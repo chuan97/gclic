@@ -182,17 +182,28 @@ pub fn reach_masks(commits: &[Commit], tips: &[String]) -> Vec<u64> {
     masks
 }
 
-/// Reached by every ref: shared, so dim. Reached by exactly one: that ref's
-/// color. In between: neutral.
-fn color_for(mask: u64, ref_count: usize) -> Color {
-    if ref_count <= 1 {
-        return PALETTE[0];
-    }
-    match mask.count_ones() as usize {
-        1 => PALETTE[mask.trailing_zeros() as usize % PALETTE.len()],
-        n if n >= ref_count => ui::DIM,
-        _ => Color::Gray,
-    }
+/// One color per ref, where refs with the same key share a color. The key is
+/// the branch name without its remote, so `feature` and `origin/feature` match.
+fn ref_colors(keys: &[String]) -> Vec<Color> {
+    let mut seen: Vec<&String> = Vec::new();
+    keys.iter()
+        .map(|key| {
+            let position = seen.iter().position(|k| *k == key).unwrap_or_else(|| {
+                seen.push(key);
+                seen.len() - 1
+            });
+            PALETTE[position % PALETTE.len()]
+        })
+        .collect()
+}
+
+/// The color of a commit: that of the first selected ref that reaches it.
+fn color_for(mask: u64, colors: &[Color]) -> Color {
+    colors
+        .iter()
+        .enumerate()
+        .find(|(bit, _)| mask & (1 << bit) != 0)
+        .map_or(PALETTE[0], |(_, color)| *color)
 }
 
 /// A named ref on screen and the commit it points at.
@@ -221,6 +232,8 @@ pub struct GraphPanel {
     /// Refs the user picked. Empty means the default view.
     custom_refs: Vec<String>,
     tips: Vec<Tip>,
+    /// The color of each tip, in the same order.
+    colors: Vec<Color>,
     commits: Vec<Commit>,
     rows: Vec<Row>,
     masks: Vec<u64>,
@@ -236,6 +249,7 @@ impl GraphPanel {
         GraphPanel {
             custom_refs: Vec::new(),
             tips: Vec::new(),
+            colors: Vec::new(),
             commits: Vec::new(),
             rows: Vec::new(),
             masks: Vec::new(),
@@ -286,6 +300,15 @@ impl GraphPanel {
             .collect();
 
         let names: Vec<String> = self.tips.iter().map(|tip| tip.name.clone()).collect();
+        let branches = git::branches()?;
+        let color_keys: Vec<String> = names
+            .iter()
+            .map(|name| {
+                let branch = branches.iter().find(|branch| branch.name == *name);
+                branch.map_or(name.clone(), |branch| branch.local_name.clone())
+            })
+            .collect();
+        self.colors = ref_colors(&color_keys);
         let shas: Vec<String> = self.tips.iter().map(|tip| tip.sha.clone()).collect();
         self.commits = if names.is_empty() {
             Vec::new()
@@ -521,7 +544,7 @@ impl GraphPanel {
     fn glyph_span(&self, glyph: &Glyph) -> Span<'static> {
         let color = glyph
             .commit
-            .map_or(ui::DIM, |i| color_for(self.masks[i], self.tips.len()));
+            .map_or(PALETTE[0], |i| color_for(self.masks[i], &self.colors));
         Span::styled(glyph.ch.to_string(), Style::default().fg(color))
     }
 
@@ -542,10 +565,10 @@ impl GraphPanel {
                     format!("  {}", commit.author),
                     Style::default().fg(ui::DIM),
                 ));
-                for (bit, tip) in self.tips.iter().enumerate() {
+                let bead_color = color_for(self.masks[*index], &self.colors);
+                for tip in &self.tips {
                     if tip.sha == commit.sha {
-                        let color = PALETTE[bit % PALETTE.len()];
-                        let style = Style::default().fg(color).add_modifier(Modifier::BOLD);
+                        let style = Style::default().fg(bead_color).add_modifier(Modifier::BOLD);
                         spans.push(Span::raw("  "));
                         spans.push(Span::styled(tip.name.as_str(), style));
                     }
@@ -705,12 +728,18 @@ mod tests {
     }
 
     #[test]
-    fn colors_dim_shared_commits_only() {
-        assert_eq!(color_for(0b01, 2), PALETTE[0]);
-        assert_eq!(color_for(0b10, 2), PALETTE[1]);
-        assert_eq!(color_for(0b11, 2), ui::DIM);
-        assert_eq!(color_for(0b011, 3), Color::Gray);
-        assert_eq!(color_for(0b1, 1), PALETTE[0]);
+    fn a_commit_takes_the_color_of_the_first_ref_reaching_it() {
+        let colors = [PALETTE[0], PALETTE[1]];
+        assert_eq!(color_for(0b01, &colors), PALETTE[0]);
+        assert_eq!(color_for(0b10, &colors), PALETTE[1]);
+        assert_eq!(color_for(0b11, &colors), PALETTE[0]);
+    }
+
+    #[test]
+    fn a_branch_and_its_remotes_share_a_color() {
+        let keys = ["feature", "main", "feature"].map(str::to_string);
+        let colors = ref_colors(&keys);
+        assert_eq!(colors, [PALETTE[0], PALETTE[1], PALETTE[0]]);
     }
 
     #[test]

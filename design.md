@@ -173,6 +173,7 @@ Implemented after trying the MVP. Where this differs from the plan above, this w
 - **Graph row order:** bead, title, author, branch names.
 - **Word-level highlighting in diffs:** paired lines mark the changed words with a slightly stronger red or green, using a longest common subsequence over words. Lines with little in common (under 30%, ignoring whitespace) get no word marks.
 - **Commit files as a drop-down:** `Enter` opens a commit's files inline under it, and `j`/`k` walk through them as rows. The separate file view is gone, so `file_list.rs` now only serves compare, plus the shared file row.
+- **Branch colors, no dimming:** a commit takes the color of the first selected branch that reaches it, its label matches its bead, and a branch and its remotes share a color. The default view is therefore one solid color. This replaces the plan's local green, remote blue and dim shared commits, so the graph no longer changes color between local and origin; position and labels show the difference instead.
 - **Constant refresh:** every 500 ms the app checks `git status` and a fingerprint of refs and HEAD, reloading the graph and compare only when the fingerprint changes. This runs on the UI thread, so a repo with a slow `git status` could make keys lag; the fix would be a background thread.
 
 Still left for the full implementation: syntax highlighting in diffs, which probably means a dependency like `syntect`.
