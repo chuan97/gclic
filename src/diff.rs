@@ -8,16 +8,26 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
+use std::ops::Range;
 
 const REMOVED_BG: Color = Color::Indexed(52);
 const ADDED_BG: Color = Color::Indexed(22);
+const REMOVED_WORD_BG: Color = Color::Indexed(88);
+const ADDED_WORD_BG: Color = Color::Indexed(28);
 const FILLER_BG: Color = Color::Indexed(235);
+/// A changed line sharing less than this with its partner is a rewrite, not an
+/// edit, and marking most of it would only add noise.
+const MIN_SIMILARITY: f32 = 0.3;
+/// Comparing two lines costs tokens x tokens, so very long ones are skipped.
+const MAX_TOKEN_PAIRS: usize = 250_000;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Cell {
     pub number: usize,
     pub text: String,
     pub changed: bool,
+    /// Byte ranges of `text` that differ from the line opposite.
+    pub marks: Vec<Range<usize>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -52,18 +62,19 @@ pub fn parse_diff(text: &str) -> Vec<Row> {
             if !added.is_empty() {
                 flush_change(&mut rows, &mut removed, &mut added);
             }
-            removed.push(Cell { number: old_number, text: clean(content), changed: true });
+            removed.push(changed_cell(old_number, content));
             old_number += 1;
         } else if let Some(content) = line.strip_prefix('+') {
-            added.push(Cell { number: new_number, text: clean(content), changed: true });
+            added.push(changed_cell(new_number, content));
             new_number += 1;
         } else if !line.starts_with('\\') {
             // Context line. `\ No newline at end of file` is ignored.
             flush_change(&mut rows, &mut removed, &mut added);
             let content = clean(line.strip_prefix(' ').unwrap_or(line));
+            let context = |number, text| Cell { number, text, changed: false, marks: Vec::new() };
             rows.push(Row::Lines {
-                left: Some(Cell { number: old_number, text: content.clone(), changed: false }),
-                right: Some(Cell { number: new_number, text: content, changed: false }),
+                left: Some(context(old_number, content.clone())),
+                right: Some(context(new_number, content)),
             });
             old_number += 1;
             new_number += 1;
@@ -73,17 +84,104 @@ pub fn parse_diff(text: &str) -> Vec<Row> {
     rows
 }
 
+fn changed_cell(number: usize, content: &str) -> Cell {
+    Cell { number, text: clean(content), changed: true, marks: Vec::new() }
+}
+
 /// Pairs held-back lines row by row. The shorter side gets blank fillers.
 fn flush_change(rows: &mut Vec<Row>, removed: &mut Vec<Cell>, added: &mut Vec<Cell>) {
     let mut left = removed.drain(..);
     let mut right = added.drain(..);
     loop {
-        let (l, r) = (left.next(), right.next());
+        let (mut l, mut r) = (left.next(), right.next());
         if l.is_none() && r.is_none() {
             break;
         }
+        if let (Some(l), Some(r)) = (&mut l, &mut r) {
+            (l.marks, r.marks) = word_marks(&l.text, &r.text);
+        }
         rows.push(Row::Lines { left: l, right: r });
     }
+}
+
+/// Splits a line into words and single other characters, as byte ranges.
+fn tokenize(text: &str) -> Vec<Range<usize>> {
+    let is_word = |ch: char| ch.is_alphanumeric() || ch == '_';
+    let mut tokens: Vec<Range<usize>> = Vec::new();
+    let mut in_word = false;
+    for (start, ch) in text.char_indices() {
+        let end = start + ch.len_utf8();
+        match tokens.last_mut() {
+            Some(last) if in_word && is_word(ch) => last.end = end,
+            _ => tokens.push(start..end),
+        }
+        in_word = is_word(ch);
+    }
+    tokens
+}
+
+/// Finds which words differ between two versions of a line, using a longest
+/// common subsequence over their tokens. Returns the marks for each side.
+fn word_marks(old: &str, new: &str) -> (Vec<Range<usize>>, Vec<Range<usize>>) {
+    let (a, b) = (tokenize(old), tokenize(new));
+    if a.len() * b.len() > MAX_TOKEN_PAIRS {
+        return (Vec::new(), Vec::new());
+    }
+    let same = |i: usize, j: usize| old[a[i].clone()] == new[b[j].clone()];
+
+    // lengths[i][j] is the length of the longest match between a[i..] and b[j..].
+    let mut lengths = vec![vec![0u32; b.len() + 1]; a.len() + 1];
+    for i in (0..a.len()).rev() {
+        for j in (0..b.len()).rev() {
+            lengths[i][j] = if same(i, j) {
+                lengths[i + 1][j + 1] + 1
+            } else {
+                lengths[i + 1][j].max(lengths[i][j + 1])
+            };
+        }
+    }
+
+    let (mut in_common_a, mut in_common_b) = (vec![false; a.len()], vec![false; b.len()]);
+    let (mut i, mut j) = (0, 0);
+    while i < a.len() && j < b.len() {
+        if same(i, j) {
+            in_common_a[i] = true;
+            in_common_b[j] = true;
+            i += 1;
+            j += 1;
+        } else if lengths[i + 1][j] >= lengths[i][j + 1] {
+            i += 1;
+        } else {
+            j += 1;
+        }
+    }
+
+    // Whitespace doesn't count, or any two lines of code would look related.
+    let visible = |text: &str| text.chars().filter(|ch| !ch.is_whitespace()).count();
+    let common: usize = (0..a.len())
+        .filter(|&i| in_common_a[i])
+        .map(|i| visible(&old[a[i].clone()]))
+        .sum();
+    let total = visible(old) + visible(new);
+    if total > 0 && (2 * common) as f32 / (total as f32) < MIN_SIMILARITY {
+        return (Vec::new(), Vec::new());
+    }
+    (merged_marks(&a, &in_common_a), merged_marks(&b, &in_common_b))
+}
+
+/// The tokens not in common, with neighbours joined into one range.
+fn merged_marks(tokens: &[Range<usize>], in_common: &[bool]) -> Vec<Range<usize>> {
+    let mut marks: Vec<Range<usize>> = Vec::new();
+    for (token, common) in tokens.iter().zip(in_common) {
+        if *common {
+            continue;
+        }
+        match marks.last_mut() {
+            Some(last) if last.end == token.start => last.end = token.end,
+            _ => marks.push(token.clone()),
+        }
+    }
+    marks
 }
 
 /// Reads the start line numbers from `@@ -12,5 +12,6 @@ context`.
@@ -194,21 +292,29 @@ impl DiffPane {
                         width: inner.width.saturating_sub(column_width + 1),
                         ..full
                     };
-                    frame.render_widget(side_line(left.as_ref(), REMOVED_BG), left_area);
+                    frame.render_widget(side_line(left.as_ref(), REMOVED_BG, REMOVED_WORD_BG), left_area);
                     frame.render_widget(Line::styled("│", Style::default().fg(ui::DIM)), separator);
-                    frame.render_widget(side_line(right.as_ref(), ADDED_BG), right_area);
+                    frame.render_widget(side_line(right.as_ref(), ADDED_BG, ADDED_WORD_BG), right_area);
                 }
             }
         }
     }
 }
 
-fn side_line(cell: Option<&Cell>, changed_bg: Color) -> Line<'_> {
+fn side_line(cell: Option<&Cell>, changed_bg: Color, word_bg: Color) -> Line<'_> {
     let Some(cell) = cell else {
         return Line::default().style(Style::default().bg(FILLER_BG));
     };
     let gutter = Span::styled(format!("{:>4} ", cell.number), Style::default().fg(ui::DIM));
-    let line = Line::from(vec![gutter, Span::raw(cell.text.as_str())]);
+    let mut spans = vec![gutter];
+    let mut position = 0;
+    for mark in &cell.marks {
+        spans.push(Span::raw(&cell.text[position..mark.start]));
+        spans.push(Span::styled(&cell.text[mark.clone()], Style::default().bg(word_bg)));
+        position = mark.end;
+    }
+    spans.push(Span::raw(&cell.text[position..]));
+    let line = Line::from(spans);
     if cell.changed {
         line.style(Style::default().bg(changed_bg))
     } else {
@@ -221,7 +327,58 @@ mod tests {
     use super::*;
 
     fn cell(number: usize, text: &str, changed: bool) -> Option<Cell> {
-        Some(Cell { number, text: text.to_string(), changed })
+        Some(Cell { number, text: text.to_string(), changed, marks: Vec::new() })
+    }
+
+    fn marked<'a>(text: &'a str, marks: &[Range<usize>]) -> Vec<&'a str> {
+        marks.iter().map(|mark| &text[mark.clone()]).collect()
+    }
+
+    #[test]
+    fn marks_only_the_words_that_changed() {
+        let (old, new) = ("let total = count + 1;", "let total = amount + 2;");
+        let (left, right) = word_marks(old, new);
+        assert_eq!(marked(old, &left), ["count", "1"]);
+        assert_eq!(marked(new, &right), ["amount", "2"]);
+    }
+
+    #[test]
+    fn marks_an_insertion_on_one_side_only() {
+        let (old, new) = ("line 2", "line 2 changed");
+        let (left, right) = word_marks(old, new);
+        assert!(left.is_empty());
+        assert_eq!(marked(new, &right), [" changed"]);
+    }
+
+    #[test]
+    fn neighbouring_changed_tokens_become_one_mark() {
+        let (old, new) = ("value(b)", "value[c]");
+        let (_, right) = word_marks(old, new);
+        assert_eq!(marked(new, &right), ["[c]"]);
+    }
+
+    #[test]
+    fn rewritten_lines_get_no_marks() {
+        let (left, right) = word_marks("completely different", "nothing shared here");
+        assert!(left.is_empty() && right.is_empty());
+    }
+
+    #[test]
+    fn marks_respect_multibyte_characters() {
+        let (old, new) = ("héllo wörld ok", "héllo wörld fine");
+        let (left, right) = word_marks(old, new);
+        assert_eq!(marked(old, &left), ["ok"]);
+        assert_eq!(marked(new, &right), ["fine"]);
+    }
+
+    #[test]
+    fn paired_lines_get_marks_when_parsed() {
+        let rows = parse_diff("@@ -1 +1 @@\n-let b = 2;\n+let b = 3;\n");
+        let Row::Lines { left: Some(left), right: Some(right) } = &rows[1] else {
+            panic!("expected a paired row")
+        };
+        assert_eq!(marked(&left.text, &left.marks), ["2"]);
+        assert_eq!(marked(&right.text, &right.marks), ["3"]);
     }
 
     #[test]

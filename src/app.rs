@@ -19,7 +19,7 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-const AUTO_REFRESH: Duration = Duration::from_secs(2);
+const AUTO_REFRESH: Duration = Duration::from_millis(500);
 
 const HELP: &str = "\
 Anywhere
@@ -35,14 +35,16 @@ Changes
   d          restore file          c    commit staged
 
 Graph
-  Enter      files in commit       y   copy sha
+  Enter      expand commit or open file diff
+  Esc        collapse              y   copy sha
   i          toggle commit details
 
 Diff
   Ctrl-d/u   half page             n/p  next/previous hunk
 
 Picker
-  type to filter                   Up/Down, Ctrl-j/k  move
+  j/k g/G    move                  i   start typing to filter
+  Esc        stop typing, or close
   Space      tick (multi-select)   Enter  confirm";
 
 /// What a panel wants the app to do after handling a key.
@@ -125,6 +127,8 @@ pub struct App {
     message: String,
     should_quit: bool,
     last_refresh: Instant,
+    /// How refs and HEAD looked at the last full reload.
+    refs_fingerprint: String,
 }
 
 impl App {
@@ -142,6 +146,7 @@ impl App {
             message: String::new(),
             should_quit: false,
             last_refresh: Instant::now(),
+            refs_fingerprint: String::new(),
         };
         app.refresh();
         app
@@ -150,7 +155,7 @@ impl App {
     pub fn run(mut self, terminal: &mut DefaultTerminal) -> Result<()> {
         while !self.should_quit {
             terminal.draw(|frame| self.render(frame))?;
-            if event::poll(Duration::from_millis(250))?
+            if event::poll(Duration::from_millis(100))?
                 && let Event::Key(key) = event::read()?
                     && key.kind == KeyEventKind::Press {
                         self.handle_key(key);
@@ -168,15 +173,29 @@ impl App {
 
     /// Reloads everything from git, after an action or on `r`.
     fn refresh(&mut self) {
-        let result = self.staging.refresh().and_then(|()| self.graph.refresh());
+        let result = self.reload_panels();
         self.report(result);
+        self.refs_fingerprint = git::refs_fingerprint();
         self.sync_diff();
         self.last_refresh = Instant::now();
     }
 
-    /// Picks up edits made outside the app. Only the working tree is checked:
-    /// history rarely changes on its own, and the graph is the expensive part.
+    fn reload_panels(&mut self) -> Result<()> {
+        self.staging.refresh()?;
+        self.graph.refresh()?;
+        if let Some(compare) = &mut self.compare {
+            compare.refresh()?;
+        }
+        Ok(())
+    }
+
+    /// Picks up what happened outside the app, such as git commands in another
+    /// terminal. Runs often, so the graph only reloads when a ref or HEAD moved.
     fn auto_refresh(&mut self) {
+        if git::refs_fingerprint() != self.refs_fingerprint {
+            self.refresh();
+            return;
+        }
         let result = self.staging.refresh();
         self.report(result);
         self.sync_diff();
@@ -532,8 +551,8 @@ impl App {
     fn hints(&self) -> &'static str {
         match self.focus {
             Focus::Changes => "space stage · enter diff · d restore · c commit · tab next · ? help · q quit",
-            Focus::Graph if self.graph.is_showing_files() => "enter diff · esc back · i details · y copy sha · ? help",
-            Focus::Graph => "enter files · i details · y copy sha · B branches · tab next · ? help · q quit",
+            Focus::Graph if self.graph.is_on_file() => "enter diff · esc collapse · j/k move · i details · y copy sha · ? help",
+            Focus::Graph => "enter expand · i details · y copy sha · B branches · tab next · ? help · q quit",
             Focus::Compare => "enter diff · esc close · tab next · ? help · q quit",
             Focus::Diff => "j/k scroll · ctrl-d/u page · n/p hunk · z zoom · esc back · ? help",
         }

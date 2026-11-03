@@ -1,7 +1,7 @@
 //! Feature 4: how two refs differ.
 
 use crate::app::Action;
-use crate::file_list::{FileList, Origin};
+use crate::file_list::FileList;
 use crate::git;
 use crate::ui;
 use anyhow::Result;
@@ -24,9 +24,15 @@ impl ComparePanel {
     pub fn new(a: String, b: String) -> Result<ComparePanel> {
         let (ahead, behind) = git::ahead_behind(&a, &b)?;
         let merge_base = git::merge_base(&a, &b);
-        let origin = Origin::Refs { a: a.clone(), b: b.clone() };
-        let files = FileList::new(origin, git::changed_files(&a, &b)?);
+        let files = FileList::new(a.clone(), b.clone(), git::changed_files(&a, &b)?);
         Ok(ComparePanel { a, b, ahead, behind, merge_base, files })
+    }
+
+    pub fn refresh(&mut self) -> Result<()> {
+        (self.ahead, self.behind) = git::ahead_behind(&self.a, &self.b)?;
+        self.merge_base = git::merge_base(&self.a, &self.b);
+        self.files.set_files(git::changed_files(&self.a, &self.b)?);
+        Ok(())
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Action {

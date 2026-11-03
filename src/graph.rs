@@ -2,8 +2,8 @@
 //! over commits; `GraphPanel` holds the state and draws them.
 
 use crate::app::Action;
-use crate::file_list::{FileList, Origin};
-use crate::git::{self, Commit, CommitDetails};
+use crate::file_list::file_line;
+use crate::git::{self, Commit, CommitDetails, DiffSource, FileEntry};
 use crate::ui;
 use anyhow::Result;
 use ratatui::Frame;
@@ -34,9 +34,10 @@ pub struct Glyph {
 
 #[derive(Debug, PartialEq)]
 pub enum Row {
-    /// `index` is the commit's position in the commits slice.
-    Commit { index: usize, glyphs: Vec<Glyph> },
-    /// Lines forking or joining between two commits, e.g. `├─╯`.
+    /// `index` is the commit's position in the commits slice. `below` is the
+    /// lines leaving this commit, drawn alongside its files when it is expanded.
+    Commit { index: usize, glyphs: Vec<Glyph>, below: Vec<Glyph> },
+    /// Lines between two commits: straight, forking or joining, e.g. `├─╯`.
     Connector { glyphs: Vec<Glyph> },
 }
 
@@ -52,9 +53,18 @@ pub fn layout(commits: &[Commit]) -> Vec<Row> {
         .collect();
     let mut lanes: Vec<Option<&str>> = Vec::new();
     let mut rows = Vec::new();
+    // Whether a row of lines already separates the previous bead from the next.
+    let mut separated = true;
 
     for (index, commit) in commits.iter().enumerate() {
         let sha = commit.sha.as_str();
+
+        // Beads never touch: without a fork or join between them, add plain lines.
+        let joins_here = lanes.iter().filter(|lane| **lane == Some(sha)).count() > 1;
+        if !separated && !joins_here && lanes.iter().any(Option::is_some) {
+            rows.push(Row::Connector { glyphs: lane_glyphs(&lanes, &index_of) });
+        }
+        separated = false;
 
         // A commit continues the leftmost line heading for it. With no such
         // line it is a branch tip and starts a new one.
@@ -74,13 +84,15 @@ pub fn layout(commits: &[Commit]) -> Vec<Row> {
 
         let mut glyphs = lane_glyphs(&lanes, &index_of);
         glyphs[column * 2] = Glyph { ch: '●', commit: Some(index) };
-        rows.push(Row::Commit { index, glyphs });
 
         // The first parent continues straight down.
         lanes[column] = commit.parents.first().map(String::as_str);
+        let below = lane_glyphs(&lanes, &index_of);
+        rows.push(Row::Commit { index, glyphs, below });
 
         // Merge commits send a line to each further parent.
         for parent in commit.parents.iter().skip(1) {
+            separated = true;
             let parent = parent.as_str();
             match lanes.iter().position(|lane| *lane == Some(parent)) {
                 Some(existing) if existing > column => {
@@ -189,6 +201,22 @@ struct Tip {
     sha: String,
 }
 
+/// A commit opened as a drop-down, listing its changed files under it.
+struct Expanded {
+    sha: String,
+    files: Vec<FileEntry>,
+    /// The file under the cursor. None while the cursor is on a commit.
+    selected: Option<usize>,
+}
+
+/// One row on screen.
+enum Display {
+    /// An index into `rows`.
+    Graph(usize),
+    /// An index into the expanded commit's files.
+    File(usize),
+}
+
 pub struct GraphPanel {
     /// Refs the user picked. Empty means the default view.
     custom_refs: Vec<String>,
@@ -199,8 +227,7 @@ pub struct GraphPanel {
     /// Index into `commits`.
     selected: usize,
     scroll: usize,
-    /// The changed files of the opened commit, shown in place of the chain.
-    files: Option<FileList>,
+    expanded: Option<Expanded>,
     details: Option<CommitDetails>,
 }
 
@@ -214,7 +241,7 @@ impl GraphPanel {
             masks: Vec::new(),
             selected: 0,
             scroll: 0,
-            files: None,
+            expanded: None,
             details: None,
         }
     }
@@ -225,20 +252,26 @@ impl GraphPanel {
 
     pub fn set_refs(&mut self, refs: Vec<String>) -> Result<()> {
         self.custom_refs = refs;
-        self.files = None;
+        self.expanded = None;
         self.selected = 0;
         self.refresh()
     }
 
-    pub fn is_showing_files(&self) -> bool {
-        self.files.is_some()
+    pub fn is_on_file(&self) -> bool {
+        self.expanded.as_ref().is_some_and(|expanded| expanded.selected.is_some())
+    }
+
+    fn is_expanded(&self, index: usize) -> bool {
+        self.expanded.as_ref().is_some_and(|expanded| {
+            self.commits.get(index).is_some_and(|commit| commit.sha == expanded.sha)
+        })
     }
 
     pub fn refresh(&mut self) -> Result<()> {
         let selected_sha = self.commits.get(self.selected).map(|c| c.sha.clone());
         // Browsing the top of the chain follows new commits as they arrive.
-        // An opened commit stays selected, as its file list belongs to it.
-        let follow_tip = self.selected == 0 && self.files.is_none();
+        // A selected file stays selected, along with the commit it belongs to.
+        let follow_tip = self.selected == 0 && !self.is_on_file();
         let refs = if self.custom_refs.is_empty() {
             git::default_refs()
         } else {
@@ -261,6 +294,10 @@ impl GraphPanel {
         };
         self.rows = layout(&self.commits);
         self.masks = reach_masks(&self.commits, &shas);
+
+        let commits = &self.commits;
+        self.expanded
+            .take_if(|expanded| !commits.iter().any(|commit| commit.sha == expanded.sha));
 
         if !follow_tip {
             let same_commit = selected_sha
@@ -299,44 +336,102 @@ impl GraphPanel {
             KeyCode::Char('i') => return Action::after_view_change(self.toggle_details()),
             _ => {}
         }
-        if let Some(files) = &mut self.files {
-            if key.code == KeyCode::Esc {
-                self.files = None;
-                return Action::None;
-            }
-            return files.handle_key(key);
-        }
 
         let last = self.commits.len() - 1;
         let before = self.selected;
         match key.code {
-            KeyCode::Char('j') | KeyCode::Down => self.selected = (self.selected + 1).min(last),
-            KeyCode::Char('k') | KeyCode::Up => self.selected = self.selected.saturating_sub(1),
-            KeyCode::Char('g') => self.selected = 0,
-            KeyCode::Char('G') => self.selected = last,
-            KeyCode::Enter => {
-                return match git::commit_files(&sha) {
-                    Ok(files) => {
-                        self.files = Some(FileList::new(Origin::Commit { sha }, files));
-                        Action::None
-                    }
-                    Err(error) => Action::Error(error.to_string()),
-                };
+            KeyCode::Char('j') | KeyCode::Down => self.move_down(),
+            KeyCode::Char('k') | KeyCode::Up => self.move_up(),
+            KeyCode::Char('g') => self.select_commit(0),
+            KeyCode::Char('G') => self.select_commit(last),
+            KeyCode::Enter => return self.open_selection(sha),
+            KeyCode::Esc => {
+                self.expanded = None;
+                return Action::None;
             }
-            _ => {}
+            _ => return Action::None,
         }
-        if self.selected != before {
-            return Action::after_view_change(self.update_details());
+        if self.selected != before
+            && let Err(error) = self.update_details()
+        {
+            return Action::Error(error.to_string());
         }
-        Action::None
+        match self.selected_file_source() {
+            Some(source) => Action::PreviewDiff(source),
+            None => Action::None,
+        }
+    }
+
+    fn select_commit(&mut self, index: usize) {
+        self.selected = index;
+        if let Some(expanded) = &mut self.expanded {
+            expanded.selected = None;
+        }
+    }
+
+    /// Walks down through a commit's files, if it is expanded, then on to the next commit.
+    fn move_down(&mut self) {
+        let last = self.commits.len() - 1;
+        if self.is_expanded(self.selected)
+            && let Some(expanded) = &mut self.expanded
+        {
+            let next = expanded.selected.map_or(0, |file| file + 1);
+            if next < expanded.files.len() {
+                expanded.selected = Some(next);
+                return;
+            }
+            if self.selected == last {
+                return; // already on the very last row
+            }
+        }
+        self.select_commit((self.selected + 1).min(last));
+    }
+
+    /// The mirror of `move_down`: into the files of an expanded commit from below.
+    fn move_up(&mut self) {
+        if let Some(expanded) = &mut self.expanded
+            && let Some(file) = expanded.selected
+        {
+            expanded.selected = file.checked_sub(1);
+            return;
+        }
+        let above = self.selected.saturating_sub(1);
+        let enters_files = above != self.selected && self.is_expanded(above);
+        self.select_commit(above);
+        if enters_files && let Some(expanded) = &mut self.expanded {
+            expanded.selected = expanded.files.len().checked_sub(1);
+        }
+    }
+
+    fn selected_file_source(&self) -> Option<DiffSource> {
+        let expanded = self.expanded.as_ref()?;
+        let file = expanded.files.get(expanded.selected?)?;
+        Some(DiffSource::Commit { sha: expanded.sha.clone(), path: file.path.clone() })
+    }
+
+    /// Enter: on a file opens its diff, on a commit toggles its drop-down.
+    fn open_selection(&mut self, sha: String) -> Action {
+        if let Some(source) = self.selected_file_source() {
+            return Action::OpenDiff(source);
+        }
+        if self.is_expanded(self.selected) {
+            self.expanded = None;
+            return Action::None;
+        }
+        match git::commit_files(&sha) {
+            Ok(files) if files.is_empty() => {
+                Action::Message("No files changed in this commit".to_string())
+            }
+            Ok(files) => {
+                self.expanded = Some(Expanded { sha, files, selected: None });
+                Action::None
+            }
+            Err(error) => Action::Error(error.to_string()),
+        }
     }
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
-        let title = match self.files {
-            Some(_) => format!(" Files in {} ", self.selected_short_sha()),
-            None => " Graph ".to_string(),
-        };
-        let block = ui::panel(title, focused);
+        let block = ui::panel(" Graph ".to_string(), focused);
         let inner = block.inner(area);
         frame.render_widget(block, area);
 
@@ -348,20 +443,10 @@ impl GraphPanel {
             (inner, None)
         };
 
-        if let Some(files) = &mut self.files {
-            files.render(frame, main, focused);
-        } else {
-            self.render_chain(frame, main, focused);
-        }
+        self.render_chain(frame, main, focused);
         if let (Some(details), Some(details_area)) = (&self.details, details_area) {
             render_details(frame, details_area, details);
         }
-    }
-
-    fn selected_short_sha(&self) -> &str {
-        self.commits
-            .get(self.selected)
-            .map_or("", |commit| &commit.sha[..commit.sha.len().min(7)])
     }
 
     fn render_chain(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
@@ -370,12 +455,24 @@ impl GraphPanel {
             frame.render_widget(note, area);
             return;
         }
-        let selected_row = self
-            .rows
+        let display = self.display_rows();
+        let selected_file = self.expanded.as_ref().and_then(|expanded| expanded.selected);
+        let selected_line = display
             .iter()
-            .position(|row| matches!(row, Row::Commit { index, .. } if *index == self.selected))
+            .position(|row| match (row, selected_file) {
+                (Display::File(file), Some(selected)) => *file == selected,
+                (Display::Graph(row), None) => self.is_row_of_selected_commit(*row),
+                _ => false,
+            })
             .unwrap_or(0);
-        self.scroll = ui::keep_visible(self.scroll, selected_row, area.height as usize);
+
+        // Opening a drop-down shows as many of its files as fit.
+        let height = area.height as usize;
+        if selected_file.is_none() && self.is_expanded(self.selected) {
+            let files = self.expanded.as_ref().map_or(0, |expanded| expanded.files.len());
+            self.scroll = ui::keep_visible(self.scroll, selected_line + files, height);
+        }
+        self.scroll = ui::keep_visible(self.scroll, selected_line, height);
 
         // Text starts at the same column on every row, so the chain stays clean.
         let graph_width = self
@@ -387,46 +484,72 @@ impl GraphPanel {
             .max()
             .unwrap_or(0);
 
-        let mut lines: Vec<Line> = self
-            .rows
+        let mut lines: Vec<Line> = display
             .iter()
             .skip(self.scroll)
-            .take(area.height as usize)
-            .map(|row| self.row_line(row, graph_width, focused))
+            .take(height)
+            .map(|row| match row {
+                Display::Graph(row) => self.row_line(&self.rows[*row], graph_width, focused),
+                Display::File(file) => self.file_row_line(*file, graph_width, focused),
+            })
             .collect();
-        let at_end = self.scroll + lines.len() == self.rows.len();
+        let at_end = self.scroll + lines.len() == display.len();
         if at_end && self.commits.len() == COMMIT_LIMIT {
             lines.push(Line::styled("┊", Style::default().fg(ui::DIM)));
         }
         ui::render_lines(frame, area, lines);
     }
 
+    /// The graph's rows, with the expanded commit's files inserted under it.
+    fn display_rows(&self) -> Vec<Display> {
+        let mut display = Vec::with_capacity(self.rows.len());
+        for (i, row) in self.rows.iter().enumerate() {
+            display.push(Display::Graph(i));
+            if let (Row::Commit { index, .. }, Some(expanded)) = (row, &self.expanded)
+                && self.commits[*index].sha == expanded.sha
+            {
+                display.extend((0..expanded.files.len()).map(Display::File));
+            }
+        }
+        display
+    }
+
+    fn is_row_of_selected_commit(&self, row: usize) -> bool {
+        matches!(self.rows[row], Row::Commit { index, .. } if index == self.selected)
+    }
+
+    fn glyph_span(&self, glyph: &Glyph) -> Span<'static> {
+        let color = glyph
+            .commit
+            .map_or(ui::DIM, |i| color_for(self.masks[i], self.tips.len()));
+        Span::styled(glyph.ch.to_string(), Style::default().fg(color))
+    }
+
     fn row_line(&self, row: &Row, graph_width: usize, focused: bool) -> Line<'_> {
-        let ref_count = self.tips.len();
-        let glyph_span = |glyph: &Glyph| {
-            let color = glyph
-                .commit
-                .map_or(ui::DIM, |i| color_for(self.masks[i], ref_count));
-            Span::styled(glyph.ch.to_string(), Style::default().fg(color))
-        };
         match row {
-            Row::Connector { glyphs } => Line::from(glyphs.iter().map(glyph_span).collect::<Vec<_>>()),
-            Row::Commit { index, glyphs } => {
-                let selected = *index == self.selected;
-                let mut spans: Vec<Span> = glyphs.iter().map(glyph_span).collect();
+            Row::Connector { glyphs } => {
+                Line::from(glyphs.iter().map(|g| self.glyph_span(g)).collect::<Vec<_>>())
+            }
+            Row::Commit { index, glyphs, .. } => {
+                let selected = *index == self.selected && !self.is_on_file();
+                let mut spans: Vec<Span> = glyphs.iter().map(|g| self.glyph_span(g)).collect();
                 spans.push(Span::raw(" ".repeat(graph_width - glyphs.len() + 1)));
 
                 let commit = &self.commits[*index];
+                let subject = if selected && focused { Color::White } else { Color::Gray };
+                spans.push(Span::styled(commit.subject.as_str(), Style::default().fg(subject)));
+                spans.push(Span::styled(
+                    format!("  {}", commit.author),
+                    Style::default().fg(ui::DIM),
+                ));
                 for (bit, tip) in self.tips.iter().enumerate() {
                     if tip.sha == commit.sha {
                         let color = PALETTE[bit % PALETTE.len()];
                         let style = Style::default().fg(color).add_modifier(Modifier::BOLD);
+                        spans.push(Span::raw("  "));
                         spans.push(Span::styled(tip.name.as_str(), style));
-                        spans.push(Span::raw(" "));
                     }
                 }
-                let subject = if selected && focused { Color::White } else { Color::Gray };
-                spans.push(Span::styled(commit.subject.as_str(), Style::default().fg(subject)));
 
                 let line = Line::from(spans);
                 if selected {
@@ -436,6 +559,28 @@ impl GraphPanel {
                 }
             }
         }
+    }
+
+    /// A file in the drop-down, with the graph's lines carrying on beside it.
+    fn file_row_line(&self, file: usize, graph_width: usize, focused: bool) -> Line<'_> {
+        let Some(expanded) = &self.expanded else {
+            return Line::default();
+        };
+        let below = self.rows.iter().find_map(|row| match row {
+            Row::Commit { index, below, .. } if self.commits[*index].sha == expanded.sha => {
+                Some(below.as_slice())
+            }
+            _ => None,
+        });
+        let below = below.unwrap_or_default();
+
+        let mut spans: Vec<Span> = below.iter().map(|g| self.glyph_span(g)).collect();
+        spans.push(Span::raw(" ".repeat(graph_width.saturating_sub(below.len()) + 1)));
+        let selected = expanded.selected == Some(file);
+        let mut line = file_line(&expanded.files[file], selected, focused);
+        spans.append(&mut line.spans);
+        line.spans = spans;
+        line
     }
 }
 
@@ -461,6 +606,7 @@ mod tests {
         Commit {
             sha: sha.to_string(),
             parents: parents.iter().map(|p| p.to_string()).collect(),
+            author: String::new(),
             subject: String::new(),
         }
     }
@@ -478,9 +624,9 @@ mod tests {
     }
 
     #[test]
-    fn linear_history_is_one_straight_chain() {
+    fn linear_history_is_beads_joined_by_lines() {
         let commits = [commit("c", &["b"]), commit("b", &["a"]), commit("a", &[])];
-        assert_eq!(draw(&commits), ["●", "●", "●"]);
+        assert_eq!(draw(&commits), ["●", "│", "●", "│", "●"]);
     }
 
     #[test]
@@ -492,7 +638,7 @@ mod tests {
             commit("base", &["root"]),
             commit("root", &[]),
         ];
-        assert_eq!(draw(&commits), ["●", "●", "│ ●", "├─╯", "●", "●"]);
+        assert_eq!(draw(&commits), ["●", "│", "●", "│", "│ ●", "├─╯", "●", "│", "●"]);
     }
 
     #[test]
@@ -503,7 +649,7 @@ mod tests {
             commit("p2", &["base"]),
             commit("base", &[]),
         ];
-        assert_eq!(draw(&commits), ["●", "├─╮", "● │", "│ ●", "├─╯", "●"]);
+        assert_eq!(draw(&commits), ["●", "├─╮", "● │", "│ │", "│ ●", "├─╯", "●"]);
     }
 
     #[test]
@@ -515,7 +661,7 @@ mod tests {
             commit("first", &["shared"]),
             commit("shared", &[]),
         ];
-        assert_eq!(draw(&commits), ["●", "│ ●", "├─┤", "│ ●", "├─╯", "●"]);
+        assert_eq!(draw(&commits), ["●", "│", "│ ●", "├─┤", "│ ●", "├─╯", "●"]);
     }
 
     #[test]
@@ -526,7 +672,7 @@ mod tests {
             commit("c", &["base"]),
             commit("base", &[]),
         ];
-        assert_eq!(draw(&commits), ["●", "│ ●", "│ │ ●", "├─╯ │", "├───╯", "●"]);
+        assert_eq!(draw(&commits), ["●", "│", "│ ●", "│ │", "│ │ ●", "├─╯ │", "├───╯", "●"]);
     }
 
     #[test]
@@ -537,7 +683,7 @@ mod tests {
             commit("c", &["far"]),
             commit("merge", &["first", "far"]),
         ];
-        assert_eq!(draw(&commits)[4], "├─┼─┤");
+        assert_eq!(draw(&commits).last().unwrap(), "├─┼─┤");
     }
 
     #[test]
@@ -571,7 +717,83 @@ mod tests {
     fn lines_take_the_color_of_the_commit_they_lead_to() {
         let commits = [commit("a", &["base"]), commit("b", &["base"]), commit("base", &[])];
         let rows = layout(&commits);
-        let Row::Connector { glyphs } = &rows[2] else { panic!("expected a connector") };
+        let Row::Connector { glyphs } = &rows[3] else { panic!("expected a connector") };
+        assert_eq!(glyphs[0].ch, '├');
         assert_eq!(glyphs[0].commit, Some(2));
+    }
+
+    #[test]
+    fn plain_lines_take_the_color_of_the_parent() {
+        let commits = [commit("child", &["parent"]), commit("parent", &[])];
+        let rows = layout(&commits);
+        let Row::Connector { glyphs } = &rows[1] else { panic!("expected a connector") };
+        assert_eq!(glyphs[0].commit, Some(1));
+    }
+
+    #[test]
+    fn lines_below_a_commit_are_kept_for_its_drop_down() {
+        let commits = [commit("a", &["b"]), commit("b", &[])];
+        let rows = layout(&commits);
+        let Row::Commit { below, .. } = &rows[0] else { panic!("expected a commit") };
+        assert_eq!(below[0].ch, '│');
+        let Row::Commit { below, .. } = &rows[2] else { panic!("expected a commit") };
+        assert_eq!(below[0].ch, ' ');
+    }
+
+    /// A panel showing `shas` as a linear history, with the first one expanded.
+    fn panel_with_expanded_first_commit(shas: &[&str], files: &[&str]) -> GraphPanel {
+        let mut panel = GraphPanel::new();
+        panel.commits = shas.iter().map(|sha| commit(sha, &[])).collect();
+        panel.expanded = Some(Expanded {
+            sha: shas[0].to_string(),
+            files: files
+                .iter()
+                .map(|path| FileEntry { status: 'M', path: path.to_string() })
+                .collect(),
+            selected: None,
+        });
+        panel
+    }
+
+    #[test]
+    fn moving_down_walks_through_the_files_then_to_the_next_commit() {
+        let mut panel = panel_with_expanded_first_commit(&["a", "b"], &["x", "y"]);
+        panel.move_down();
+        assert_eq!(panel.expanded.as_ref().unwrap().selected, Some(0));
+        panel.move_down();
+        assert_eq!(panel.expanded.as_ref().unwrap().selected, Some(1));
+        panel.move_down();
+        assert_eq!(panel.selected, 1);
+        assert_eq!(panel.expanded.as_ref().unwrap().selected, None);
+    }
+
+    #[test]
+    fn moving_up_enters_the_files_from_below() {
+        let mut panel = panel_with_expanded_first_commit(&["a", "b"], &["x", "y"]);
+        panel.selected = 1;
+        panel.move_up();
+        assert_eq!(panel.selected, 0);
+        assert_eq!(panel.expanded.as_ref().unwrap().selected, Some(1));
+        panel.move_up();
+        panel.move_up();
+        assert_eq!(panel.expanded.as_ref().unwrap().selected, None);
+        assert_eq!(panel.selected, 0);
+    }
+
+    #[test]
+    fn moving_past_the_last_file_of_the_last_commit_stays_put() {
+        let mut panel = panel_with_expanded_first_commit(&["a"], &["x"]);
+        panel.move_down();
+        panel.move_down();
+        assert_eq!(panel.expanded.as_ref().unwrap().selected, Some(0));
+    }
+
+    #[test]
+    fn a_selected_file_points_its_diff_at_the_expanded_commit() {
+        let mut panel = panel_with_expanded_first_commit(&["a", "b"], &["x"]);
+        assert_eq!(panel.selected_file_source(), None);
+        panel.move_down();
+        let expected = DiffSource::Commit { sha: "a".to_string(), path: "x".to_string() };
+        assert_eq!(panel.selected_file_source(), Some(expected));
     }
 }

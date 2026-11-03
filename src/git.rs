@@ -21,6 +21,7 @@ pub struct Status {
 pub struct Commit {
     pub sha: String,
     pub parents: Vec<String>,
+    pub author: String,
     pub subject: String,
 }
 
@@ -204,7 +205,7 @@ fn has_commits() -> bool {
 /// children come before their parents, which the graph layout relies on.
 pub fn log(refs: &[String], limit: usize) -> Result<Vec<Commit>> {
     let limit = format!("-n{limit}");
-    let mut args = vec!["log", "--topo-order", limit.as_str(), "--format=%H%x00%P%x00%s"];
+    let mut args = vec!["log", "--topo-order", limit.as_str(), "--format=%H%x00%P%x00%an%x00%s"];
     args.extend(refs.iter().map(String::as_str));
     args.push("--");
     Ok(parse_log(&run(&args)?))
@@ -213,14 +214,23 @@ pub fn log(refs: &[String], limit: usize) -> Result<Vec<Commit>> {
 fn parse_log(text: &str) -> Vec<Commit> {
     text.lines()
         .filter_map(|line| {
-            let mut fields = line.splitn(3, '\0');
+            let mut fields = line.splitn(4, '\0');
             Some(Commit {
                 sha: fields.next()?.to_string(),
                 parents: fields.next()?.split_whitespace().map(str::to_string).collect(),
+                author: fields.next()?.to_string(),
                 subject: fields.next()?.to_string(),
             })
         })
         .collect()
+}
+
+/// Changes whenever a ref or HEAD moves, for spotting commits, checkouts and
+/// fetches made outside the app without reloading the whole graph.
+pub fn refs_fingerprint() -> String {
+    let refs = try_run(&["for-each-ref", "--format=%(objectname) %(refname)"]);
+    let head = try_run(&["rev-parse", "HEAD", "--symbolic-full-name", "HEAD"]);
+    format!("{}\n{}", refs.unwrap_or_default(), head.unwrap_or_default())
 }
 
 /// The default graph view: the current branch and its remote counterpart.
@@ -368,8 +378,9 @@ mod tests {
 
     #[test]
     fn log_reads_parents_and_subject() {
-        let commits = parse_log("aaa\0bbb ccc\0merge things\nbbb\0\0root\n");
+        let commits = parse_log("aaa\0bbb ccc\0Ann\0merge things\nbbb\0\0Bo\0root\n");
         assert_eq!(commits[0].parents, vec!["bbb", "ccc"]);
+        assert_eq!(commits[0].author, "Ann");
         assert_eq!(commits[0].subject, "merge things");
         assert!(commits[1].parents.is_empty());
     }

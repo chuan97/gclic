@@ -164,6 +164,19 @@ The plan above is kept as approved. These are the differences in the code:
 - **Remote color:** bright blue instead of blue, which is too dark to read on dark terminals.
 - **Auto-refresh pauses while a popup is open,** so it can't replace a dialog you're using.
 
+## First round of feedback on the MVP
+
+Implemented after trying the MVP. Where this differs from the plan above, this wins.
+
+- **Picker modes:** `j`/`k` navigate by default. `i` starts typing, like vim's insert mode. The first `Esc` stops typing, and the next closes the picker.
+- **Lines between beads:** every pair of beads is joined by a row of lines, even though this fits about half as many commits on screen.
+- **Graph row order:** bead, title, author, branch names.
+- **Word-level highlighting in diffs:** paired lines mark the changed words with a slightly stronger red or green, using a longest common subsequence over words. Lines with little in common (under 30%, ignoring whitespace) get no word marks.
+- **Commit files as a drop-down:** `Enter` opens a commit's files inline under it, and `j`/`k` walk through them as rows. The separate file view is gone, so `file_list.rs` now only serves compare, plus the shared file row.
+- **Constant refresh:** every 500 ms the app checks `git status` and a fingerprint of refs and HEAD, reloading the graph and compare only when the fingerprint changes. This runs on the UI thread, so a repo with a slow `git status` could make keys lag; the fix would be a background thread.
+
+Still left for the full implementation: syntax highlighting in diffs, which probably means a dependency like `syntect`.
+
 ## Questions to answer by trying it
 
 - Should compare's file list stay the direct difference (`git diff A B`), or be PR-style (`A...B`)?

@@ -1,5 +1,5 @@
-//! A selectable list of changed files, shared by the commit drill-down and
-//! the compare view.
+//! The compare view's selectable list of changed files, plus the file row
+//! drawing shared with the other panels.
 
 use crate::app::Action;
 use crate::git::{DiffSource, FileEntry};
@@ -10,30 +10,27 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
-/// Where the listed files come from, which decides what their diffs compare.
-pub enum Origin {
-    Commit { sha: String },
-    Refs { a: String, b: String },
-}
-
 pub struct FileList {
-    origin: Origin,
+    a: String,
+    b: String,
     files: Vec<FileEntry>,
     selected: usize,
     scroll: usize,
 }
 
 impl FileList {
-    pub fn new(origin: Origin, files: Vec<FileEntry>) -> FileList {
-        FileList { origin, files, selected: 0, scroll: 0 }
+    pub fn new(a: String, b: String, files: Vec<FileEntry>) -> FileList {
+        FileList { a, b, files, selected: 0, scroll: 0 }
+    }
+
+    pub fn set_files(&mut self, files: Vec<FileEntry>) {
+        self.files = files;
+        self.selected = self.selected.min(self.files.len().saturating_sub(1));
     }
 
     fn selected_source(&self) -> Option<DiffSource> {
         let path = self.files.get(self.selected)?.path.clone();
-        Some(match &self.origin {
-            Origin::Commit { sha } => DiffSource::Commit { sha: sha.clone(), path },
-            Origin::Refs { a, b } => DiffSource::Refs { a: a.clone(), b: b.clone(), path },
-        })
+        Some(DiffSource::Refs { a: self.a.clone(), b: self.b.clone(), path })
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Action {

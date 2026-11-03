@@ -62,6 +62,8 @@ pub struct Picker {
     ticked: Vec<String>,
     /// Lets Enter return the typed text when nothing matches, e.g. a sha.
     free_text: bool,
+    /// Keys go to the query rather than navigating, like vim's insert mode.
+    typing: bool,
 }
 
 impl Picker {
@@ -77,6 +79,7 @@ impl Picker {
             multi: false,
             ticked: Vec::new(),
             free_text: false,
+            typing: false,
         }
     }
 
@@ -110,21 +113,31 @@ impl Picker {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let last = self.matches.len().saturating_sub(1);
         match key.code {
-            KeyCode::Esc => return Outcome::Cancelled,
             KeyCode::Enter => return self.submit(),
             KeyCode::Down => self.selected = (self.selected + 1).min(last),
             KeyCode::Up => self.selected = self.selected.saturating_sub(1),
             KeyCode::Char('j' | 'n') if ctrl => self.selected = (self.selected + 1).min(last),
             KeyCode::Char('k' | 'p') if ctrl => self.selected = self.selected.saturating_sub(1),
             KeyCode::Char(' ') if self.multi => self.toggle_tick(),
-            KeyCode::Backspace => {
+
+            // Typing mode, entered with `i`.
+            KeyCode::Esc if self.typing => self.typing = false,
+            KeyCode::Backspace if self.typing => {
                 self.query.pop();
                 self.update_matches();
             }
-            KeyCode::Char(ch) if !ctrl => {
+            KeyCode::Char(ch) if self.typing && !ctrl => {
                 self.query.push(ch);
                 self.update_matches();
             }
+
+            // Navigation mode, the default.
+            KeyCode::Esc => return Outcome::Cancelled,
+            KeyCode::Char('i') => self.typing = true,
+            KeyCode::Char('j') => self.selected = (self.selected + 1).min(last),
+            KeyCode::Char('k') => self.selected = self.selected.saturating_sub(1),
+            KeyCode::Char('g') => self.selected = 0,
+            KeyCode::Char('G') => self.selected = last,
             _ => {}
         }
         Outcome::Open
@@ -164,12 +177,16 @@ impl Picker {
             return;
         }
 
-        let query = Line::from(vec![
+        let mut query = vec![
             Span::styled("> ", Style::default().fg(Color::Cyan)),
             Span::raw(self.query.as_str()),
-            Span::styled("▏", Style::default().fg(Color::Cyan)),
-        ]);
-        frame.render_widget(query, Rect { height: 1, ..inner });
+        ];
+        if self.typing {
+            query.push(Span::styled("▏", Style::default().fg(Color::Cyan)));
+        } else if self.query.is_empty() {
+            query.push(Span::styled("i to search", Style::default().fg(ui::DIM)));
+        }
+        frame.render_widget(Line::from(query), Rect { height: 1, ..inner });
 
         let list = Rect { y: inner.y + 1, height: inner.height - 1, ..inner };
         self.scroll = ui::keep_visible(self.scroll, self.selected, list.height as usize);
@@ -217,6 +234,7 @@ mod tests {
     }
 
     fn type_text(picker: &mut Picker, text: &str) {
+        picker.handle_key(key(KeyCode::Char('i')));
         for ch in text.chars() {
             picker.handle_key(key(KeyCode::Char(ch)));
         }
@@ -258,6 +276,28 @@ mod tests {
             Outcome::Picked(picked) => assert_eq!(picked, ["feature/parser"]),
             _ => panic!("expected a pick"),
         }
+    }
+
+    #[test]
+    fn letters_navigate_until_i_starts_typing() {
+        let items = vec!["a".to_string(), "b".to_string(), "jk".to_string()];
+        let mut picker = Picker::single("t", items);
+        picker.handle_key(key(KeyCode::Char('j')));
+        assert_eq!((picker.selected, picker.query.as_str()), (1, ""));
+
+        type_text(&mut picker, "jk");
+        assert_eq!(picker.query, "jk");
+        assert_eq!(picker.matches, [2]);
+    }
+
+    #[test]
+    fn esc_stops_typing_first_and_cancels_second() {
+        let mut picker = Picker::single("t", vec!["main".to_string()]);
+        type_text(&mut picker, "m");
+        assert!(matches!(picker.handle_key(key(KeyCode::Esc)), Outcome::Open));
+        assert!(!picker.typing);
+        assert_eq!(picker.query, "m");
+        assert!(matches!(picker.handle_key(key(KeyCode::Esc)), Outcome::Cancelled));
     }
 
     #[test]
