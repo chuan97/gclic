@@ -3,15 +3,14 @@
 
 use crate::app::Action;
 use crate::file_list::file_line;
-use crate::git::{self, Commit, CommitDetails, DiffSource, FileEntry};
+use crate::git::{self, Commit, DiffSource, FileEntry};
 use crate::ui;
 use anyhow::Result;
 use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
-use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Paragraph, Wrap};
 use std::collections::HashMap;
 
 const COMMIT_LIMIT: usize = 500;
@@ -259,7 +258,6 @@ pub struct GraphPanel {
     /// The file under the cursor, in the selected commit. None while the
     /// cursor is on the commit itself.
     selected_file: Option<usize>,
-    details: Option<CommitDetails>,
 }
 
 impl GraphPanel {
@@ -276,7 +274,6 @@ impl GraphPanel {
             scroll: 0,
             expanded: Vec::new(),
             selected_file: None,
-            details: None,
         }
     }
 
@@ -359,24 +356,6 @@ impl GraphPanel {
         if self.expanded_at(self.selected).is_none() {
             self.selected_file = None;
         }
-        self.update_details()
-    }
-
-    fn update_details(&mut self) -> Result<()> {
-        if self.details.is_some() {
-            self.details = match self.commits.get(self.selected) {
-                Some(commit) => Some(git::commit_details(&commit.sha)?),
-                None => None,
-            };
-        }
-        Ok(())
-    }
-
-    fn toggle_details(&mut self) -> Result<()> {
-        if self.details.take().is_none()
-            && let Some(commit) = self.commits.get(self.selected) {
-                self.details = Some(git::commit_details(&commit.sha)?);
-            }
         Ok(())
     }
 
@@ -386,12 +365,16 @@ impl GraphPanel {
         };
         match key.code {
             KeyCode::Char('y') => return Action::Copy(sha),
-            KeyCode::Char('i') => return Action::after_view_change(self.toggle_details()),
+            KeyCode::Char('i') => {
+                return match git::commit_details(&sha) {
+                    Ok(details) => Action::ShowDetails(details),
+                    Err(error) => Action::Error(error.to_string()),
+                };
+            }
             _ => {}
         }
 
         let last = self.commits.len() - 1;
-        let before = self.selected;
         match key.code {
             KeyCode::Char('j') | KeyCode::Down => self.move_down(),
             KeyCode::Char('k') | KeyCode::Up => self.move_up(),
@@ -403,11 +386,6 @@ impl GraphPanel {
                 return Action::None;
             }
             _ => return Action::None,
-        }
-        if self.selected != before
-            && let Err(error) = self.update_details()
-        {
-            return Action::Error(error.to_string());
         }
         match self.selected_file_source() {
             Some(source) => Action::PreviewDiff(source),
@@ -498,18 +476,7 @@ impl GraphPanel {
         let inner = block.inner(area);
         frame.render_widget(block, area);
 
-        let (main, details_area) = if self.details.is_some() {
-            let [top, bottom] =
-                Layout::vertical([Constraint::Min(3), Constraint::Length(9)]).areas(inner);
-            (top, Some(bottom))
-        } else {
-            (inner, None)
-        };
-
-        self.render_chain(frame, main, focused);
-        if let (Some(details), Some(details_area)) = (&self.details, details_area) {
-            render_details(frame, details_area, details);
-        }
+        self.render_chain(frame, inner, focused);
     }
 
     fn render_chain(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
@@ -655,20 +622,6 @@ impl GraphPanel {
         line.spans = spans;
         line
     }
-}
-
-fn render_details(frame: &mut Frame, area: Rect, details: &CommitDetails) {
-    let label = Style::default().fg(ui::DIM);
-    let mut lines = vec![
-        Line::from(vec![Span::styled("sha    ", label), Span::raw(details.sha.as_str())]),
-        Line::from(vec![Span::styled("author ", label), Span::raw(details.author.as_str())]),
-        Line::from(vec![Span::styled("date   ", label), Span::raw(details.date.as_str())]),
-        Line::default(),
-    ];
-    lines.extend(details.message.lines().map(Line::raw));
-    let block = ui::panel(" Commit ".to_string(), false);
-    let paragraph = Paragraph::new(lines).block(block).wrap(Wrap { trim: false });
-    frame.render_widget(paragraph, area);
 }
 
 #[cfg(test)]

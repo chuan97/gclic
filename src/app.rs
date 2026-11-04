@@ -2,8 +2,9 @@
 //! each other: they return an `Action` and `apply` carries it out here.
 
 use crate::compare::ComparePanel;
+use crate::details::DetailsPopup;
 use crate::diff::DiffPane;
-use crate::git::{self, Branch, DiffSource};
+use crate::git::{self, Branch, CommitDetails, DiffSource};
 use crate::graph::GraphPanel;
 use crate::picker::{Outcome, Picker};
 use crate::staging::StagingPanel;
@@ -37,7 +38,7 @@ Changes
 Graph
   Enter      expand commit or open file diff
   Esc        collapse              y   copy sha
-  i          toggle commit details
+  i          commit details: j/k g/G scroll, y copy sha, i/q/Esc close
 
 Diff
   Ctrl-d/u   half page             n/p  next/previous hunk
@@ -61,6 +62,7 @@ pub enum Action {
     OpenCommitBox,
     CloseCompare,
     Copy(String),
+    ShowDetails(CommitDetails),
 }
 
 impl Action {
@@ -68,14 +70,6 @@ impl Action {
     pub fn after_change(result: Result<()>) -> Action {
         match result {
             Ok(()) => Action::Refresh,
-            Err(error) => Action::Error(error.to_string()),
-        }
-    }
-
-    /// The outcome of a step that only changed what's on screen.
-    pub fn after_view_change(result: Result<()>) -> Action {
-        match result {
-            Ok(()) => Action::None,
             Err(error) => Action::Error(error.to_string()),
         }
     }
@@ -109,6 +103,7 @@ enum Modal {
     Picker(Picker, PickerUse),
     Confirm(Confirm),
     CommitBox,
+    Details(DetailsPopup),
     Error(String),
     Help,
 }
@@ -251,6 +246,7 @@ impl App {
             Modal::Picker(picker, usage) => self.handle_picker_key(picker, usage, key),
             Modal::Confirm(confirm) => self.handle_confirm_key(confirm, key),
             Modal::CommitBox => self.handle_commit_key(key),
+            Modal::Details(popup) => self.handle_details_key(popup, key),
             // Any key dismisses these.
             Modal::Error(_) | Modal::Help => {}
         }
@@ -321,6 +317,7 @@ impl App {
             Action::Error(error) => self.modal = Modal::Error(error),
             Action::Confirm(confirm) => self.modal = Modal::Confirm(confirm),
             Action::OpenCommitBox => self.modal = Modal::CommitBox,
+            Action::ShowDetails(details) => self.modal = Modal::Details(DetailsPopup::new(details)),
             Action::CloseCompare => {
                 self.compare = None;
                 self.focus_left(Focus::Changes);
@@ -405,6 +402,21 @@ impl App {
             _ => {}
         }
         self.modal = Modal::CommitBox;
+    }
+
+    fn handle_details_key(&mut self, mut popup: DetailsPopup, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('i' | 'q') => {}
+            KeyCode::Char('y') => {
+                let sha = popup.sha().to_string();
+                self.modal = Modal::Details(popup);
+                self.apply(Action::Copy(sha));
+            }
+            _ => {
+                popup.handle_key(key);
+                self.modal = Modal::Details(popup);
+            }
+        }
     }
 
     fn handle_picker_key(&mut self, mut picker: Picker, usage: PickerUse, key: KeyEvent) {
@@ -563,6 +575,7 @@ impl App {
         match &mut self.modal {
             Modal::None => {}
             Modal::Picker(picker, _) => picker.render(frame, area),
+            Modal::Details(popup) => popup.render(frame, area),
             Modal::Confirm(confirm) => {
                 let text = match confirm {
                     Confirm::Restore(path) => format!("Discard your changes to {path}?"),

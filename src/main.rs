@@ -1,5 +1,6 @@
 mod app;
 mod compare;
+mod details;
 mod diff;
 mod file_list;
 mod git;
