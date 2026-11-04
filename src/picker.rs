@@ -2,7 +2,6 @@
 //! refs to compare. The branches pane uses its search and selection, and draws
 //! the rows itself.
 
-use crate::git;
 use crate::ui;
 use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -214,10 +213,6 @@ impl Picker {
     fn submit(&self) -> Outcome {
         if self.multi {
             return Outcome::Picked(self.ticked.clone());
-        }
-        // A sha mustn't lose to a branch name it happens to fuzzy-match.
-        if self.free_text && git::looks_like_sha(&self.query) {
-            return Outcome::Picked(vec![self.query.clone()]);
         }
         match self.highlighted() {
             Some(item) => Outcome::Picked(vec![item.clone()]),
@@ -489,18 +484,6 @@ mod tests {
         match free.handle_key(key(KeyCode::Enter)) {
             Outcome::Picked(picked) => assert_eq!(picked, ["xyz123"]),
             _ => panic!("expected the typed text"),
-        }
-    }
-
-    #[test]
-    fn a_sha_beats_a_branch_it_fuzzy_matches() {
-        let items = vec!["a-b-c-1-2-3-4".to_string()];
-        let mut picker = Picker::with_free_text("t", items);
-        type_text(&mut picker, "abc1234");
-        assert_eq!(picker.matches, [0]); // the branch does match
-        match picker.handle_key(key(KeyCode::Enter)) {
-            Outcome::Picked(picked) => assert_eq!(picked, ["abc1234"]),
-            _ => panic!("expected the sha"),
         }
     }
 
