@@ -52,6 +52,13 @@ pub enum DiffSource {
     Refs { a: String, b: String, path: String },
 }
 
+impl DiffSource {
+    /// Whether this comes from the Changes pane, rather than from history.
+    pub fn is_working_tree(&self) -> bool {
+        matches!(self, DiffSource::Unstaged(_) | DiffSource::Staged(_) | DiffSource::Untracked(_))
+    }
+}
+
 fn git(args: &[&str]) -> Result<std::process::Output> {
     Command::new("git")
         .args(args)
@@ -242,12 +249,17 @@ pub fn refs_fingerprint() -> String {
     format!("{}\n{}", refs.unwrap_or_default(), head.unwrap_or_default())
 }
 
+/// The checked-out branch. None on a detached HEAD.
+pub fn current_branch() -> Option<String> {
+    try_run(&["symbolic-ref", "--short", "-q", "HEAD"])
+}
+
 /// The default graph view: the current branch and its remote counterpart.
 pub fn default_refs() -> Vec<String> {
     if !has_commits() {
         return Vec::new();
     }
-    let Some(branch) = try_run(&["symbolic-ref", "--short", "-q", "HEAD"]) else {
+    let Some(branch) = current_branch() else {
         return vec!["HEAD".to_string()]; // detached HEAD
     };
     let upstream = try_run(&["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);

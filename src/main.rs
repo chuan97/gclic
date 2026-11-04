@@ -1,4 +1,5 @@
 mod app;
+mod branches;
 mod compare;
 mod details;
 mod diff;

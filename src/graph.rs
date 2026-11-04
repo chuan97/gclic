@@ -360,6 +360,10 @@ impl GraphPanel {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Action {
+        // Checked first, as it's the way out if the chosen branches were deleted.
+        if key.code == KeyCode::Char('b') {
+            return Action::OpenGraphPicker;
+        }
         let Some(sha) = self.commits.get(self.selected).map(|c| c.sha.clone()) else {
             return Action::None;
         };

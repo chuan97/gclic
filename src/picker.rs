@@ -1,5 +1,5 @@
-//! A fuzzy-search popup over a list of names, used for checkout, for choosing
-//! graph branches and for choosing refs to compare.
+//! A fuzzy-searchable list of names. As a popup it chooses graph branches and
+//! refs to compare. As a pane's contents, it lists the branches to check out.
 
 use crate::ui;
 use ratatui::Frame;
@@ -64,6 +64,10 @@ pub struct Picker {
     free_text: bool,
     /// Keys go to the query rather than navigating, like vim's insert mode.
     typing: bool,
+    /// Shown inside a pane rather than as a popup.
+    in_pane: bool,
+    /// The item to mark as current, e.g. the checked-out branch.
+    current: Option<String>,
 }
 
 impl Picker {
@@ -80,6 +84,8 @@ impl Picker {
             ticked: Vec::new(),
             free_text: false,
             typing: false,
+            in_pane: false,
+            current: None,
         }
     }
 
@@ -89,6 +95,45 @@ impl Picker {
 
     pub fn with_free_text(title: &str, items: Vec<String>) -> Picker {
         Picker { free_text: true, ..Picker::single(title, items) }
+    }
+
+    pub fn pane() -> Picker {
+        Picker { in_pane: true, ..Picker::single("", Vec::new()) }
+    }
+
+    pub fn is_typing(&self) -> bool {
+        self.typing
+    }
+
+    pub fn stop_typing(&mut self) {
+        self.typing = false;
+    }
+
+    pub fn clear_query(&mut self) {
+        self.query.clear();
+        self.update_matches();
+    }
+
+    pub fn set_current(&mut self, current: Option<String>) {
+        self.current = current;
+    }
+
+    /// Replaces the list, keeping the cursor on the same item if it's still there.
+    pub fn set_items(&mut self, items: Vec<String>) {
+        let highlighted = self.highlighted().cloned();
+        self.items = items;
+        self.update_matches();
+        if let Some(item) = highlighted {
+            self.select_item(&item);
+        }
+    }
+
+    /// Moves the cursor to `item`, if it's in the filtered list.
+    pub fn select_item(&mut self, item: &str) {
+        let position = self.matches.iter().position(|&i| self.items[i] == item);
+        if let Some(position) = position {
+            self.selected = position;
+        }
     }
 
     fn update_matches(&mut self) {
@@ -173,32 +218,44 @@ impl Picker {
         let block = ui::panel(self.title.clone(), true);
         let inner = block.inner(popup);
         frame.render_widget(block, popup);
-        if inner.height < 2 {
-            return;
+        self.render_list(frame, inner, true);
+    }
+
+    /// The search line and the list. In a pane, the search line only shows when in use.
+    pub fn render_list(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
+        let searching = self.typing || !self.query.is_empty();
+        let show_query = !self.in_pane || searching;
+        let query_height = u16::from(show_query).min(area.height);
+        if show_query && query_height > 0 {
+            let mut query = vec![
+                Span::styled("> ", Style::default().fg(Color::Cyan)),
+                Span::raw(self.query.as_str()),
+            ];
+            if self.typing {
+                query.push(Span::styled("▏", Style::default().fg(Color::Cyan)));
+            } else if self.query.is_empty() {
+                query.push(Span::styled("i to search", Style::default().fg(ui::DIM)));
+            }
+            frame.render_widget(Line::from(query), Rect { height: 1, ..area });
         }
 
-        let mut query = vec![
-            Span::styled("> ", Style::default().fg(Color::Cyan)),
-            Span::raw(self.query.as_str()),
-        ];
-        if self.typing {
-            query.push(Span::styled("▏", Style::default().fg(Color::Cyan)));
-        } else if self.query.is_empty() {
-            query.push(Span::styled("i to search", Style::default().fg(ui::DIM)));
-        }
-        frame.render_widget(Line::from(query), Rect { height: 1, ..inner });
-
-        let list = Rect { y: inner.y + 1, height: inner.height - 1, ..inner };
+        let list = Rect {
+            y: area.y + query_height,
+            height: area.height - query_height,
+            ..area
+        };
         self.scroll = ui::keep_visible(self.scroll, self.selected, list.height as usize);
         let lines: Vec<Line> = self
             .matches
             .iter()
             .enumerate()
             .skip(self.scroll)
-            .map(|(row, &item)| self.item_line(&self.items[item], row == self.selected))
+            .map(|(row, &item)| self.item_line(&self.items[item], row == self.selected && focused))
             .collect();
         if lines.is_empty() {
-            let note = if self.free_text {
+            let note = if self.items.is_empty() {
+                "Nothing to list"
+            } else if self.free_text {
                 "No match. Enter uses the typed text as a ref"
             } else {
                 "No match"
@@ -215,7 +272,16 @@ impl Picker {
             let mark = if self.ticked.iter().any(|t| t == item) { "◉ " } else { "○ " };
             spans.push(Span::styled(mark, Style::default().fg(Color::Green)));
         }
-        spans.push(Span::raw(item));
+        if self.in_pane && self.current.as_deref() == Some(item) {
+            let style = Style::default().fg(Color::Green).add_modifier(Modifier::BOLD);
+            spans.push(Span::styled("* ", style));
+            spans.push(Span::styled(item, style));
+        } else if self.in_pane {
+            spans.push(Span::raw("  "));
+            spans.push(Span::raw(item));
+        } else {
+            spans.push(Span::raw(item));
+        }
         let line = Line::from(spans);
         if selected {
             line.style(Style::default().bg(ui::SELECTED_BG).add_modifier(Modifier::BOLD))
@@ -298,6 +364,32 @@ mod tests {
         assert!(!picker.typing);
         assert_eq!(picker.query, "m");
         assert!(matches!(picker.handle_key(key(KeyCode::Esc)), Outcome::Cancelled));
+    }
+
+    #[test]
+    fn set_items_keeps_the_cursor_on_the_same_item() {
+        let mut picker = Picker::single("t", vec!["a".to_string(), "b".to_string()]);
+        picker.handle_key(key(KeyCode::Char('j')));
+        picker.set_items(vec!["new".to_string(), "a".to_string(), "b".to_string()]);
+        assert_eq!(picker.highlighted().unwrap(), "b");
+    }
+
+    #[test]
+    fn select_item_ignores_names_that_are_filtered_out() {
+        let items = vec!["main".to_string(), "feature".to_string()];
+        let mut picker = Picker::single("t", items);
+        type_text(&mut picker, "fea");
+        picker.select_item("main");
+        assert_eq!(picker.highlighted().unwrap(), "feature");
+    }
+
+    #[test]
+    fn clearing_the_query_lists_everything_again() {
+        let items = vec!["main".to_string(), "feature".to_string()];
+        let mut picker = Picker::single("t", items);
+        type_text(&mut picker, "fea");
+        picker.clear_query();
+        assert_eq!(picker.matches, [0, 1]);
     }
 
     #[test]

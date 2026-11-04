@@ -1,10 +1,11 @@
 //! Owns all state, lays out the screen and routes keys. Panels never touch
 //! each other: they return an `Action` and `apply` carries it out here.
 
+use crate::branches::BranchesPanel;
 use crate::compare::ComparePanel;
 use crate::details::DetailsPopup;
 use crate::diff::DiffPane;
-use crate::git::{self, Branch, CommitDetails, DiffSource};
+use crate::git::{self, CommitDetails, DiffSource};
 use crate::graph::GraphPanel;
 use crate::picker::{Outcome, Picker};
 use crate::staging::StagingPanel;
@@ -24,12 +25,14 @@ const AUTO_REFRESH: Duration = Duration::from_millis(500);
 
 const HELP: &str = "\
 Anywhere
-  Tab        next pane             b   check out a branch
-  r          refresh               B   choose graph branches
+  h/l        previous/next pane    r   refresh
   ?          this help             C   compare two refs
   z          zoom diff             q   quit
   j/k g/G    move                  Enter  open
   Esc        close the diff, or go back
+
+Branches
+  Enter      check out             i   start typing to filter
 
 Changes
   Space/s    stage or unstage      a/A  stage/unstage all
@@ -37,6 +40,7 @@ Changes
 
 Graph
   Enter      expand commit or open file diff
+  b          choose which branches to show
   Esc        collapse              y   copy sha
   i          commit details: j/k g/G scroll, y copy sha, i/q/Esc close
 
@@ -60,6 +64,7 @@ pub enum Action {
     Error(String),
     Confirm(Confirm),
     OpenCommitBox,
+    OpenGraphPicker,
     CloseCompare,
     Copy(String),
     ShowDetails(CommitDetails),
@@ -83,6 +88,7 @@ pub enum Confirm {
 
 #[derive(Clone, Copy, PartialEq)]
 enum Focus {
+    Branches,
     Changes,
     Graph,
     Compare,
@@ -91,7 +97,6 @@ enum Focus {
 
 /// What the picker's result will be used for.
 enum PickerUse {
-    Checkout(Vec<Branch>),
     GraphBranches,
     CompareA,
     CompareB { a: String },
@@ -109,6 +114,7 @@ enum Modal {
 }
 
 pub struct App {
+    branches: BranchesPanel,
     staging: StagingPanel,
     graph: GraphPanel,
     compare: Option<ComparePanel>,
@@ -129,6 +135,7 @@ pub struct App {
 impl App {
     pub fn new() -> App {
         let mut app = App {
+            branches: BranchesPanel::new(),
             staging: StagingPanel::new(),
             graph: GraphPanel::new(),
             compare: None,
@@ -176,6 +183,7 @@ impl App {
     }
 
     fn reload_panels(&mut self) -> Result<()> {
+        self.branches.refresh()?;
         self.staging.refresh()?;
         self.graph.refresh()?;
         if let Some(compare) = &mut self.compare {
@@ -203,7 +211,8 @@ impl App {
         if self.diff.is_none() {
             return;
         }
-        if self.focus == Focus::Changes {
+        let shows_working_tree = self.diff.as_ref().is_some_and(|diff| diff.source.is_working_tree());
+        if self.focus == Focus::Changes && shows_working_tree {
             match self.staging.selected_source() {
                 Some(source) => self.show_diff(source),
                 None => self.diff = None,
@@ -256,12 +265,15 @@ impl App {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
             KeyCode::Char('c') if ctrl => self.should_quit = true,
+            // While searching branches, letters belong to the search.
+            _ if self.focus == Focus::Branches && self.branches.is_typing() => {
+                self.send_to_focused_panel(key);
+            }
             KeyCode::Char('q') => self.should_quit = true,
-            KeyCode::Tab => self.next_focus(),
+            KeyCode::Char('h') => self.move_focus(-1),
+            KeyCode::Char('l') => self.move_focus(1),
             KeyCode::Char('?') => self.modal = Modal::Help,
             KeyCode::Char('r') => self.refresh(),
-            KeyCode::Char('b') => self.open_checkout_picker(),
-            KeyCode::Char('B') => self.open_graph_picker(),
             KeyCode::Char('C') => self.open_compare_picker(),
             KeyCode::Char('z') if self.diff.is_some() => {
                 self.zoomed = !self.zoomed;
@@ -287,6 +299,7 @@ impl App {
 
     fn send_to_focused_panel(&mut self, key: KeyEvent) {
         let action = match self.focus {
+            Focus::Branches => self.branches.handle_key(key),
             Focus::Changes => self.staging.handle_key(key),
             Focus::Graph => self.graph.handle_key(key),
             Focus::Compare => match &mut self.compare {
@@ -317,6 +330,7 @@ impl App {
             Action::Error(error) => self.modal = Modal::Error(error),
             Action::Confirm(confirm) => self.modal = Modal::Confirm(confirm),
             Action::OpenCommitBox => self.modal = Modal::CommitBox,
+            Action::OpenGraphPicker => self.open_graph_picker(),
             Action::ShowDetails(details) => self.modal = Modal::Details(DetailsPopup::new(details)),
             Action::CloseCompare => {
                 self.compare = None;
@@ -329,21 +343,22 @@ impl App {
         }
     }
 
-    fn next_focus(&mut self) {
+    /// Steps along the panes from left to right, stopping at the ends.
+    fn move_focus(&mut self, step: isize) {
         let mut order = if self.compare.is_some() {
             vec![Focus::Compare]
         } else {
-            vec![Focus::Changes, Focus::Graph]
+            vec![Focus::Branches, Focus::Changes, Focus::Graph]
         };
         if self.diff.is_some() {
             order.push(Focus::Diff);
         }
         let current = order.iter().position(|f| *f == self.focus).unwrap_or(0);
-        let next = order[(current + 1) % order.len()];
-        if next == Focus::Diff {
+        let next = current.saturating_add_signed(step).min(order.len() - 1);
+        if order[next] == Focus::Diff {
             self.focus_diff();
-        } else {
-            self.focus_left(next);
+        } else if next != current {
+            self.focus_left(order[next]);
         }
     }
 
@@ -430,20 +445,7 @@ impl App {
     fn use_picked(&mut self, usage: PickerUse, picked: Vec<String>) {
         let first = picked.first().cloned().unwrap_or_default();
         match usage {
-            PickerUse::Checkout(branches) => {
-                let branch = branches.iter().find(|b| b.name == first);
-                let local_name = branch.map_or(first.as_str(), |b| b.local_name.as_str());
-                match git::switch(local_name) {
-                    Ok(()) => {
-                        self.refresh();
-                        self.message = format!("On branch {local_name}");
-                    }
-                    Err(error) => self.modal = Modal::Error(error.to_string()),
-                }
-            }
             PickerUse::GraphBranches => {
-                self.compare = None;
-                self.focus_left(Focus::Graph);
                 let result = self.graph.set_refs(picked);
                 self.report(result);
             }
@@ -475,17 +477,6 @@ impl App {
                     Err(error) => self.modal = Modal::Error(error.to_string()),
                 }
             }
-        }
-    }
-
-    fn open_checkout_picker(&mut self) {
-        match git::branches() {
-            Ok(branches) => {
-                let names = branches.iter().map(|b| b.name.clone()).collect();
-                let picker = Picker::single("Check out branch", names);
-                self.modal = Modal::Picker(picker, PickerUse::Checkout(branches));
-            }
-            Err(error) => self.modal = Modal::Error(error.to_string()),
         }
     }
 
@@ -538,10 +529,15 @@ impl App {
             compare.render(frame, area, self.focus == Focus::Compare);
             return;
         }
-        let [top, bottom] =
-            Layout::vertical([Constraint::Percentage(40), Constraint::Percentage(60)]).areas(area);
-        self.staging.render(frame, top, self.focus == Focus::Changes);
-        self.graph.render(frame, bottom, self.focus == Focus::Graph);
+        let [branches, changes, graph] = Layout::vertical([
+            Constraint::Percentage(20),
+            Constraint::Percentage(30),
+            Constraint::Percentage(50),
+        ])
+        .areas(area);
+        self.branches.render(frame, branches, self.focus == Focus::Branches);
+        self.staging.render(frame, changes, self.focus == Focus::Changes);
+        self.graph.render(frame, graph, self.focus == Focus::Graph);
     }
 
     fn render_diff(&mut self, frame: &mut Frame, area: Rect) {
@@ -562,11 +558,12 @@ impl App {
 
     fn hints(&self) -> &'static str {
         match self.focus {
-            Focus::Changes => "space stage · enter diff · d restore · c commit · tab next · ? help · q quit",
+            Focus::Branches => "enter check out · i search · esc clear search · h/l panes · ? help · q quit",
+            Focus::Changes => "space stage · enter diff · d restore · c commit · h/l panes · ? help · q quit",
             Focus::Graph if self.graph.is_on_file() => "enter diff · esc collapse · j/k move · i details · y copy sha · ? help",
-            Focus::Graph => "enter expand · i details · y copy sha · B branches · tab next · ? help · q quit",
-            Focus::Compare => "enter diff · esc close · tab next · ? help · q quit",
-            Focus::Diff => "j/k scroll · ctrl-d/u page · n/p hunk · z zoom · esc back · ? help",
+            Focus::Graph => "enter expand · i details · y copy sha · b choose branches · h/l panes · ? help · q quit",
+            Focus::Compare => "enter diff · esc close · h/l panes · ? help · q quit",
+            Focus::Diff => "j/k scroll · ctrl-d/u page · n/p hunk · z zoom · h panes · esc back · ? help",
         }
     }
 
