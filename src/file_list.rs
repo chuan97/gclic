@@ -28,7 +28,11 @@ impl FileList {
         self.selected = self.selected.min(self.files.len().saturating_sub(1));
     }
 
-    fn selected_source(&self) -> Option<DiffSource> {
+    pub fn swap_refs(&mut self) {
+        std::mem::swap(&mut self.a, &mut self.b);
+    }
+
+    pub fn selected_source(&self) -> Option<DiffSource> {
         let path = self.files.get(self.selected)?.path.clone();
         Some(DiffSource::Refs { a: self.a.clone(), b: self.b.clone(), path })
     }

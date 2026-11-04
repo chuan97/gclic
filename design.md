@@ -180,6 +180,9 @@ Implemented after trying the MVP. Where this differs from the plan above, this w
 - **Branches pane:** checkout moved from a popup to a permanent pane at the top of the left column (`branches.rs`). The checked-out branch shows as `* name` in bold green, and the cursor is a selection bar. `i` searches, as in the picker it shares its list with. Choosing which branches the graph shows stays a popup, opened with `b` in the Graph pane.
 - **`h`/`l` switch panes, not `Tab`:** a fixed line of Branches, Changes, Graph, then Diff when open. `Esc` from the diff still returns to the pane it came from.
 - **Tick all in the graph's branch picker:** `a` ticks and `A` unticks everything shown, so a search narrows what they affect.
+- **Swapping A and B:** `r` in compare swaps the two refs, from its list or its diff.
+- **No manual refresh:** the global `r` is gone, as auto-refresh covers everything the app reads from git.
+- **Recent yanks in compare:** the last two commits yanked top both compare pickers, in yank order, and the second picker leaves out what was picked as A. So `y`, `y`, `C`, `Enter`, `Enter` compares two commits, with the first yanked as A. They last until quitting.
 - **Comparing commits by sha:** `p` in the compare pickers pastes the first word on the clipboard, so `y` in the graph, then `C`, `p`, `Enter` compares a commit. Compare shortens shas with `git rev-parse --short`, to keep titles readable.
 - **Wrap-around:** `j`/`k` and `h`/`l` wrap past either end, in every list, popup and pane. `g`/`G` and the half-page keys are jumps, so they stop at the ends.
 - **Constant refresh:** every 500 ms the app checks `git status` and a fingerprint of refs and HEAD, reloading the graph and compare only when the fingerprint changes. This runs on the UI thread, so a repo with a slow `git status` could make keys lag; the fix would be a background thread.

@@ -25,8 +25,8 @@ const AUTO_REFRESH: Duration = Duration::from_millis(500);
 
 const HELP: &str = "\
 Anywhere
-  h/l        previous/next pane    r   refresh
-  ?          this help             C   compare two refs
+  h/l        previous/next pane    C   compare two refs
+  ?          this help
   z          zoom diff             q   quit
   j/k g/G    move                  Enter  open
   Esc        close the diff, or go back
@@ -44,6 +44,9 @@ Graph
   b          choose which branches to show
   Esc        collapse              y   copy sha
   i          commit details: j/k g/G scroll, y copy sha, i/q/Esc close
+
+Compare
+  r          swap A and B, also from its diff
 
 Diff
   Ctrl-d/u   half page             n/p  next/previous hunk
@@ -128,6 +131,8 @@ pub struct App {
     last_left_focus: Focus,
     modal: Modal,
     commit_draft: String,
+    /// The last commits yanked, oldest first, as labels starting with the sha.
+    recent_yanks: Vec<String>,
     message: String,
     should_quit: bool,
     last_refresh: Instant,
@@ -148,6 +153,7 @@ impl App {
             last_left_focus: Focus::Changes,
             modal: Modal::None,
             commit_draft: String::new(),
+            recent_yanks: Vec::new(),
             message: String::new(),
             should_quit: false,
             last_refresh: Instant::now(),
@@ -276,7 +282,7 @@ impl App {
             KeyCode::Char('h') => self.move_focus(false),
             KeyCode::Char('l') => self.move_focus(true),
             KeyCode::Char('?') => self.modal = Modal::Help,
-            KeyCode::Char('r') => self.refresh(),
+            KeyCode::Char('r') if self.compare.is_some() => self.swap_compare(),
             KeyCode::Char('C') => self.open_compare_picker(),
             KeyCode::Char('z') if self.diff.is_some() => {
                 self.zoomed = !self.zoomed;
@@ -340,9 +346,21 @@ impl App {
                 self.focus_left(Focus::Changes);
             }
             Action::Copy(sha) => match copy_to_clipboard(&sha) {
-                Ok(()) => self.message = format!("Copied {sha}"),
+                Ok(()) => {
+                    if let Some(label) = git::commit_label(&sha) {
+                        remember_yank(&mut self.recent_yanks, label);
+                    }
+                    self.message = format!("Copied {sha}");
+                }
                 Err(error) => self.modal = Modal::Error(error.to_string()),
             },
+        }
+    }
+
+    fn swap_compare(&mut self) {
+        if let Some(compare) = &mut self.compare {
+            let action = compare.swap();
+            self.apply(action);
         }
     }
 
@@ -464,7 +482,9 @@ impl App {
     }
 
     fn use_picked(&mut self, usage: PickerUse, picked: Vec<String>) {
-        let first = picked.first().cloned().unwrap_or_default();
+        // Refs have no spaces, so this also takes the sha out of a yank's label.
+        let first = picked.first().and_then(|item| item.split_whitespace().next());
+        let first = first.unwrap_or_default().to_string();
         match usage {
             PickerUse::GraphBranches => {
                 let result = self.graph.set_refs(picked);
@@ -476,8 +496,10 @@ impl App {
                     return;
                 }
                 let a = git::display_ref(&first);
-                match compare_items() {
-                    Ok(items) => {
+                match compare_items(&self.recent_yanks) {
+                    Ok(mut items) => {
+                        // Comparing a ref with itself shows nothing.
+                        items.retain(|item| item.split_whitespace().next() != Some(a.as_str()));
                         let title = format!("Compare {a} with: i types, p pastes");
                         let picker = Picker::with_free_text(&title, items);
                         self.modal = Modal::Picker(picker, PickerUse::CompareB { a });
@@ -516,7 +538,7 @@ impl App {
     }
 
     fn open_compare_picker(&mut self) {
-        match compare_items() {
+        match compare_items(&self.recent_yanks) {
             Ok(items) => {
                 let picker = Picker::with_free_text("Compare ref A: i types, p pastes", items);
                 self.modal = Modal::Picker(picker, PickerUse::CompareA);
@@ -584,7 +606,7 @@ impl App {
             Focus::Changes => "space stage · enter diff · d restore · c commit · h/l panes · ? help · q quit",
             Focus::Graph if self.graph.is_on_file() => "enter diff · esc collapse · j/k move · i details · y copy sha · ? help",
             Focus::Graph => "enter expand · i details · y copy sha · b choose branches · h/l panes · ? help · q quit",
-            Focus::Compare => "enter diff · esc close · h/l panes · ? help · q quit",
+            Focus::Compare => "enter diff · r swap A and B · esc close · h/l panes · ? help · q quit",
             Focus::Diff => "j/k scroll · ctrl-d/u page · n/p hunk · z zoom · h panes · esc back · ? help",
         }
     }
@@ -639,8 +661,20 @@ fn render_popup(
     frame.render_widget(paragraph, popup);
 }
 
-fn compare_items() -> Result<Vec<String>> {
-    let mut items = vec!["HEAD".to_string()];
+/// Keeps the last two yanks, the most a comparison can use. In yank order, so
+/// that the first one yanked is the top choice for A and the second for B.
+fn remember_yank(yanks: &mut Vec<String>, label: String) {
+    let sha = label.split_whitespace().next().unwrap_or_default();
+    yanks.retain(|yank| yank.split_whitespace().next() != Some(sha));
+    yanks.push(label);
+    if yanks.len() > 2 {
+        yanks.remove(0);
+    }
+}
+
+fn compare_items(recent_yanks: &[String]) -> Result<Vec<String>> {
+    let mut items = recent_yanks.to_vec();
+    items.push("HEAD".to_string());
     items.extend(git::branches()?.into_iter().map(|b| b.name));
     items.extend(git::tags()?);
     Ok(items)
@@ -660,4 +694,32 @@ fn copy_to_clipboard(text: &str) -> Result<()> {
     }
     child.wait()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn yanks(labels: &[&str]) -> Vec<String> {
+        let mut yanks = Vec::new();
+        for label in labels {
+            remember_yank(&mut yanks, label.to_string());
+        }
+        yanks
+    }
+
+    #[test]
+    fn yanks_keep_their_order() {
+        assert_eq!(yanks(&["aaa  one", "bbb  two"]), ["aaa  one", "bbb  two"]);
+    }
+
+    #[test]
+    fn only_the_last_two_yanks_are_kept() {
+        assert_eq!(yanks(&["aaa  one", "bbb  two", "ccc  three"]), ["bbb  two", "ccc  three"]);
+    }
+
+    #[test]
+    fn yanking_a_commit_again_moves_it_to_the_end() {
+        assert_eq!(yanks(&["aaa  one", "bbb  two", "aaa  one"]), ["bbb  two", "aaa  one"]);
+    }
 }

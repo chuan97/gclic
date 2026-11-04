@@ -298,6 +298,11 @@ pub fn display_ref(reference: &str) -> String {
     reference.to_string()
 }
 
+/// A one-line description of a commit: its short sha, two spaces, its subject.
+pub fn commit_label(sha: &str) -> Option<String> {
+    try_run(&["show", "-s", "--format=%h  %s", sha])
+}
+
 pub fn commit_details(sha: &str) -> Result<CommitDetails> {
     let text = run(&["show", "-s", "--date=iso", "--format=%H%n%an <%ae>%n%ad%n%B", sha])?;
     let mut lines = text.splitn(4, '\n');

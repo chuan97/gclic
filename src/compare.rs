@@ -35,6 +35,19 @@ impl ComparePanel {
         Ok(())
     }
 
+    /// Swaps A and B. An open diff follows, through the action returned.
+    pub fn swap(&mut self) -> Action {
+        std::mem::swap(&mut self.a, &mut self.b);
+        self.files.swap_refs();
+        if let Err(error) = self.refresh() {
+            return Action::Error(error.to_string());
+        }
+        match self.files.selected_source() {
+            Some(source) => Action::PreviewDiff(source),
+            None => Action::None,
+        }
+    }
+
     pub fn handle_key(&mut self, key: KeyEvent) -> Action {
         if key.code == KeyCode::Esc {
             return Action::CloseCompare;
