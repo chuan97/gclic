@@ -40,6 +40,9 @@ pub struct Branch {
     pub name: String,
     /// Name without the remote, e.g. `main` for `origin/main`.
     pub local_name: String,
+    pub is_remote: bool,
+    /// The remote branch this one tracks, for a local branch that has one.
+    pub upstream: Option<String>,
 }
 
 /// What a diff pane is showing. One variant per place a diff can come from.
@@ -309,7 +312,7 @@ pub fn commit_files(sha: &str) -> Result<Vec<FileEntry>> {
 pub fn branches() -> Result<Vec<Branch>> {
     let text = run(&[
         "for-each-ref",
-        "--format=%(refname)%00%(refname:short)%00%(refname:lstrip=3)",
+        "--format=%(refname)%00%(refname:short)%00%(refname:lstrip=3)%00%(upstream:short)",
         "refs/heads",
         "refs/remotes",
     ])?;
@@ -320,17 +323,24 @@ fn parse_branches(text: &str) -> Vec<Branch> {
     let mut branches = Vec::new();
     for line in text.lines() {
         let fields: Vec<&str> = line.split('\0').collect();
-        let [full, short, without_remote] = fields[..] else { continue };
+        let [full, short, without_remote, upstream] = fields[..] else { continue };
         if full.starts_with("refs/remotes/") {
             // `origin/HEAD` is only a pointer to the remote's default branch.
             if without_remote != "HEAD" {
                 branches.push(Branch {
                     name: short.to_string(),
                     local_name: without_remote.to_string(),
+                    is_remote: true,
+                    upstream: None,
                 });
             }
         } else {
-            branches.push(Branch { name: short.to_string(), local_name: short.to_string() });
+            branches.push(Branch {
+                name: short.to_string(),
+                local_name: short.to_string(),
+                is_remote: false,
+                upstream: (!upstream.is_empty()).then(|| upstream.to_string()),
+            });
         }
     }
     branches
@@ -341,10 +351,13 @@ pub fn tags() -> Result<Vec<String>> {
     Ok(text.lines().map(str::to_string).collect())
 }
 
-/// For a remote branch this is given the name without the remote: git then
-/// creates a tracking branch, or switches to the local one if it exists.
 pub fn switch(local_name: &str) -> Result<()> {
     run(&["switch", local_name]).map(|_| ())
+}
+
+/// Creates a local branch tracking this remote one, and switches to it.
+pub fn switch_track(remote_name: &str) -> Result<()> {
+    run(&["switch", "--track", remote_name]).map(|_| ())
 }
 
 // ---------------------------------------------------------------- compare
@@ -408,13 +421,16 @@ mod tests {
 
     #[test]
     fn branches_skip_remote_head_and_strip_the_remote() {
-        let text = "refs/heads/main\0main\0\n\
-                    refs/remotes/origin/HEAD\0origin\0HEAD\n\
-                    refs/remotes/origin/a/b\0origin/a/b\0a/b\n";
+        let text = "refs/heads/main\0main\0\0origin/main\n\
+                    refs/remotes/origin/HEAD\0origin\0HEAD\0\n\
+                    refs/remotes/origin/a/b\0origin/a/b\0a/b\0\n";
         let branches = parse_branches(text);
         assert_eq!(branches.len(), 2);
         assert_eq!(branches[0].local_name, "main");
         assert_eq!(branches[1].name, "origin/a/b");
         assert_eq!(branches[1].local_name, "a/b");
+        assert_eq!(branches[0].upstream.as_deref(), Some("origin/main"));
+        assert!(!branches[0].is_remote);
+        assert!(branches[1].is_remote);
     }
 }

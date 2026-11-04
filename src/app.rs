@@ -33,6 +33,7 @@ Anywhere
 
 Branches
   Enter      check out             i   start typing to filter
+  Space      show a branch's remotes
 
 Changes
   Space/s    stage or unstage      a/A  stage/unstage all
@@ -562,7 +563,7 @@ impl App {
 
     fn hints(&self) -> &'static str {
         match self.focus {
-            Focus::Branches => "enter check out · i search · esc clear search · h/l panes · ? help · q quit",
+            Focus::Branches => "enter check out · space remotes · i search · esc clear search · h/l panes · ? help · q quit",
             Focus::Changes => "space stage · enter diff · d restore · c commit · h/l panes · ? help · q quit",
             Focus::Graph if self.graph.is_on_file() => "enter diff · esc collapse · j/k move · i details · y copy sha · ? help",
             Focus::Graph => "enter expand · i details · y copy sha · b choose branches · h/l panes · ? help · q quit",
