@@ -172,7 +172,7 @@ Implemented after trying the MVP. Where this differs from the plan above, this w
 - **Lines between beads:** every pair of beads is joined by a row of lines, even though this fits about half as many commits on screen.
 - **Graph row order:** bead, title, author, branch names.
 - **Word-level highlighting in diffs:** paired lines mark the changed words with a slightly stronger red or green, using a longest common subsequence over words. Lines with little in common (under 30%, ignoring whitespace) get no word marks.
-- **Commit files as a drop-down:** `Enter` opens a commit's files inline under it, and `j`/`k` walk through them as rows. The separate file view is gone, so `file_list.rs` now only serves compare, plus the shared file row.
+- **Commit files as a drop-down:** `Enter` opens a commit's files inline under it, and `j`/`k` walk through them as rows. Several commits can be open at once. `Esc` collapses the selected commit, or all of them from a closed commit. The separate file view is gone, so `file_list.rs` now only serves compare, plus the shared file row.
 - **Branch colors, no dimming:** a commit takes the color of the first selected ref that reaches it, and its label matches its bead. With several branches selected, a branch and its remotes share a color. With just one branch and its remote, as in the default view, each gets its own: local and shared commits are green, remote-only commits are blue. This replaces the plan's dim shared commits.
 - **Constant refresh:** every 500 ms the app checks `git status` and a fingerprint of refs and HEAD, reloading the graph and compare only when the fingerprint changes. This runs on the UI thread, so a repo with a slow `git status` could make keys lag; the fix would be a background thread.
 

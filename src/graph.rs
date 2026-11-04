@@ -221,16 +221,14 @@ struct Tip {
 struct Expanded {
     sha: String,
     files: Vec<FileEntry>,
-    /// The file under the cursor. None while the cursor is on a commit.
-    selected: Option<usize>,
 }
 
 /// One row on screen.
 enum Display {
     /// An index into `rows`.
     Graph(usize),
-    /// An index into the expanded commit's files.
-    File(usize),
+    /// A file of an expanded commit, as indexes into `commits` and its files.
+    File { commit: usize, file: usize },
 }
 
 pub struct GraphPanel {
@@ -245,7 +243,10 @@ pub struct GraphPanel {
     /// Index into `commits`.
     selected: usize,
     scroll: usize,
-    expanded: Option<Expanded>,
+    expanded: Vec<Expanded>,
+    /// The file under the cursor, in the selected commit. None while the
+    /// cursor is on the commit itself.
+    selected_file: Option<usize>,
     details: Option<CommitDetails>,
 }
 
@@ -260,7 +261,8 @@ impl GraphPanel {
             masks: Vec::new(),
             selected: 0,
             scroll: 0,
-            expanded: None,
+            expanded: Vec::new(),
+            selected_file: None,
             details: None,
         }
     }
@@ -271,19 +273,20 @@ impl GraphPanel {
 
     pub fn set_refs(&mut self, refs: Vec<String>) -> Result<()> {
         self.custom_refs = refs;
-        self.expanded = None;
+        self.expanded.clear();
         self.selected = 0;
+        self.selected_file = None;
         self.refresh()
     }
 
     pub fn is_on_file(&self) -> bool {
-        self.expanded.as_ref().is_some_and(|expanded| expanded.selected.is_some())
+        self.selected_file.is_some()
     }
 
-    fn is_expanded(&self, index: usize) -> bool {
-        self.expanded.as_ref().is_some_and(|expanded| {
-            self.commits.get(index).is_some_and(|commit| commit.sha == expanded.sha)
-        })
+    /// The drop-down of the commit at `index`, if it is open.
+    fn expanded_at(&self, index: usize) -> Option<&Expanded> {
+        let sha = &self.commits.get(index)?.sha;
+        self.expanded.iter().find(|expanded| expanded.sha == *sha)
     }
 
     pub fn refresh(&mut self) -> Result<()> {
@@ -325,7 +328,7 @@ impl GraphPanel {
 
         let commits = &self.commits;
         self.expanded
-            .take_if(|expanded| !commits.iter().any(|commit| commit.sha == expanded.sha));
+            .retain(|expanded| commits.iter().any(|commit| commit.sha == expanded.sha));
 
         if !follow_tip {
             let same_commit = selected_sha
@@ -333,6 +336,9 @@ impl GraphPanel {
             self.selected = same_commit
                 .unwrap_or(self.selected)
                 .min(self.commits.len().saturating_sub(1));
+        }
+        if self.expanded_at(self.selected).is_none() {
+            self.selected_file = None;
         }
         self.update_details()
     }
@@ -374,7 +380,7 @@ impl GraphPanel {
             KeyCode::Char('G') => self.select_commit(last),
             KeyCode::Enter => return self.open_selection(sha),
             KeyCode::Esc => {
-                self.expanded = None;
+                self.collapse();
                 return Action::None;
             }
             _ => return Action::None,
@@ -392,20 +398,31 @@ impl GraphPanel {
 
     fn select_commit(&mut self, index: usize) {
         self.selected = index;
-        if let Some(expanded) = &mut self.expanded {
-            expanded.selected = None;
+        self.selected_file = None;
+    }
+
+    /// Closes the selected commit's drop-down. On a closed commit, closes them all.
+    fn collapse(&mut self) {
+        if self.expanded_at(self.selected).is_some() {
+            self.remove_selected_drop_down();
+        } else {
+            self.expanded.clear();
         }
+    }
+
+    fn remove_selected_drop_down(&mut self) {
+        let sha = self.commits[self.selected].sha.clone();
+        self.expanded.retain(|expanded| expanded.sha != sha);
+        self.selected_file = None;
     }
 
     /// Walks down through a commit's files, if it is expanded, then on to the next commit.
     fn move_down(&mut self) {
         let last = self.commits.len() - 1;
-        if self.is_expanded(self.selected)
-            && let Some(expanded) = &mut self.expanded
-        {
-            let next = expanded.selected.map_or(0, |file| file + 1);
+        if let Some(expanded) = self.expanded_at(self.selected) {
+            let next = self.selected_file.map_or(0, |file| file + 1);
             if next < expanded.files.len() {
-                expanded.selected = Some(next);
+                self.selected_file = Some(next);
                 return;
             }
             if self.selected == last {
@@ -417,23 +434,22 @@ impl GraphPanel {
 
     /// The mirror of `move_down`: into the files of an expanded commit from below.
     fn move_up(&mut self) {
-        if let Some(expanded) = &mut self.expanded
-            && let Some(file) = expanded.selected
-        {
-            expanded.selected = file.checked_sub(1);
+        if let Some(file) = self.selected_file {
+            self.selected_file = file.checked_sub(1);
             return;
         }
-        let above = self.selected.saturating_sub(1);
-        let enters_files = above != self.selected && self.is_expanded(above);
-        self.select_commit(above);
-        if enters_files && let Some(expanded) = &mut self.expanded {
-            expanded.selected = expanded.files.len().checked_sub(1);
+        if self.selected == 0 {
+            return;
         }
+        self.select_commit(self.selected - 1);
+        self.selected_file = self
+            .expanded_at(self.selected)
+            .and_then(|expanded| expanded.files.len().checked_sub(1));
     }
 
     fn selected_file_source(&self) -> Option<DiffSource> {
-        let expanded = self.expanded.as_ref()?;
-        let file = expanded.files.get(expanded.selected?)?;
+        let expanded = self.expanded_at(self.selected)?;
+        let file = expanded.files.get(self.selected_file?)?;
         Some(DiffSource::Commit { sha: expanded.sha.clone(), path: file.path.clone() })
     }
 
@@ -442,8 +458,8 @@ impl GraphPanel {
         if let Some(source) = self.selected_file_source() {
             return Action::OpenDiff(source);
         }
-        if self.is_expanded(self.selected) {
-            self.expanded = None;
+        if self.expanded_at(self.selected).is_some() {
+            self.remove_selected_drop_down();
             return Action::None;
         }
         match git::commit_files(&sha) {
@@ -451,7 +467,7 @@ impl GraphPanel {
                 Action::Message("No files changed in this commit".to_string())
             }
             Ok(files) => {
-                self.expanded = Some(Expanded { sha, files, selected: None });
+                self.expanded.push(Expanded { sha, files });
                 Action::None
             }
             Err(error) => Action::Error(error.to_string()),
@@ -484,20 +500,24 @@ impl GraphPanel {
             return;
         }
         let display = self.display_rows();
-        let selected_file = self.expanded.as_ref().and_then(|expanded| expanded.selected);
         let selected_line = display
             .iter()
-            .position(|row| match (row, selected_file) {
-                (Display::File(file), Some(selected)) => *file == selected,
-                (Display::Graph(row), None) => self.is_row_of_selected_commit(*row),
-                _ => false,
+            .position(|row| match row {
+                Display::File { commit, file } => {
+                    *commit == self.selected && self.selected_file == Some(*file)
+                }
+                Display::Graph(row) => {
+                    self.selected_file.is_none() && self.is_row_of_selected_commit(*row)
+                }
             })
             .unwrap_or(0);
 
         // Opening a drop-down shows as many of its files as fit.
         let height = area.height as usize;
-        if selected_file.is_none() && self.is_expanded(self.selected) {
-            let files = self.expanded.as_ref().map_or(0, |expanded| expanded.files.len());
+        if self.selected_file.is_none()
+            && let Some(expanded) = self.expanded_at(self.selected)
+        {
+            let files = expanded.files.len();
             self.scroll = ui::keep_visible(self.scroll, selected_line + files, height);
         }
         self.scroll = ui::keep_visible(self.scroll, selected_line, height);
@@ -518,7 +538,9 @@ impl GraphPanel {
             .take(height)
             .map(|row| match row {
                 Display::Graph(row) => self.row_line(&self.rows[*row], graph_width, focused),
-                Display::File(file) => self.file_row_line(*file, graph_width, focused),
+                Display::File { commit, file } => {
+                    self.file_row_line(*commit, *file, graph_width, focused)
+                }
             })
             .collect();
         let at_end = self.scroll + lines.len() == display.len();
@@ -528,15 +550,16 @@ impl GraphPanel {
         ui::render_lines(frame, area, lines);
     }
 
-    /// The graph's rows, with the expanded commit's files inserted under it.
+    /// The graph's rows, with each expanded commit's files inserted under it.
     fn display_rows(&self) -> Vec<Display> {
         let mut display = Vec::with_capacity(self.rows.len());
         for (i, row) in self.rows.iter().enumerate() {
             display.push(Display::Graph(i));
-            if let (Row::Commit { index, .. }, Some(expanded)) = (row, &self.expanded)
-                && self.commits[*index].sha == expanded.sha
+            if let Row::Commit { index, .. } = row
+                && let Some(expanded) = self.expanded_at(*index)
             {
-                display.extend((0..expanded.files.len()).map(Display::File));
+                let commit = *index;
+                display.extend((0..expanded.files.len()).map(|file| Display::File { commit, file }));
             }
         }
         display
@@ -590,21 +613,25 @@ impl GraphPanel {
     }
 
     /// A file in the drop-down, with the graph's lines carrying on beside it.
-    fn file_row_line(&self, file: usize, graph_width: usize, focused: bool) -> Line<'_> {
-        let Some(expanded) = &self.expanded else {
+    fn file_row_line(
+        &self,
+        commit: usize,
+        file: usize,
+        graph_width: usize,
+        focused: bool,
+    ) -> Line<'_> {
+        let Some(expanded) = self.expanded_at(commit) else {
             return Line::default();
         };
         let below = self.rows.iter().find_map(|row| match row {
-            Row::Commit { index, below, .. } if self.commits[*index].sha == expanded.sha => {
-                Some(below.as_slice())
-            }
+            Row::Commit { index, below, .. } if *index == commit => Some(below.as_slice()),
             _ => None,
         });
         let below = below.unwrap_or_default();
 
         let mut spans: Vec<Span> = below.iter().map(|g| self.glyph_span(g)).collect();
         spans.push(Span::raw(" ".repeat(graph_width.saturating_sub(below.len()) + 1)));
-        let selected = expanded.selected == Some(file);
+        let selected = commit == self.selected && self.selected_file == Some(file);
         let mut line = file_line(&expanded.files[file], selected, focused);
         spans.append(&mut line.spans);
         line.spans = spans;
@@ -785,31 +812,69 @@ mod tests {
         assert_eq!(below[0].ch, ' ');
     }
 
-    /// A panel showing `shas` as a linear history, with the first one expanded.
-    fn panel_with_expanded_first_commit(shas: &[&str], files: &[&str]) -> GraphPanel {
+    /// A panel showing `shas` as a linear history, with the given commits expanded.
+    fn panel_with_expanded(shas: &[&str], open: &[&str], files: &[&str]) -> GraphPanel {
         let mut panel = GraphPanel::new();
         panel.commits = shas.iter().map(|sha| commit(sha, &[])).collect();
-        panel.expanded = Some(Expanded {
-            sha: shas[0].to_string(),
-            files: files
-                .iter()
-                .map(|path| FileEntry { status: 'M', path: path.to_string() })
-                .collect(),
-            selected: None,
-        });
+        for sha in open {
+            panel.expanded.push(Expanded {
+                sha: sha.to_string(),
+                files: files
+                    .iter()
+                    .map(|path| FileEntry { status: 'M', path: path.to_string() })
+                    .collect(),
+            });
+        }
         panel
+    }
+
+    fn panel_with_expanded_first_commit(shas: &[&str], files: &[&str]) -> GraphPanel {
+        panel_with_expanded(shas, &shas[..1], files)
+    }
+
+    #[test]
+    fn the_cursor_walks_through_every_open_drop_down() {
+        let mut panel = panel_with_expanded(&["a", "b", "c"], &["a", "b"], &["x"]);
+        panel.move_down();
+        assert_eq!((panel.selected, panel.selected_file), (0, Some(0)));
+        panel.move_down();
+        assert_eq!((panel.selected, panel.selected_file), (1, None));
+        panel.move_down();
+        assert_eq!((panel.selected, panel.selected_file), (1, Some(0)));
+        panel.move_down();
+        assert_eq!((panel.selected, panel.selected_file), (2, None));
+    }
+
+    #[test]
+    fn esc_collapses_only_the_selected_commit() {
+        let mut panel = panel_with_expanded(&["a", "b", "c"], &["a", "b"], &["x"]);
+        panel.selected = 1;
+        panel.selected_file = Some(0);
+        panel.collapse();
+        assert_eq!(panel.selected_file, None);
+        assert_eq!(panel.selected, 1);
+        assert!(panel.expanded_at(0).is_some());
+        assert!(panel.expanded_at(1).is_none());
+    }
+
+    #[test]
+    fn esc_on_a_closed_commit_collapses_everything() {
+        let mut panel = panel_with_expanded(&["a", "b", "c"], &["a", "b"], &["x"]);
+        panel.selected = 2;
+        panel.collapse();
+        assert!(panel.expanded.is_empty());
     }
 
     #[test]
     fn moving_down_walks_through_the_files_then_to_the_next_commit() {
         let mut panel = panel_with_expanded_first_commit(&["a", "b"], &["x", "y"]);
         panel.move_down();
-        assert_eq!(panel.expanded.as_ref().unwrap().selected, Some(0));
+        assert_eq!(panel.selected_file, Some(0));
         panel.move_down();
-        assert_eq!(panel.expanded.as_ref().unwrap().selected, Some(1));
+        assert_eq!(panel.selected_file, Some(1));
         panel.move_down();
         assert_eq!(panel.selected, 1);
-        assert_eq!(panel.expanded.as_ref().unwrap().selected, None);
+        assert_eq!(panel.selected_file, None);
     }
 
     #[test]
@@ -818,10 +883,10 @@ mod tests {
         panel.selected = 1;
         panel.move_up();
         assert_eq!(panel.selected, 0);
-        assert_eq!(panel.expanded.as_ref().unwrap().selected, Some(1));
+        assert_eq!(panel.selected_file, Some(1));
         panel.move_up();
         panel.move_up();
-        assert_eq!(panel.expanded.as_ref().unwrap().selected, None);
+        assert_eq!(panel.selected_file, None);
         assert_eq!(panel.selected, 0);
     }
 
@@ -830,7 +895,7 @@ mod tests {
         let mut panel = panel_with_expanded_first_commit(&["a"], &["x"]);
         panel.move_down();
         panel.move_down();
-        assert_eq!(panel.expanded.as_ref().unwrap().selected, Some(0));
+        assert_eq!(panel.selected_file, Some(0));
     }
 
     #[test]
