@@ -43,7 +43,7 @@ Graph
   Enter      expand commit or open file diff
   b          choose which branches to show
   Esc        collapse              y   copy sha
-  i          commit details: j/k g/G scroll, y copy sha, i/q/Esc close
+  i          commit details: j/k g/G scroll, y copy sha, i/Esc close
 
 Compare
   r          swap A and B, also from its diff
@@ -452,7 +452,7 @@ impl App {
 
     fn handle_details_key(&mut self, mut popup: DetailsPopup, key: KeyEvent) {
         match key.code {
-            KeyCode::Esc | KeyCode::Char('i' | 'q') => {}
+            KeyCode::Esc | KeyCode::Char('i') => {}
             KeyCode::Char('y') => {
                 let sha = popup.sha().to_string();
                 self.modal = Modal::Details(popup);
