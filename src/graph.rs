@@ -202,13 +202,23 @@ fn ref_colors(keys: &[String]) -> Vec<Color> {
         .collect()
 }
 
-/// The color of a commit: that of the first selected ref that reaches it.
-fn color_for(mask: u64, colors: &[Color]) -> Color {
-    colors
+/// The color of each commit, given which refs reach it (see `reach_masks`).
+/// Each commit takes the color of the first ref reaching it, trying refs with
+/// no commits of their own first. So if `feature` is ahead of `origin/feature`,
+/// the history they share takes the remote's color and only the commits ahead
+/// take the local one, and the two colors always show.
+fn commit_colors(masks: &[u64], colors: &[Color]) -> Vec<Color> {
+    let has_own_commits = |bit: usize| masks.iter().any(|mask| *mask == 1 << bit);
+    let mut order: Vec<usize> = (0..colors.len()).collect();
+    // Stable, so refs in the same situation keep their selection order.
+    order.sort_by_key(|&bit| has_own_commits(bit));
+    masks
         .iter()
-        .enumerate()
-        .find(|(bit, _)| mask & (1 << bit) != 0)
-        .map_or(PALETTE[0], |(_, color)| *color)
+        .map(|mask| {
+            let first = order.iter().find(|&&bit| mask & (1 << bit) != 0);
+            first.map_or(PALETTE[0], |&bit| colors[bit])
+        })
+        .collect()
 }
 
 /// A named ref on screen and the commit it points at.
@@ -237,9 +247,11 @@ pub struct GraphPanel {
     tips: Vec<Tip>,
     /// The color of each tip, in the same order.
     colors: Vec<Color>,
+    /// Per commit, parallel to `commits`.
+    commit_colors: Vec<Color>,
+    unpushed: Vec<bool>,
     commits: Vec<Commit>,
     rows: Vec<Row>,
-    masks: Vec<u64>,
     /// Index into `commits`.
     selected: usize,
     scroll: usize,
@@ -256,9 +268,10 @@ impl GraphPanel {
             custom_refs: Vec::new(),
             tips: Vec::new(),
             colors: Vec::new(),
+            commit_colors: Vec::new(),
+            unpushed: Vec::new(),
             commits: Vec::new(),
             rows: Vec::new(),
-            masks: Vec::new(),
             selected: 0,
             scroll: 0,
             expanded: Vec::new(),
@@ -324,7 +337,13 @@ impl GraphPanel {
             git::log(&names, COMMIT_LIMIT)?
         };
         self.rows = layout(&self.commits);
-        self.masks = reach_masks(&self.commits, &shas);
+        self.commit_colors = commit_colors(&reach_masks(&self.commits, &shas), &self.colors);
+        self.unpushed = if names.is_empty() {
+            Vec::new()
+        } else {
+            let unpushed = git::unpushed(&names)?;
+            self.commits.iter().map(|commit| unpushed.contains(&commit.sha)).collect()
+        };
 
         let commits = &self.commits;
         self.expanded
@@ -570,10 +589,10 @@ impl GraphPanel {
     }
 
     fn glyph_span(&self, glyph: &Glyph) -> Span<'static> {
-        let color = glyph
-            .commit
-            .map_or(PALETTE[0], |i| color_for(self.masks[i], &self.colors));
-        Span::styled(glyph.ch.to_string(), Style::default().fg(color))
+        let color = glyph.commit.map_or(PALETTE[0], |i| self.commit_colors[i]);
+        let hollow = glyph.ch == '●' && glyph.commit.is_some_and(|i| self.unpushed[i]);
+        let ch = if hollow { '○' } else { glyph.ch };
+        Span::styled(ch.to_string(), Style::default().fg(color))
     }
 
     fn row_line(&self, row: &Row, graph_width: usize, focused: bool) -> Line<'_> {
@@ -593,10 +612,9 @@ impl GraphPanel {
                     format!("  {}", commit.author),
                     Style::default().fg(ui::DIM),
                 ));
-                let bead_color = color_for(self.masks[*index], &self.colors);
-                for tip in &self.tips {
+                for (tip, color) in self.tips.iter().zip(&self.colors) {
                     if tip.sha == commit.sha {
-                        let style = Style::default().fg(bead_color).add_modifier(Modifier::BOLD);
+                        let style = Style::default().fg(*color).add_modifier(Modifier::BOLD);
                         spans.push(Span::raw("  "));
                         spans.push(Span::styled(tip.name.as_str(), style));
                     }
@@ -759,12 +777,30 @@ mod tests {
         assert_eq!(masks, [0b01, 0b10, 0b11, 0b11]);
     }
 
+    const LOCAL: Color = PALETTE[0];
+    const REMOTE: Color = PALETTE[1];
+
     #[test]
-    fn a_commit_takes_the_color_of_the_first_ref_reaching_it() {
-        let colors = [PALETTE[0], PALETTE[1]];
-        assert_eq!(color_for(0b01, &colors), PALETTE[0]);
-        assert_eq!(color_for(0b10, &colors), PALETTE[1]);
-        assert_eq!(color_for(0b11, &colors), PALETTE[0]);
+    fn local_ahead_shows_shared_history_in_the_remote_color() {
+        // A commit only on local, then history on both.
+        assert_eq!(commit_colors(&[0b01, 0b11], &[LOCAL, REMOTE]), [LOCAL, REMOTE]);
+    }
+
+    #[test]
+    fn remote_ahead_shows_shared_history_in_the_local_color() {
+        // A commit only on the remote, then history on both.
+        assert_eq!(commit_colors(&[0b10, 0b11], &[LOCAL, REMOTE]), [REMOTE, LOCAL]);
+    }
+
+    #[test]
+    fn diverged_shows_shared_history_in_the_first_color() {
+        let colors = commit_colors(&[0b01, 0b10, 0b11], &[LOCAL, REMOTE]);
+        assert_eq!(colors, [LOCAL, REMOTE, LOCAL]);
+    }
+
+    #[test]
+    fn in_sync_is_all_the_first_color() {
+        assert_eq!(commit_colors(&[0b11, 0b11], &[LOCAL, REMOTE]), [LOCAL, LOCAL]);
     }
 
     #[test]

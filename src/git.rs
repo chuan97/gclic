@@ -2,6 +2,7 @@
 //! subprocess or raw git output, only the typed data returned by this module.
 
 use anyhow::{Result, anyhow, bail};
+use std::collections::HashSet;
 use std::process::{Command, Stdio};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -223,6 +224,14 @@ fn parse_log(text: &str) -> Vec<Commit> {
             })
         })
         .collect()
+}
+
+/// The commits reachable from `refs` that aren't on any remote-tracking branch.
+pub fn unpushed(refs: &[String]) -> Result<HashSet<String>> {
+    let mut args = vec!["rev-list"];
+    args.extend(refs.iter().map(String::as_str));
+    args.extend(["--not", "--remotes", "--"]);
+    Ok(run(&args)?.lines().map(str::to_string).collect())
 }
 
 /// Changes whenever a ref or HEAD moves, for spotting commits, checkouts and
