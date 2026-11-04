@@ -17,7 +17,7 @@ fn main() -> Result<()> {
     let root = match git::repo_root() {
         Ok(root) => root,
         Err(error) => {
-            eprintln!("mygc: {error}");
+            eprintln!("gclic: {error}");
             std::process::exit(1);
         }
     };

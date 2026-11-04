@@ -1,4 +1,6 @@
-# mygc: design notes
+# gclic: design notes
+
+gclic stands for git cli companion. It was first called mygc.
 
 ## Original brief
 

@@ -634,7 +634,7 @@ impl App {
                 render_popup(frame, area, " Confirm ", text, (56, 7), Color::Yellow);
             }
             Modal::ConfirmQuit => {
-                let text = "Quit mygc?\n\nenter = quit · esc = cancel".to_string();
+                let text = "Quit gclic?\n\nenter = quit · esc = cancel".to_string();
                 render_popup(frame, area, " Quit ", text, (40, 5), Color::Yellow);
             }
             Modal::CommitBox => {
