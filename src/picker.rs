@@ -2,6 +2,7 @@
 //! refs to compare. The branches pane uses its search and selection, and draws
 //! the rows itself.
 
+use crate::git;
 use crate::ui;
 use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -90,6 +91,17 @@ impl Picker {
 
     pub fn with_free_text(title: &str, items: Vec<String>) -> Picker {
         Picker { free_text: true, ..Picker::single(title, items) }
+    }
+
+    pub fn accepts_free_text(&self) -> bool {
+        self.free_text
+    }
+
+    /// Fills in the search from outside, e.g. from the clipboard.
+    pub fn set_query(&mut self, query: String) {
+        self.query = query;
+        self.typing = false;
+        self.update_matches();
     }
 
     pub fn is_typing(&self) -> bool {
@@ -202,6 +214,10 @@ impl Picker {
     fn submit(&self) -> Outcome {
         if self.multi {
             return Outcome::Picked(self.ticked.clone());
+        }
+        // A sha mustn't lose to a branch name it happens to fuzzy-match.
+        if self.free_text && git::looks_like_sha(&self.query) {
+            return Outcome::Picked(vec![self.query.clone()]);
         }
         match self.highlighted() {
             Some(item) => Outcome::Picked(vec![item.clone()]),
@@ -474,6 +490,29 @@ mod tests {
             Outcome::Picked(picked) => assert_eq!(picked, ["xyz123"]),
             _ => panic!("expected the typed text"),
         }
+    }
+
+    #[test]
+    fn a_sha_beats_a_branch_it_fuzzy_matches() {
+        let items = vec!["a-b-c-1-2-3-4".to_string()];
+        let mut picker = Picker::with_free_text("t", items);
+        type_text(&mut picker, "abc1234");
+        assert_eq!(picker.matches, [0]); // the branch does match
+        match picker.handle_key(key(KeyCode::Enter)) {
+            Outcome::Picked(picked) => assert_eq!(picked, ["abc1234"]),
+            _ => panic!("expected the sha"),
+        }
+    }
+
+    #[test]
+    fn set_query_filters_and_leaves_typing_mode() {
+        let items = vec!["main".to_string(), "other".to_string()];
+        let mut picker = Picker::with_free_text("t", items);
+        type_text(&mut picker, "x");
+        picker.set_query("main".to_string());
+        assert_eq!(picker.query, "main");
+        assert!(!picker.typing);
+        assert_eq!(picker.matches, [0]);
     }
 
     #[test]

@@ -282,6 +282,22 @@ pub fn resolve(reference: &str) -> Option<String> {
     try_run(&["rev-parse", "--verify", "-q", commit.as_str()])
 }
 
+/// Whether this could be a commit sha, full or abbreviated as git usually does.
+pub fn looks_like_sha(text: &str) -> bool {
+    (7..=40).contains(&text.len()) && text.chars().all(|ch| ch.is_ascii_hexdigit())
+}
+
+/// A ref as worth showing on screen: shas get shortened, names stay as they are.
+pub fn display_ref(reference: &str) -> String {
+    if looks_like_sha(reference) {
+        let commit = format!("{reference}^{{commit}}");
+        if let Some(short) = try_run(&["rev-parse", "--short", commit.as_str()]) {
+            return short;
+        }
+    }
+    reference.to_string()
+}
+
 pub fn commit_details(sha: &str) -> Result<CommitDetails> {
     let text = run(&["show", "-s", "--date=iso", "--format=%H%n%an <%ae>%n%ad%n%B", sha])?;
     let mut lines = text.splitn(4, '\n');
@@ -395,6 +411,16 @@ mod tests {
             status.unstaged,
             vec![entry('M', "unstaged.rs"), entry('M', "both.rs"), entry('?', "new file.rs")]
         );
+    }
+
+    #[test]
+    fn shas_are_recognised_by_length_and_digits() {
+        assert!(looks_like_sha("abc1234"));
+        assert!(looks_like_sha("9AFC3E9A7D497E015C3C05968EA7D3FEB403770F"));
+        assert!(!looks_like_sha("abc123")); // too short to be sure
+        assert!(!looks_like_sha(&"a".repeat(41)));
+        assert!(!looks_like_sha("feature"));
+        assert!(!looks_like_sha(""));
     }
 
     #[test]

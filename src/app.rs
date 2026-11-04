@@ -52,7 +52,8 @@ Picker
   j/k g/G    move                  i   start typing to filter
   Esc        stop typing, or close
   Space      tick (multi-select)   a/A  tick/untick all shown
-  Enter      confirm (nothing ticked means the default view)";
+  Enter      confirm (nothing ticked means the default view)
+  p          paste a ref from the clipboard, when comparing";
 
 /// What a panel wants the app to do after handling a key.
 pub enum Action {
@@ -441,6 +442,20 @@ impl App {
     }
 
     fn handle_picker_key(&mut self, mut picker: Picker, usage: PickerUse, key: KeyEvent) {
+        // `p` pastes a ref, so a sha yanked in the graph is two keys from comparing.
+        let paste = key.code == KeyCode::Char('p') && key.modifiers == KeyModifiers::NONE;
+        if paste && picker.accepts_free_text() && !picker.is_typing() {
+            match read_clipboard() {
+                Ok(Some(text)) => picker.set_query(text),
+                Ok(None) => self.message = "The clipboard is empty".to_string(),
+                Err(error) => {
+                    self.modal = Modal::Error(error.to_string());
+                    return;
+                }
+            }
+            self.modal = Modal::Picker(picker, usage);
+            return;
+        }
         match picker.handle_key(key) {
             Outcome::Open => self.modal = Modal::Picker(picker, usage),
             Outcome::Cancelled => {}
@@ -460,11 +475,12 @@ impl App {
                     self.modal = Modal::Error(format!("Unknown ref: {first}"));
                     return;
                 }
+                let a = git::display_ref(&first);
                 match compare_items() {
                     Ok(items) => {
-                        let title = format!("Compare {first} with");
+                        let title = format!("Compare {a} with: i types, p pastes");
                         let picker = Picker::with_free_text(&title, items);
-                        self.modal = Modal::Picker(picker, PickerUse::CompareB { a: first });
+                        self.modal = Modal::Picker(picker, PickerUse::CompareB { a });
                     }
                     Err(error) => self.modal = Modal::Error(error.to_string()),
                 }
@@ -474,7 +490,7 @@ impl App {
                     self.modal = Modal::Error(format!("Unknown ref: {first}"));
                     return;
                 }
-                match ComparePanel::new(a, first) {
+                match ComparePanel::new(a, git::display_ref(&first)) {
                     Ok(compare) => {
                         self.compare = Some(compare);
                         self.diff = None;
@@ -502,7 +518,7 @@ impl App {
     fn open_compare_picker(&mut self) {
         match compare_items() {
             Ok(items) => {
-                let picker = Picker::with_free_text("Compare ref A", items);
+                let picker = Picker::with_free_text("Compare ref A: i types, p pastes", items);
                 self.modal = Modal::Picker(picker, PickerUse::CompareA);
             }
             Err(error) => self.modal = Modal::Error(error.to_string()),
@@ -628,6 +644,13 @@ fn compare_items() -> Result<Vec<String>> {
     items.extend(git::branches()?.into_iter().map(|b| b.name));
     items.extend(git::tags()?);
     Ok(items)
+}
+
+/// The first word on the clipboard, which is all a ref could be. None if empty.
+fn read_clipboard() -> Result<Option<String>> {
+    let output = Command::new("pbpaste").stdin(Stdio::null()).output()?;
+    let text = String::from_utf8_lossy(&output.stdout);
+    Ok(text.split_whitespace().next().map(str::to_string))
 }
 
 fn copy_to_clipboard(text: &str) -> Result<()> {
