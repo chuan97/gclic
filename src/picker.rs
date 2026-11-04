@@ -180,6 +180,8 @@ impl Picker {
             // Navigation mode, the default.
             KeyCode::Esc => return Outcome::Cancelled,
             KeyCode::Char('i') => self.typing = true,
+            KeyCode::Char('a') if self.multi => self.tick_all_matches(),
+            KeyCode::Char('A') if self.multi => self.untick_all_matches(),
             KeyCode::Char('j') => self.move_down(),
             KeyCode::Char('k') => self.move_up(),
             KeyCode::Char('g') => self.selected = 0,
@@ -219,6 +221,21 @@ impl Picker {
         } else {
             self.ticked.push(item);
         }
+    }
+
+    /// Ticks everything passing the filter, which without a search is everything.
+    fn tick_all_matches(&mut self) {
+        for &index in &self.matches {
+            let item = &self.items[index];
+            if !self.ticked.contains(item) {
+                self.ticked.push(item.clone());
+            }
+        }
+    }
+
+    fn untick_all_matches(&mut self) {
+        let shown: Vec<&String> = self.matches.iter().map(|&index| &self.items[index]).collect();
+        self.ticked.retain(|item| !shown.contains(&item));
     }
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect) {
@@ -355,6 +372,59 @@ mod tests {
         assert!(!picker.typing);
         assert_eq!(picker.query, "m");
         assert!(matches!(picker.handle_key(key(KeyCode::Esc)), Outcome::Cancelled));
+    }
+
+    fn picked(picker: &mut Picker) -> Vec<String> {
+        match picker.handle_key(key(KeyCode::Enter)) {
+            Outcome::Picked(picked) => picked,
+            _ => panic!("expected a pick"),
+        }
+    }
+
+    #[test]
+    fn a_ticks_everything_and_capital_a_unticks_everything() {
+        let items = vec!["x".to_string(), "y".to_string()];
+        let mut picker = Picker::multi("t", items, Vec::new());
+        picker.handle_key(key(KeyCode::Char('a')));
+        assert_eq!(picked(&mut picker), ["x", "y"]);
+        picker.handle_key(key(KeyCode::Char('A')));
+        assert!(picked(&mut picker).is_empty());
+    }
+
+    #[test]
+    fn a_keeps_earlier_ticks_first_without_repeating_them() {
+        let items = vec!["x".to_string(), "y".to_string()];
+        let mut picker = Picker::multi("t", items, vec!["y".to_string()]);
+        picker.handle_key(key(KeyCode::Char('a')));
+        assert_eq!(picked(&mut picker), ["y", "x"]);
+    }
+
+    #[test]
+    fn a_and_capital_a_only_touch_the_filtered_items() {
+        let items = vec!["origin/x".to_string(), "main".to_string()];
+        let mut picker = Picker::multi("t", items, vec!["main".to_string()]);
+        type_text(&mut picker, "origin");
+        picker.handle_key(key(KeyCode::Esc));
+        picker.handle_key(key(KeyCode::Char('a')));
+        assert_eq!(picked(&mut picker), ["main", "origin/x"]);
+        picker.handle_key(key(KeyCode::Char('A')));
+        assert_eq!(picked(&mut picker), ["main"]);
+    }
+
+    #[test]
+    fn a_is_a_letter_while_typing() {
+        let items = vec!["x".to_string(), "a".to_string()];
+        let mut picker = Picker::multi("t", items, Vec::new());
+        type_text(&mut picker, "a");
+        assert_eq!(picker.query, "a");
+        assert!(picker.ticked.is_empty());
+    }
+
+    #[test]
+    fn a_does_nothing_in_a_single_choice_picker() {
+        let mut picker = Picker::single("t", vec!["x".to_string()]);
+        picker.handle_key(key(KeyCode::Char('a')));
+        assert!(picker.ticked.is_empty());
     }
 
     #[test]

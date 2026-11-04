@@ -14,6 +14,8 @@ use ratatui::text::{Line, Span};
 use std::collections::HashMap;
 
 const COMMIT_LIMIT: usize = 500;
+/// The number of refs that fit in the bitmask `reach_masks` builds.
+const MAX_MASK_BITS: usize = 64;
 const PALETTE: [Color; 6] = [
     Color::Green,
     Color::LightBlue,
@@ -167,7 +169,7 @@ fn connector(
 /// One pass is enough because children come before their parents.
 pub fn reach_masks(commits: &[Commit], tips: &[String]) -> Vec<u64> {
     let mut reach: HashMap<&str, u64> = HashMap::new();
-    for (i, tip) in tips.iter().enumerate().take(64) {
+    for (i, tip) in tips.iter().enumerate().take(MAX_MASK_BITS) {
         *reach.entry(tip.as_str()).or_default() |= 1 << i;
     }
     let mut masks = Vec::with_capacity(commits.len());
@@ -208,7 +210,8 @@ fn ref_colors(keys: &[String]) -> Vec<Color> {
 /// take the local one, and the two colors always show.
 fn commit_colors(masks: &[u64], colors: &[Color]) -> Vec<Color> {
     let has_own_commits = |bit: usize| masks.iter().any(|mask| *mask == 1 << bit);
-    let mut order: Vec<usize> = (0..colors.len()).collect();
+    // Masks only have room for the first MAX_MASK_BITS refs.
+    let mut order: Vec<usize> = (0..colors.len().min(MAX_MASK_BITS)).collect();
     // Stable, so refs in the same situation keep their selection order.
     order.sort_by_key(|&bit| has_own_commits(bit));
     masks
@@ -752,6 +755,15 @@ mod tests {
     #[test]
     fn in_sync_is_all_the_first_color() {
         assert_eq!(commit_colors(&[0b11, 0b11], &[LOCAL, REMOTE]), [LOCAL, LOCAL]);
+    }
+
+    #[test]
+    fn more_refs_than_fit_in_a_mask_do_not_crash() {
+        let tips: Vec<String> = (0..70).map(|i| format!("tip{i}")).collect();
+        let commits: Vec<Commit> = tips.iter().map(|tip| commit(tip, &[])).collect();
+        let masks = reach_masks(&commits, &tips);
+        let colors = commit_colors(&masks, &ref_colors(&tips));
+        assert_eq!(colors.len(), 70);
     }
 
     #[test]

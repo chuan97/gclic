@@ -51,7 +51,8 @@ Diff
 Picker
   j/k g/G    move                  i   start typing to filter
   Esc        stop typing, or close
-  Space      tick (multi-select)   Enter  confirm";
+  Space      tick (multi-select)   a/A  tick/untick all shown
+  Enter      confirm (nothing ticked means the default view)";
 
 /// What a panel wants the app to do after handling a key.
 pub enum Action {
@@ -490,7 +491,7 @@ impl App {
             Ok(branches) => {
                 let names = branches.into_iter().map(|b| b.name).collect();
                 let ticked = self.graph.custom_refs().to_vec();
-                let title = "Graph branches: Space ticks, Enter applies (none = default)";
+                let title = "Graph branches: space ticks, a/A all, enter applies";
                 let picker = Picker::multi(title, names, ticked);
                 self.modal = Modal::Picker(picker, PickerUse::GraphBranches);
             }
