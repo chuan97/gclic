@@ -184,7 +184,12 @@ pub fn reach_masks(commits: &[Commit], tips: &[String]) -> Vec<u64> {
 
 /// One color per ref, where refs with the same key share a color. The key is
 /// the branch name without its remote, so `feature` and `origin/feature` match.
+/// The exception is when one branch is all that's selected: telling it apart
+/// from its remote is then the point of the view, so each ref gets its own color.
 fn ref_colors(keys: &[String]) -> Vec<Color> {
+    if keys.iter().all(|key| *key == keys[0]) {
+        return (0..keys.len()).map(|i| PALETTE[i % PALETTE.len()]).collect();
+    }
     let mut seen: Vec<&String> = Vec::new();
     keys.iter()
         .map(|key| {
@@ -733,6 +738,17 @@ mod tests {
         assert_eq!(color_for(0b01, &colors), PALETTE[0]);
         assert_eq!(color_for(0b10, &colors), PALETTE[1]);
         assert_eq!(color_for(0b11, &colors), PALETTE[0]);
+    }
+
+    #[test]
+    fn a_lone_branch_and_its_remote_get_different_colors() {
+        let keys = ["feature", "feature"].map(str::to_string);
+        assert_eq!(ref_colors(&keys), [PALETTE[0], PALETTE[1]]);
+    }
+
+    #[test]
+    fn no_refs_means_no_colors() {
+        assert!(ref_colors(&[]).is_empty());
     }
 
     #[test]
