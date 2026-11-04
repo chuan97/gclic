@@ -114,6 +114,7 @@ enum Modal {
     Picker(Picker, PickerUse),
     Confirm(Confirm),
     CommitBox,
+    ConfirmQuit,
     Details(DetailsPopup),
     Error(String),
     Help,
@@ -264,6 +265,11 @@ impl App {
             Modal::Picker(picker, usage) => self.handle_picker_key(picker, usage, key),
             Modal::Confirm(confirm) => self.handle_confirm_key(confirm, key),
             Modal::CommitBox => self.handle_commit_key(key),
+            Modal::ConfirmQuit => match key.code {
+                KeyCode::Enter => self.should_quit = true,
+                KeyCode::Esc => {}
+                _ => self.modal = Modal::ConfirmQuit,
+            },
             Modal::Details(popup) => self.handle_details_key(popup, key),
             // Any key dismisses these.
             Modal::Error(_) | Modal::Help => {}
@@ -278,7 +284,7 @@ impl App {
             _ if self.focus == Focus::Branches && self.branches.is_typing() => {
                 self.send_to_focused_panel(key);
             }
-            KeyCode::Char('q') => self.should_quit = true,
+            KeyCode::Char('q') => self.modal = Modal::ConfirmQuit,
             KeyCode::Char('h') => self.move_focus(false),
             KeyCode::Char('l') => self.move_focus(true),
             KeyCode::Char('?') => self.modal = Modal::Help,
@@ -626,6 +632,10 @@ impl App {
                 };
                 let text = format!("{text}\n\ny = yes · any other key = cancel");
                 render_popup(frame, area, " Confirm ", text, (56, 7), Color::Yellow);
+            }
+            Modal::ConfirmQuit => {
+                let text = "Quit mygc?\n\nenter = quit · esc = cancel".to_string();
+                render_popup(frame, area, " Quit ", text, (40, 5), Color::Yellow);
             }
             Modal::CommitBox => {
                 let text = format!("{}▏", self.commit_draft);

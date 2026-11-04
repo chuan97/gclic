@@ -180,6 +180,7 @@ Implemented after trying the MVP. Where this differs from the plan above, this w
 - **Branches pane:** checkout moved from a popup to a permanent pane at the top of the left column (`branches.rs`). The checked-out branch shows as `* name` in bold green, and the cursor is a selection bar. `i` searches, as in the picker it shares its list with. Choosing which branches the graph shows stays a popup, opened with `b` in the Graph pane.
 - **`h`/`l` switch panes, not `Tab`:** a fixed line of Branches, Changes, Graph, then Diff when open. `Esc` from the diff still returns to the pane it came from.
 - **Tick all in the graph's branch picker:** `a` ticks and `A` unticks everything shown, so a search narrows what they affect.
+- **Quit confirmation:** `q` asks first, `Enter` quits and `Esc` cancels. `Ctrl-C` still quits at once.
 - **Swapping A and B:** `r` in compare swaps the two refs, from its list or its diff.
 - **No manual refresh:** the global `r` is gone, as auto-refresh covers everything the app reads from git.
 - **Recent yanks in compare:** the last two commits yanked top both compare pickers, in yank order, and the second picker leaves out what was picked as A. So `y`, `y`, `C`, `Enter`, `Enter` compares two commits, with the first yanked as A. They last until quitting.
