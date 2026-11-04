@@ -270,8 +270,8 @@ impl App {
                 self.send_to_focused_panel(key);
             }
             KeyCode::Char('q') => self.should_quit = true,
-            KeyCode::Char('h') => self.move_focus(-1),
-            KeyCode::Char('l') => self.move_focus(1),
+            KeyCode::Char('h') => self.move_focus(false),
+            KeyCode::Char('l') => self.move_focus(true),
             KeyCode::Char('?') => self.modal = Modal::Help,
             KeyCode::Char('r') => self.refresh(),
             KeyCode::Char('C') => self.open_compare_picker(),
@@ -343,8 +343,8 @@ impl App {
         }
     }
 
-    /// Steps along the panes from left to right, stopping at the ends.
-    fn move_focus(&mut self, step: isize) {
+    /// Steps along the panes from left to right, wrapping around at the ends.
+    fn move_focus(&mut self, forward: bool) {
         let mut order = if self.compare.is_some() {
             vec![Focus::Compare]
         } else {
@@ -354,7 +354,11 @@ impl App {
             order.push(Focus::Diff);
         }
         let current = order.iter().position(|f| *f == self.focus).unwrap_or(0);
-        let next = current.saturating_add_signed(step).min(order.len() - 1);
+        let next = if forward {
+            ui::next_index(current, order.len())
+        } else {
+            ui::previous_index(current, order.len())
+        };
         if order[next] == Focus::Diff {
             self.focus_diff();
         } else if next != current {

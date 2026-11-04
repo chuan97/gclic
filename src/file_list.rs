@@ -37,8 +37,8 @@ impl FileList {
         let last = self.files.len().saturating_sub(1);
         let before = self.selected;
         match key.code {
-            KeyCode::Char('j') | KeyCode::Down => self.selected = (self.selected + 1).min(last),
-            KeyCode::Char('k') | KeyCode::Up => self.selected = self.selected.saturating_sub(1),
+            KeyCode::Char('j') | KeyCode::Down => self.selected = ui::next_index(self.selected, self.files.len()),
+            KeyCode::Char('k') | KeyCode::Up => self.selected = ui::previous_index(self.selected, self.files.len()),
             KeyCode::Char('g') => self.selected = 0,
             KeyCode::Char('G') => self.selected = last,
             KeyCode::Enter => {

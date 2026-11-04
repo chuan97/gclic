@@ -236,14 +236,19 @@ impl DiffPane {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
-        let last = self.rows.len().saturating_sub(1);
+        // The furthest scroll that still fills the screen. Going past it wraps.
+        let last = self.rows.len().saturating_sub(self.height);
         let half_page = (self.height / 2).max(1);
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
             KeyCode::Char('d') if ctrl => self.scroll = (self.scroll + half_page).min(last),
             KeyCode::Char('u') if ctrl => self.scroll = self.scroll.saturating_sub(half_page),
-            KeyCode::Char('j') | KeyCode::Down => self.scroll = (self.scroll + 1).min(last),
-            KeyCode::Char('k') | KeyCode::Up => self.scroll = self.scroll.saturating_sub(1),
+            KeyCode::Char('j') | KeyCode::Down => {
+                self.scroll = if self.scroll >= last { 0 } else { self.scroll + 1 };
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                self.scroll = if self.scroll == 0 { last } else { self.scroll - 1 };
+            }
             KeyCode::Char('g') => self.scroll = 0,
             KeyCode::Char('G') => self.scroll = last,
             KeyCode::Char('n') => {
@@ -332,6 +337,33 @@ mod tests {
 
     fn marked<'a>(text: &'a str, marks: &[Range<usize>]) -> Vec<&'a str> {
         marks.iter().map(|mark| &text[mark.clone()]).collect()
+    }
+
+    fn pane_with_rows(count: usize, height: usize) -> DiffPane {
+        DiffPane {
+            source: DiffSource::Unstaged("f".to_string()),
+            rows: vec![Row::Heading("x".to_string()); count],
+            scroll: 0,
+            height,
+        }
+    }
+
+    #[test]
+    fn scrolling_wraps_around_both_ends() {
+        let mut pane = pane_with_rows(5, 2);
+        pane.handle_key(KeyEvent::from(KeyCode::Char('k')));
+        assert_eq!(pane.scroll, 3); // the last screenful
+        pane.handle_key(KeyEvent::from(KeyCode::Char('j')));
+        assert_eq!(pane.scroll, 0);
+    }
+
+    #[test]
+    fn a_diff_that_fits_on_screen_doesnt_scroll() {
+        let mut pane = pane_with_rows(2, 10);
+        pane.handle_key(KeyEvent::from(KeyCode::Char('j')));
+        assert_eq!(pane.scroll, 0);
+        pane.handle_key(KeyEvent::from(KeyCode::Char('k')));
+        assert_eq!(pane.scroll, 0);
     }
 
     #[test]

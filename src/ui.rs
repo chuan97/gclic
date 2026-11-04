@@ -29,6 +29,16 @@ pub fn keep_visible(scroll: usize, selected: usize, height: usize) -> usize {
     }
 }
 
+/// The next position in a list of `len` items, wrapping past the end to the start.
+pub fn next_index(index: usize, len: usize) -> usize {
+    if index + 1 >= len { 0 } else { index + 1 }
+}
+
+/// The previous position in a list of `len` items, wrapping past the start to the end.
+pub fn previous_index(index: usize, len: usize) -> usize {
+    if index == 0 { len.saturating_sub(1) } else { index - 1 }
+}
+
 /// Draws `lines` one per row. Unlike a Paragraph, a line's background style
 /// fills its whole row, which is what makes a selection bar span the panel.
 pub fn render_lines(frame: &mut Frame, area: Rect, lines: Vec<Line>) {
@@ -55,5 +65,24 @@ pub fn status_color(status: char) -> Color {
         'D' => Color::Red,
         'U' => Color::Magenta,
         _ => Color::Yellow,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn moving_wraps_around_both_ends() {
+        assert_eq!(next_index(0, 3), 1);
+        assert_eq!(next_index(2, 3), 0);
+        assert_eq!(previous_index(1, 3), 0);
+        assert_eq!(previous_index(0, 3), 2);
+    }
+
+    #[test]
+    fn moving_in_an_empty_list_stays_at_zero() {
+        assert_eq!(next_index(0, 0), 0);
+        assert_eq!(previous_index(0, 0), 0);
     }
 }

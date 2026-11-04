@@ -16,28 +16,35 @@ pub struct DetailsPopup {
     scroll: usize,
     /// Rows of text on screen, known once drawn.
     page: usize,
+    /// The furthest it can scroll, also known once drawn.
+    max_scroll: usize,
 }
 
 impl DetailsPopup {
     pub fn new(details: CommitDetails) -> DetailsPopup {
-        DetailsPopup { details, scroll: 0, page: 0 }
+        DetailsPopup { details, scroll: 0, page: 0, max_scroll: 0 }
     }
 
     pub fn sha(&self) -> &str {
         &self.details.sha
     }
 
-    /// Moves may overshoot the end: `render` knows the wrapped height, and clamps.
     pub fn handle_key(&mut self, key: KeyEvent) {
         let half_page = (self.page / 2).max(1);
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
-            KeyCode::Char('d') if ctrl => self.scroll += half_page,
+            KeyCode::Char('d') if ctrl => {
+                self.scroll = (self.scroll + half_page).min(self.max_scroll);
+            }
             KeyCode::Char('u') if ctrl => self.scroll = self.scroll.saturating_sub(half_page),
-            KeyCode::Char('j') | KeyCode::Down => self.scroll += 1,
-            KeyCode::Char('k') | KeyCode::Up => self.scroll = self.scroll.saturating_sub(1),
+            KeyCode::Char('j') | KeyCode::Down => {
+                self.scroll = if self.scroll >= self.max_scroll { 0 } else { self.scroll + 1 };
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                self.scroll = if self.scroll == 0 { self.max_scroll } else { self.scroll - 1 };
+            }
             KeyCode::Char('g') => self.scroll = 0,
-            KeyCode::Char('G') => self.scroll = usize::MAX / 2,
+            KeyCode::Char('G') => self.scroll = self.max_scroll,
             _ => {}
         }
     }
@@ -64,7 +71,8 @@ impl DetailsPopup {
         // As tall as the text needs, up to nearly the whole screen.
         let height = (total + 2).min(area.height.saturating_sub(2) as usize);
         let page = height.saturating_sub(2);
-        let scroll = self.scroll.min(total.saturating_sub(page));
+        let max_scroll = total.saturating_sub(page);
+        let scroll = self.scroll.min(max_scroll);
 
         let short_sha = &self.details.sha[..self.details.sha.len().min(7)];
         let position = if total > page {
@@ -80,6 +88,7 @@ impl DetailsPopup {
         frame.render_widget(paragraph.block(block).scroll((scroll as u16, 0)), popup);
 
         self.page = page;
+        self.max_scroll = max_scroll;
         self.scroll = scroll;
     }
 }
@@ -109,7 +118,7 @@ mod tests {
     }
 
     #[test]
-    fn scrolling_stops_at_the_last_line() {
+    fn scrolling_wraps_around_both_ends() {
         // 4 lines of header plus 50 of message, in 10 rows of text.
         let mut popup = popup(&vec!["line"; 50].join("\n"));
         draw(&mut popup, 100, 14);
@@ -118,6 +127,10 @@ mod tests {
         assert_eq!(popup.scroll, 54 - 10);
 
         press(&mut popup, 'j');
+        draw(&mut popup, 100, 14);
+        assert_eq!(popup.scroll, 0);
+
+        press(&mut popup, 'k');
         draw(&mut popup, 100, 14);
         assert_eq!(popup.scroll, 54 - 10);
     }
@@ -138,13 +151,6 @@ mod tests {
         draw(&mut popup, 100, 30);
         press(&mut popup, 'j');
         draw(&mut popup, 100, 30);
-        assert_eq!(popup.scroll, 0);
-    }
-
-    #[test]
-    fn k_stops_at_the_top() {
-        let mut popup = popup("short");
-        press(&mut popup, 'k');
         assert_eq!(popup.scroll, 0);
     }
 

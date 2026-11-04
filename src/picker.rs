@@ -159,10 +159,10 @@ impl Picker {
         let last = self.matches.len().saturating_sub(1);
         match key.code {
             KeyCode::Enter => return self.submit(),
-            KeyCode::Down => self.selected = (self.selected + 1).min(last),
-            KeyCode::Up => self.selected = self.selected.saturating_sub(1),
-            KeyCode::Char('j' | 'n') if ctrl => self.selected = (self.selected + 1).min(last),
-            KeyCode::Char('k' | 'p') if ctrl => self.selected = self.selected.saturating_sub(1),
+            KeyCode::Down => self.move_down(),
+            KeyCode::Up => self.move_up(),
+            KeyCode::Char('j' | 'n') if ctrl => self.move_down(),
+            KeyCode::Char('k' | 'p') if ctrl => self.move_up(),
             KeyCode::Char(' ') if self.multi => self.toggle_tick(),
 
             // Typing mode, entered with `i`.
@@ -179,13 +179,21 @@ impl Picker {
             // Navigation mode, the default.
             KeyCode::Esc => return Outcome::Cancelled,
             KeyCode::Char('i') => self.typing = true,
-            KeyCode::Char('j') => self.selected = (self.selected + 1).min(last),
-            KeyCode::Char('k') => self.selected = self.selected.saturating_sub(1),
+            KeyCode::Char('j') => self.move_down(),
+            KeyCode::Char('k') => self.move_up(),
             KeyCode::Char('g') => self.selected = 0,
             KeyCode::Char('G') => self.selected = last,
             _ => {}
         }
         Outcome::Open
+    }
+
+    fn move_down(&mut self) {
+        self.selected = ui::next_index(self.selected, self.matches.len());
+    }
+
+    fn move_up(&mut self) {
+        self.selected = ui::previous_index(self.selected, self.matches.len());
     }
 
     fn submit(&self) -> Outcome {
@@ -364,6 +372,15 @@ mod tests {
         assert!(!picker.typing);
         assert_eq!(picker.query, "m");
         assert!(matches!(picker.handle_key(key(KeyCode::Esc)), Outcome::Cancelled));
+    }
+
+    #[test]
+    fn moving_wraps_around_the_filtered_list() {
+        let mut picker = Picker::single("t", vec!["a".to_string(), "b".to_string()]);
+        picker.handle_key(key(KeyCode::Char('k')));
+        assert_eq!(picker.highlighted().unwrap(), "b");
+        picker.handle_key(key(KeyCode::Char('j')));
+        assert_eq!(picker.highlighted().unwrap(), "a");
     }
 
     #[test]
