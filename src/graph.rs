@@ -24,7 +24,6 @@ const PALETTE: [Color; 6] = [
     Color::Cyan,
     Color::Red,
 ];
-
 /// One character of the drawing. `commit` is the commit it leads to, whose
 /// color it takes, so a line changes color where the history changes owner.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -33,13 +32,13 @@ pub struct Glyph {
     pub commit: Option<usize>,
 }
 
+/// The drawing for one commit. `layout` returns one per commit, in the same order.
 #[derive(Debug, PartialEq)]
-pub enum Row {
-    /// `index` is the commit's position in the commits slice. `below` is the
-    /// lines leaving this commit, drawn alongside its files when it is expanded.
-    Commit { index: usize, glyphs: Vec<Glyph>, below: Vec<Glyph> },
-    /// Lines between two commits: straight, forking or joining, e.g. `├─╯`.
-    Connector { glyphs: Vec<Glyph> },
+pub struct Row {
+    /// The bead, the lines passing it, and any lines forking or joining at it.
+    pub glyphs: Vec<Glyph>,
+    /// The lines leaving this commit, drawn alongside its files when it is expanded.
+    pub below: Vec<Glyph>,
 }
 
 /// Assigns each commit a column and draws the lines between them.
@@ -53,19 +52,10 @@ pub fn layout(commits: &[Commit]) -> Vec<Row> {
         .map(|(i, commit)| (commit.sha.as_str(), i))
         .collect();
     let mut lanes: Vec<Option<&str>> = Vec::new();
-    let mut rows = Vec::new();
-    // Whether a row of lines already separates the previous bead from the next.
-    let mut separated = true;
+    let mut rows = Vec::with_capacity(commits.len());
 
     for (index, commit) in commits.iter().enumerate() {
         let sha = commit.sha.as_str();
-
-        // Beads never touch: without a fork or join between them, add plain lines.
-        let joins_here = lanes.iter().filter(|lane| **lane == Some(sha)).count() > 1;
-        if !separated && !joins_here && lanes.iter().any(Option::is_some) {
-            rows.push(Row::Connector { glyphs: lane_glyphs(&lanes, &index_of) });
-        }
-        separated = false;
 
         // A commit continues the leftmost line heading for it. With no such
         // line it is a branch tip and starts a new one.
@@ -73,43 +63,39 @@ pub fn layout(commits: &[Commit]) -> Vec<Row> {
             .iter()
             .position(|lane| *lane == Some(sha))
             .unwrap_or_else(|| free_lane(&mut lanes, 0));
-        lanes[column] = Some(sha);
+        let above = lanes.clone();
 
-        // Any other lines heading for this commit join it here.
-        for other in column + 1..lanes.len() {
-            if lanes[other] == Some(sha) {
-                rows.push(connector(&lanes, &index_of, column, other, '├', '╯', sha));
-                lanes[other] = None;
-            }
-        }
-
-        let mut glyphs = lane_glyphs(&lanes, &index_of);
-        glyphs[column * 2] = Glyph { ch: '●', commit: Some(index) };
+        // The lines reaching the bead sideways, as their column and the commit
+        // they lead to. First, any other lines heading for this commit join it.
+        let mut sideways: Vec<(usize, Option<usize>)> = (column + 1..lanes.len())
+            .filter(|&other| lanes[other] == Some(sha))
+            .map(|other| (other, Some(index)))
+            .collect();
 
         // The first parent continues straight down.
         lanes[column] = commit.parents.first().map(String::as_str);
-        let below = lane_glyphs(&lanes, &index_of);
-        rows.push(Row::Commit { index, glyphs, below });
 
         // Merge commits send a line to each further parent.
         for parent in commit.parents.iter().skip(1) {
-            separated = true;
             let parent = parent.as_str();
-            match lanes.iter().position(|lane| *lane == Some(parent)) {
-                Some(existing) if existing > column => {
-                    rows.push(connector(&lanes, &index_of, column, existing, '├', '┤', parent));
-                }
-                Some(existing) if existing < column => {
-                    rows.push(connector(&lanes, &index_of, column, existing, '┤', '├', parent));
-                }
-                Some(_) => {}
-                None => {
-                    let new = free_lane(&mut lanes, column + 1);
-                    lanes[new] = Some(parent);
-                    rows.push(connector(&lanes, &index_of, column, new, '├', '╮', parent));
-                }
+            let lane = lanes.iter().position(|lane| *lane == Some(parent)).unwrap_or_else(|| {
+                let new = free_lane(&mut lanes, column + 1);
+                lanes[new] = Some(parent);
+                new
+            });
+            if lane != column {
+                sideways.push((lane, index_of.get(parent).copied()));
             }
         }
+
+        // Only freed now, as a new line starting in a column where another ends
+        // would look like a single line running through.
+        for lane in lanes.iter_mut().filter(|lane| **lane == Some(sha)) {
+            *lane = None;
+        }
+
+        let glyphs = commit_glyphs(index, column, &above, &lanes, sideways, &index_of);
+        rows.push(Row { glyphs, below: lane_glyphs(&lanes, &index_of) });
 
         while lanes.last() == Some(&None) {
             lanes.pop();
@@ -143,26 +129,105 @@ fn lane_glyphs(lanes: &[Option<&str>], index_of: &HashMap<&str, usize>) -> Vec<G
     glyphs
 }
 
-/// A row with a horizontal line between two columns.
-fn connector(
-    lanes: &[Option<&str>],
+/// A commit's row: its bead, with `above` and `below` being the lanes on either
+/// side of it and `sideways` the lines running horizontally from it.
+fn commit_glyphs(
+    index: usize,
+    column: usize,
+    above: &[Option<&str>],
+    below: &[Option<&str>],
+    mut sideways: Vec<(usize, Option<usize>)>,
     index_of: &HashMap<&str, usize>,
-    from: usize,
-    to: usize,
-    from_ch: char,
-    to_ch: char,
-    target: &str,
-) -> Row {
-    let commit = index_of.get(target).copied();
-    let mut glyphs = lane_glyphs(lanes, index_of);
-    let (left, right) = (from.min(to) * 2, from.max(to) * 2);
-    for (x, glyph) in glyphs.iter_mut().enumerate().take(right).skip(left + 1) {
-        let crossing = x % 2 == 0 && glyph.ch == '│';
-        *glyph = Glyph { ch: if crossing { '┼' } else { '─' }, commit };
+) -> Vec<Glyph> {
+    let is_active = |lanes: &[Option<&str>], lane: usize| lanes.get(lane).is_some_and(|l| l.is_some());
+
+    // New lanes only exist below, the ones that just ended only above.
+    let lanes: Vec<Option<&str>> = (0..above.len().max(below.len()))
+        .map(|lane| below.get(lane).copied().flatten().or(above.get(lane).copied().flatten()))
+        .collect();
+    let mut glyphs = lane_glyphs(&lanes, index_of);
+
+    // The farthest go first, so where lines overlap each cell takes the color
+    // of the nearest one, and every line shows up to where it ends.
+    sideways.sort_by_key(|(lane, _)| std::cmp::Reverse(lane.abs_diff(column)));
+    for &(lane, commit) in &sideways {
+        for x in lane.min(column) * 2..=lane.max(column) * 2 {
+            glyphs[x].commit = commit;
+            if x % 2 == 1 {
+                glyphs[x].ch = '─';
+            }
+        }
     }
-    glyphs[from * 2] = Glyph { ch: from_ch, commit };
-    glyphs[to * 2] = Glyph { ch: to_ch, commit };
-    Row::Connector { glyphs }
+
+    let reach = |pick: fn(usize, usize) -> usize| {
+        sideways.iter().fold(column, |far, (lane, _)| pick(far, *lane))
+    };
+    let (left, right) = (reach(usize::min), reach(usize::max));
+    for lane in left..=right {
+        let (up, down) = (is_active(above, lane), is_active(below, lane));
+        glyphs[lane * 2].ch = box_char(up, down, lane > left, lane < right);
+    }
+    let ch = bead_char(
+        is_active(above, column),
+        is_active(below, column),
+        left < column,
+        right > column,
+    );
+    glyphs[column * 2] = Glyph { ch, commit: Some(index) };
+    glyphs
+}
+
+/// The filled bead whose lines reach the given edges of its cell, so that beads
+/// on consecutive rows are joined by an unbroken line. These are the "branch
+/// drawing" symbols in the Private Use Area, which kitty introduced for git
+/// graphs: U+F5EE to U+F60D, alternating filled and hollow. Ghostty and kitty
+/// draw them themselves, but other terminals need a font that has them.
+fn bead_char(up: bool, down: bool, left: bool, right: bool) -> char {
+    match (up, down, left, right) {
+        (false, false, false, false) => '\u{f5ee}',
+        (false, false, false, true) => '\u{f5f0}',
+        (false, false, true, false) => '\u{f5f2}',
+        (false, false, true, true) => '\u{f5f4}',
+        (false, true, false, false) => '\u{f5f6}',
+        (true, false, false, false) => '\u{f5f8}',
+        (true, true, false, false) => '\u{f5fa}',
+        (false, true, false, true) => '\u{f5fc}',
+        (false, true, true, false) => '\u{f5fe}',
+        (true, false, false, true) => '\u{f600}',
+        (true, false, true, false) => '\u{f602}',
+        (true, true, false, true) => '\u{f604}',
+        (true, true, true, false) => '\u{f606}',
+        (false, true, true, true) => '\u{f608}',
+        (true, false, true, true) => '\u{f60a}',
+        (true, true, true, true) => '\u{f60c}',
+    }
+}
+
+fn is_bead(ch: char) -> bool {
+    ('\u{f5ee}'..='\u{f60d}').contains(&ch)
+}
+
+/// The hollow bead that comes right after each filled one in `bead_char`.
+fn hollow(bead: char) -> char {
+    char::from_u32(bead as u32 + 1).unwrap_or(bead)
+}
+
+/// The box-drawing character with arms in the given directions.
+fn box_char(up: bool, down: bool, left: bool, right: bool) -> char {
+    match (up, down, left, right) {
+        (true, true, true, true) => '┼',
+        (true, true, true, false) => '┤',
+        (true, true, false, true) => '├',
+        (true, false, true, true) => '┴',
+        (false, true, true, true) => '┬',
+        (true, false, true, false) => '╯',
+        (true, false, false, true) => '╰',
+        (false, true, true, false) => '╮',
+        (false, true, false, true) => '╭',
+        (_, _, true, _) | (_, _, _, true) => '─',
+        (true, _, _, _) | (_, true, _, _) => '│',
+        _ => ' ',
+    }
 }
 
 /// For each commit, a bitmask of which tips can reach it (bit i = tips[i]).
@@ -237,8 +302,8 @@ struct Expanded {
 
 /// One row on screen.
 enum Display {
-    /// An index into `rows`.
-    Graph(usize),
+    /// An index into `commits`.
+    Commit(usize),
     /// A file of an expanded commit, as indexes into `commits` and its files.
     File { commit: usize, file: usize },
 }
@@ -493,9 +558,7 @@ impl GraphPanel {
                 Display::File { commit, file } => {
                     *commit == self.selected && self.selected_file == Some(*file)
                 }
-                Display::Graph(row) => {
-                    self.selected_file.is_none() && self.is_row_of_selected_commit(*row)
-                }
+                Display::Commit(index) => self.selected_file.is_none() && *index == self.selected,
             })
             .unwrap_or(0);
 
@@ -510,21 +573,14 @@ impl GraphPanel {
         self.scroll = ui::keep_visible(self.scroll, selected_line, height);
 
         // Text starts at the same column on every row, so the chain stays clean.
-        let graph_width = self
-            .rows
-            .iter()
-            .map(|row| match row {
-                Row::Commit { glyphs, .. } | Row::Connector { glyphs } => glyphs.len(),
-            })
-            .max()
-            .unwrap_or(0);
+        let graph_width = self.rows.iter().map(|row| row.glyphs.len()).max().unwrap_or(0);
 
         let mut lines: Vec<Line> = display
             .iter()
             .skip(self.scroll)
             .take(height)
             .map(|row| match row {
-                Display::Graph(row) => self.row_line(&self.rows[*row], graph_width, focused),
+                Display::Commit(index) => self.commit_line(*index, graph_width, focused),
                 Display::File { commit, file } => {
                     self.file_row_line(*commit, *file, graph_width, focused)
                 }
@@ -537,64 +593,48 @@ impl GraphPanel {
         ui::render_lines(frame, area, lines);
     }
 
-    /// The graph's rows, with each expanded commit's files inserted under it.
+    /// One row per commit, with each expanded commit's files inserted under it.
     fn display_rows(&self) -> Vec<Display> {
         let mut display = Vec::with_capacity(self.rows.len());
-        for (i, row) in self.rows.iter().enumerate() {
-            display.push(Display::Graph(i));
-            if let Row::Commit { index, .. } = row
-                && let Some(expanded) = self.expanded_at(*index)
-            {
-                let commit = *index;
+        for commit in 0..self.rows.len() {
+            display.push(Display::Commit(commit));
+            if let Some(expanded) = self.expanded_at(commit) {
                 display.extend((0..expanded.files.len()).map(|file| Display::File { commit, file }));
             }
         }
         display
     }
 
-    fn is_row_of_selected_commit(&self, row: usize) -> bool {
-        matches!(self.rows[row], Row::Commit { index, .. } if index == self.selected)
-    }
-
     fn glyph_span(&self, glyph: &Glyph) -> Span<'static> {
         let color = glyph.commit.map_or(PALETTE[0], |i| self.commit_colors[i]);
-        let hollow = glyph.ch == '●' && glyph.commit.is_some_and(|i| self.unpushed[i]);
-        let ch = if hollow { '○' } else { glyph.ch };
+        let unpushed = glyph.commit.is_some_and(|i| self.unpushed[i]);
+        let ch = if is_bead(glyph.ch) && unpushed { hollow(glyph.ch) } else { glyph.ch };
         Span::styled(ch.to_string(), Style::default().fg(color))
     }
 
-    fn row_line(&self, row: &Row, graph_width: usize, focused: bool) -> Line<'_> {
-        match row {
-            Row::Connector { glyphs } => {
-                Line::from(glyphs.iter().map(|g| self.glyph_span(g)).collect::<Vec<_>>())
-            }
-            Row::Commit { index, glyphs, .. } => {
-                let selected = *index == self.selected && !self.is_on_file();
-                let mut spans: Vec<Span> = glyphs.iter().map(|g| self.glyph_span(g)).collect();
-                spans.push(Span::raw(" ".repeat(graph_width - glyphs.len() + 1)));
+    fn commit_line(&self, index: usize, graph_width: usize, focused: bool) -> Line<'_> {
+        let glyphs = &self.rows[index].glyphs;
+        let selected = index == self.selected && !self.is_on_file();
+        let mut spans: Vec<Span> = glyphs.iter().map(|g| self.glyph_span(g)).collect();
+        spans.push(Span::raw(" ".repeat(graph_width - glyphs.len() + 1)));
 
-                let commit = &self.commits[*index];
-                let subject = if selected && focused { Color::White } else { Color::Gray };
-                spans.push(Span::styled(commit.subject.as_str(), Style::default().fg(subject)));
-                spans.push(Span::styled(
-                    format!("  {}", commit.author),
-                    Style::default().fg(ui::DIM),
-                ));
-                for (tip, color) in self.tips.iter().zip(&self.colors) {
-                    if tip.sha == commit.sha {
-                        let style = Style::default().fg(*color).add_modifier(Modifier::BOLD);
-                        spans.push(Span::raw("  "));
-                        spans.push(Span::styled(tip.name.as_str(), style));
-                    }
-                }
-
-                let line = Line::from(spans);
-                if selected {
-                    line.style(Style::default().bg(ui::SELECTED_BG))
-                } else {
-                    line
-                }
+        let commit = &self.commits[index];
+        let subject = if selected && focused { Color::White } else { Color::Gray };
+        spans.push(Span::styled(commit.subject.as_str(), Style::default().fg(subject)));
+        spans.push(Span::styled(format!("  {}", commit.author), Style::default().fg(ui::DIM)));
+        for (tip, color) in self.tips.iter().zip(&self.colors) {
+            if tip.sha == commit.sha {
+                let style = Style::default().fg(*color).add_modifier(Modifier::BOLD);
+                spans.push(Span::raw("  "));
+                spans.push(Span::styled(tip.name.as_str(), style));
             }
+        }
+
+        let line = Line::from(spans);
+        if selected {
+            line.style(Style::default().bg(ui::SELECTED_BG))
+        } else {
+            line
         }
     }
 
@@ -609,11 +649,7 @@ impl GraphPanel {
         let Some(expanded) = self.expanded_at(commit) else {
             return Line::default();
         };
-        let below = self.rows.iter().find_map(|row| match row {
-            Row::Commit { index, below, .. } if *index == commit => Some(below.as_slice()),
-            _ => None,
-        });
-        let below = below.unwrap_or_default();
+        let below = &self.rows[commit].below;
 
         let mut spans: Vec<Span> = below.iter().map(|g| self.glyph_span(g)).collect();
         spans.push(Span::raw(" ".repeat(graph_width.saturating_sub(below.len()) + 1)));
@@ -643,17 +679,17 @@ mod tests {
         layout(commits)
             .iter()
             .map(|row| {
-                let (Row::Commit { glyphs, .. } | Row::Connector { glyphs }) = row;
-                let text: String = glyphs.iter().map(|g| g.ch).collect();
+                let text: String =
+                    row.glyphs.iter().map(|g| if is_bead(g.ch) { '●' } else { g.ch }).collect();
                 text.trim_end().to_string()
             })
             .collect()
     }
 
     #[test]
-    fn linear_history_is_beads_joined_by_lines() {
+    fn linear_history_is_one_row_per_commit() {
         let commits = [commit("c", &["b"]), commit("b", &["a"]), commit("a", &[])];
-        assert_eq!(draw(&commits), ["●", "│", "●", "│", "●"]);
+        assert_eq!(draw(&commits), ["●", "●", "●"]);
     }
 
     #[test]
@@ -665,7 +701,7 @@ mod tests {
             commit("base", &["root"]),
             commit("root", &[]),
         ];
-        assert_eq!(draw(&commits), ["●", "│", "●", "│", "│ ●", "├─╯", "●", "│", "●"]);
+        assert_eq!(draw(&commits), ["●", "●", "│ ●", "●─╯", "●"]);
     }
 
     #[test]
@@ -676,7 +712,7 @@ mod tests {
             commit("p2", &["base"]),
             commit("base", &[]),
         ];
-        assert_eq!(draw(&commits), ["●", "├─╮", "● │", "│ │", "│ ●", "├─╯", "●"]);
+        assert_eq!(draw(&commits), ["●─╮", "● │", "│ ●", "●─╯"]);
     }
 
     #[test]
@@ -688,18 +724,18 @@ mod tests {
             commit("first", &["shared"]),
             commit("shared", &[]),
         ];
-        assert_eq!(draw(&commits), ["●", "│", "│ ●", "├─┤", "│ ●", "├─╯", "●"]);
+        assert_eq!(draw(&commits), ["●", "├─●", "│ ●", "●─╯"]);
     }
 
     #[test]
-    fn three_tips_join_one_at_a_time() {
+    fn three_tips_join_on_one_row() {
         let commits = [
             commit("a", &["base"]),
             commit("b", &["base"]),
             commit("c", &["base"]),
             commit("base", &[]),
         ];
-        assert_eq!(draw(&commits), ["●", "│", "│ ●", "│ │", "│ │ ●", "├─╯ │", "├───╯", "●"]);
+        assert_eq!(draw(&commits), ["●", "│ ●", "│ │ ●", "●─┴─╯"]);
     }
 
     #[test]
@@ -710,7 +746,76 @@ mod tests {
             commit("c", &["far"]),
             commit("merge", &["first", "far"]),
         ];
-        assert_eq!(draw(&commits).last().unwrap(), "├─┼─┤");
+        assert_eq!(draw(&commits).last().unwrap(), "●─┼─┤");
+    }
+
+    #[test]
+    fn beads_reach_the_edges_their_lines_leave_through() {
+        let commits = [
+            commit("a", &["m"]),
+            commit("m", &["p1", "p2"]),
+            commit("p1", &["root"]),
+            commit("p2", &["root"]),
+            commit("root", &[]),
+        ];
+        let beads: Vec<char> = layout(&commits)
+            .iter()
+            .map(|row| row.glyphs.iter().find(|g| is_bead(g.ch)).unwrap().ch)
+            .collect();
+        assert_eq!(
+            beads,
+            [
+                bead_char(false, true, false, false), // a tip: only down
+                bead_char(true, true, false, true),   // the merge forks right
+                bead_char(true, true, false, false),  // straight through
+                bead_char(true, true, false, false),  // p2 in the second lane
+                bead_char(true, false, false, true),  // the join comes from the right
+            ]
+        );
+    }
+
+    #[test]
+    fn a_lone_commit_has_no_lines() {
+        assert_eq!(layout(&[commit("a", &[])])[0].glyphs[0].ch, '\u{f5ee}');
+    }
+
+    #[test]
+    fn a_bead_reaches_left_when_merging_into_a_lane_on_its_left() {
+        let commits = [commit("tip", &["shared"]), commit("m", &["first", "shared"])];
+        // m is a new tip in the second lane, so nothing comes in from above.
+        assert_eq!(layout(&commits)[1].glyphs[2].ch, bead_char(false, true, true, false));
+    }
+
+    #[test]
+    fn every_bead_has_a_hollow_version_next_to_it() {
+        for ch in ['\u{f5ee}', '\u{f60c}'] {
+            assert!(is_bead(hollow(ch)));
+        }
+        assert_eq!(hollow('\u{f5ee}'), '\u{f5ef}');
+    }
+
+    #[test]
+    fn a_merge_does_not_reuse_the_column_of_a_line_joining_it() {
+        let commits = [
+            commit("a", &["m"]),
+            commit("b", &["m"]),
+            commit("m", &["p1", "p2"]),
+            commit("p1", &[]),
+            commit("p2", &[]),
+        ];
+        assert_eq!(draw(&commits), ["●", "│ ●", "●─┴─╮", "●   │", "    ●"]);
+    }
+
+    #[test]
+    fn a_merge_can_start_a_line_inside_one_joining_it() {
+        let commits = [
+            commit("a", &["m"]),
+            commit("x", &["z"]),
+            commit("b", &["m"]),
+            commit("z", &[]),
+            commit("m", &["p1", "p2"]),
+        ];
+        assert_eq!(draw(&commits).last().unwrap(), "●─┬─╯");
     }
 
     #[test]
@@ -788,27 +893,39 @@ mod tests {
     fn lines_take_the_color_of_the_commit_they_lead_to() {
         let commits = [commit("a", &["base"]), commit("b", &["base"]), commit("base", &[])];
         let rows = layout(&commits);
-        let Row::Connector { glyphs } = &rows[3] else { panic!("expected a connector") };
-        assert_eq!(glyphs[0].ch, '├');
-        assert_eq!(glyphs[0].commit, Some(2));
+        assert_eq!(rows[2].glyphs[2], Glyph { ch: '╯', commit: Some(2) });
+        // The line passing `b` is also heading for `base`.
+        assert_eq!(rows[1].glyphs[0], Glyph { ch: '│', commit: Some(2) });
     }
 
     #[test]
-    fn plain_lines_take_the_color_of_the_parent() {
-        let commits = [commit("child", &["parent"]), commit("parent", &[])];
-        let rows = layout(&commits);
-        let Row::Connector { glyphs } = &rows[1] else { panic!("expected a connector") };
-        assert_eq!(glyphs[0].commit, Some(1));
+    fn overlapping_lines_show_each_color_up_to_where_it_ends() {
+        let commits = [
+            commit("a", &["m"]),
+            commit("b", &["m"]),
+            commit("m", &["p1", "p2"]),
+            commit("p1", &[]),
+            commit("p2", &[]),
+        ];
+        let glyphs = &layout(&commits)[2].glyphs;
+        let leads_to: Vec<_> = glyphs[1..5].iter().map(|g| g.commit).collect();
+        assert_eq!(leads_to, [Some(2), Some(2), Some(4), Some(4)]);
     }
 
     #[test]
     fn lines_below_a_commit_are_kept_for_its_drop_down() {
         let commits = [commit("a", &["b"]), commit("b", &[])];
         let rows = layout(&commits);
-        let Row::Commit { below, .. } = &rows[0] else { panic!("expected a commit") };
-        assert_eq!(below[0].ch, '│');
-        let Row::Commit { below, .. } = &rows[2] else { panic!("expected a commit") };
-        assert_eq!(below[0].ch, ' ');
+        assert_eq!(rows[0].below[0].ch, '│');
+        assert_eq!(rows[1].below[0].ch, ' ');
+    }
+
+    #[test]
+    fn a_merges_second_line_runs_beside_its_drop_down() {
+        let commits = [commit("m", &["p1", "p2"]), commit("p1", &[]), commit("p2", &[])];
+        let rows = layout(&commits);
+        let below: String = rows[0].below.iter().map(|g| g.ch).collect();
+        assert_eq!(below.trim_end(), "│ │");
     }
 
     /// A panel showing `shas` as a linear history, with the given commits expanded.
