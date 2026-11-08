@@ -400,6 +400,15 @@ impl ColorCache {
         Some(rows)
     }
 
+    /// The most recent version of this diff, whatever its text.
+    pub fn latest(&mut self, source: &DiffSource) -> Option<(String, Vec<Row>)> {
+        let position = self.entries.iter().position(|(s, ..)| s == source)?;
+        let entry = self.entries.remove(position);
+        let found = (entry.1.clone(), entry.2.clone());
+        self.entries.push(entry);
+        Some(found)
+    }
+
     /// Whether some version of this diff is cached. A working-tree file may
     /// have changed since, which showing it will find out.
     pub fn contains(&self, source: &DiffSource) -> bool {
@@ -435,16 +444,16 @@ impl DiffPane {
     pub fn load(source: DiffSource) -> Result<DiffPane> {
         let text = git::diff(&source)?;
         let rows = parse_diff(&text);
-        Ok(DiffPane {
-            source,
-            text,
-            rows,
-            active: 0,
-            height: 0,
-            shift: 0,
-            text_width: 0,
-            colored: false,
-        })
+        Ok(DiffPane::new(source, text, rows, false))
+    }
+
+    /// A diff already coloured, as the cache keeps them, without asking git.
+    pub fn colored(source: DiffSource, text: String, rows: Vec<Row>) -> DiffPane {
+        DiffPane::new(source, text, rows, true)
+    }
+
+    fn new(source: DiffSource, text: String, rows: Vec<Row>, colored: bool) -> DiffPane {
+        DiffPane { source, text, rows, active: 0, height: 0, shift: 0, text_width: 0, colored }
     }
 
     pub fn text(&self) -> &str {

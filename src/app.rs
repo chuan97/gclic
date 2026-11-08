@@ -412,6 +412,9 @@ impl App {
     }
 
     /// Scroll is kept when the diff is the same one, reloaded.
+    /// A diff that was prefetched shows straight from the cache, without
+    /// waiting for git. If the file has changed since, the next poll or
+    /// refresh brings the newer version, as for any change made elsewhere.
     fn show_diff(&mut self, source: DiffSource) {
         if let Some(diff) = &mut self.diff
             && diff.source == source {
@@ -419,6 +422,11 @@ impl App {
                 self.report(result);
                 return;
             }
+        if let Some((text, rows)) = self.colors.latest(&source) {
+            self.diff = Some(DiffPane::colored(source, text, rows));
+            self.details = None;
+            return;
+        }
         match DiffPane::load(source) {
             Ok(diff) => {
                 self.diff = Some(diff);

@@ -28,8 +28,21 @@ impl FileList {
         self.selected = self.selected.min(self.files.len().saturating_sub(1));
     }
 
+    /// Going the other way, an added file is a deleted one and the reverse.
     pub fn swap_refs(&mut self) {
         std::mem::swap(&mut self.a, &mut self.b);
+        for file in &mut self.files {
+            file.status = match file.status {
+                'A' => 'D',
+                'D' => 'A',
+                other => other,
+            };
+        }
+    }
+
+    #[cfg(test)]
+    pub fn statuses(&self) -> Vec<char> {
+        self.files.iter().map(|file| file.status).collect()
     }
 
     pub fn selected_source(&self) -> Option<DiffSource> {
