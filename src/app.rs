@@ -76,6 +76,9 @@ impl Action {
 pub enum Confirm {
     Restore(String),
     DeleteUntracked(String),
+    /// Closing loses refs the user may have taken a while to pick, and tab
+    /// already leaves the comparison without losing it.
+    CloseCompare,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -577,11 +580,7 @@ impl App {
                 }
             }
             // Closing a comparison goes back to the Repo tab, as esc does.
-            Action::CloseCompare => {
-                self.compare = None;
-                self.close_preview();
-                self.switch_tab();
-            }
+            Action::CloseCompare => self.modal = Modal::Confirm(Confirm::CloseCompare),
             Action::Compare(a, b) => self.start_compare(a, b),
             Action::CompareWith(sha) => self.open_compare_b_picker(git::display_ref(&sha)),
             Action::Copy(sha) => match copy_to_clipboard(&sha) {
@@ -646,6 +645,10 @@ impl App {
                 let result = match &confirm {
                     Confirm::Restore(path) => git::restore(path),
                     Confirm::DeleteUntracked(path) => git::delete_untracked(path),
+                    Confirm::CloseCompare => {
+                        self.close_compare();
+                        return;
+                    }
                 };
                 self.apply(Action::after_change(result));
             }
@@ -763,6 +766,13 @@ impl App {
             }
             Err(error) => self.modal = Modal::Error(error.to_string()),
         }
+    }
+
+    /// Closing a comparison goes back to the Repo tab, as esc does elsewhere.
+    fn close_compare(&mut self) {
+        self.compare = None;
+        self.close_preview();
+        self.switch_tab();
     }
 
     /// Swaps the showing tab's state with the other tab's.
@@ -1122,8 +1132,16 @@ impl App {
                     Confirm::DeleteUntracked(path) => format!(
                         "{path} is untracked. Permanently delete it?\n\nenter = delete · esc = cancel"
                     ),
+                    Confirm::CloseCompare => {
+                        let refs = self.compare.as_ref().map(|c| c.refs()).unwrap_or_default();
+                        format!(
+                            "Close the comparison {refs}?\ntab goes to Repo and keeps it.\n\nenter = close · esc = cancel"
+                        )
+                    }
                 };
-                render_popup(frame, area, " Confirm ", text, (56, 7), Color::Yellow);
+                // The borders, plus a row in case a long path or ref wraps.
+                let height = text.lines().count() as u16 + 3;
+                render_popup(frame, area, " Confirm ", text, (56, height), Color::Yellow);
             }
             Modal::ConfirmQuit => {
                 let text = "Quit gclic?\n\nenter = quit · esc = cancel".to_string();
@@ -1263,8 +1281,14 @@ mod tests {
         app.start_compare("HEAD~1".to_string(), "HEAD".to_string());
         assert!(app.tab == Tab::Compare && app.focus == Focus::Compare);
         assert!(app.compare.as_ref().is_some_and(|c| c.refs() == "HEAD~1 → HEAD"));
-        // Closing it goes back to where the user was.
+        // Closing it asks first, and esc cancels.
         press(&mut app, KeyCode::Esc);
+        assert!(matches!(app.modal, Modal::Confirm(Confirm::CloseCompare)));
+        press(&mut app, KeyCode::Esc);
+        assert!(app.tab == Tab::Compare && app.compare.is_some());
+        // Enter closes it, going back to where the user was.
+        press(&mut app, KeyCode::Esc);
+        press(&mut app, KeyCode::Enter);
         assert!(app.tab == Tab::Repo && app.compare.is_none());
     }
 

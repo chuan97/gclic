@@ -74,7 +74,7 @@ const RIGHT: &[Section] = &[
             ("enter", "show the diff"),
             ("c", "new comparison: choose two refs"),
             ("r", "swap A and B"),
-            ("esc", "close it, back to Repo"),
+            ("esc", "close it after confirming, back to Repo"),
         ],
     },
     Section {
