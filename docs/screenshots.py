@@ -240,22 +240,53 @@ def capture(pyte, repo, keys, settle=1.2):
 # ------------------------------------------------------------- drawing
 
 CELL_W, CELL_H, FONT = 8.2, 17, 13.6
-BG = "#181818"
-FG = "#CCCCCC"
-# The basic terminal colours, as VS Code's terminal draws them.
-NAMED = {
-    "black": "#000000", "red": "#CD3131", "green": "#0DBC79", "brown": "#E5E510",
-    "yellow": "#E5E510", "blue": "#2472C8", "magenta": "#BC3FBC", "cyan": "#11A8CD",
-    "white": "#E5E5E5", "brightblack": "#666666", "brightred": "#F14C4C",
-    "brightgreen": "#23D18B", "brightbrown": "#F5F543", "brightyellow": "#F5F543",
-    "brightblue": "#3B8EEA", "brightmagenta": "#D670D6", "brightcyan": "#29B8DB",
-    "brightwhite": "#FFFFFF",
-}
+
+
+def terminal_colours():
+    """The background, text colour and 16 basic colours to draw with: the
+    ones Ghostty uses, read from it if it's installed, or else its defaults.
+    gclic's own exact colours, such as syntax highlighting, don't need them."""
+    background, foreground = "#282c34", "#ffffff"
+    palette = [
+        "#1d1f21", "#cc6666", "#b5bd68", "#f0c674", "#81a2be", "#b294bb", "#8abeb7", "#c5c8c6",
+        "#666666", "#d54e53", "#b9ca4a", "#e7c547", "#7aa6da", "#c397d8", "#70c0b1", "#eaeaea",
+    ]
+    try:
+        config = subprocess.run(["ghostty", "+show-config", "--default"], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        config = ""
+    for line in config.splitlines():
+        key, _, value = line.partition(" = ")
+        if key == "background" and value:
+            background = value
+        elif key == "foreground" and value:
+            foreground = value
+        elif key == "palette" and "=" in value:
+            index, colour = value.split("=", 1)
+            if int(index) < 16:
+                palette[int(index)] = colour
+    return background, foreground, palette
+
+
+BG, FG, PALETTE = terminal_colours()
+# pyte names the 16 basic colours, in palette order. Yellow is "brown".
+NAMES = ["black", "red", "green", "brown", "blue", "magenta", "cyan", "white"]
+NAMED = {name: PALETTE[i] for i, name in enumerate(NAMES)}
+NAMED.update({"bright" + name: PALETTE[i + 8] for i, name in enumerate(NAMES)})
+NAMED["yellow"], NAMED["brightyellow"] = NAMED["brown"], NAMED["brightbrown"]
+
+
+# pyte also reports the 16 basic colours as xterm's values for them, in
+# palette order, rather than by name.
+XTERM = ["000000", "cd0000", "00cd00", "cdcd00", "0000ee", "cd00cd", "00cdcd", "e5e5e5",
+         "7f7f7f", "ff0000", "00ff00", "ffff00", "5c5cff", "ff00ff", "00ffff", "ffffff"]
 
 
 def color(value, default):
     if value == "default":
         return default
+    if value.lower() in XTERM:
+        return PALETTE[XTERM.index(value.lower())]
     return NAMED.get(value, f"#{value}")
 
 
