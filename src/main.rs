@@ -10,6 +10,7 @@ mod highlight;
 mod picker;
 mod staging;
 mod ui;
+mod worker;
 
 use anyhow::Result;
 use app::App;

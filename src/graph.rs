@@ -545,6 +545,42 @@ impl GraphPanel {
             .and_then(|expanded| expanded.files.len().checked_sub(1));
     }
 
+    /// The diffs one key away among the open commits' files, most likely
+    /// first: the selected file's, then the files j and k lead to. From a
+    /// commit, j leads into its first file and k into the last file above.
+    /// The other jumps (n/N, g/G) land on commits, which have no diff.
+    pub fn file_sources_around(&self) -> Vec<DiffSource> {
+        // Every file row, in the order they're shown.
+        let files: Vec<(usize, usize)> = (0..self.commits.len())
+            .filter_map(|commit| self.expanded_at(commit).map(|e| (commit, e.files.len())))
+            .flat_map(|(commit, count)| (0..count).map(move |file| (commit, file)))
+            .collect();
+        let picks: Vec<(usize, usize)> = match self.selected_file {
+            Some(file) => {
+                let Some(here) = files.iter().position(|&row| row == (self.selected, file)) else {
+                    return Vec::new();
+                };
+                [Some(here), Some(here + 1), here.checked_sub(1)]
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|index| files.get(index).copied())
+                    .collect()
+            }
+            None => {
+                let below = files.iter().find(|(commit, _)| *commit == self.selected);
+                let above = files.iter().rev().find(|(commit, _)| commit + 1 == self.selected);
+                below.into_iter().chain(above).copied().collect()
+            }
+        };
+        picks.into_iter().filter_map(|(commit, file)| self.file_source(commit, file)).collect()
+    }
+
+    fn file_source(&self, commit: usize, file: usize) -> Option<DiffSource> {
+        let expanded = self.expanded_at(commit)?;
+        let path = expanded.files.get(file)?.path.clone();
+        Some(DiffSource::Commit { sha: expanded.sha.clone(), path })
+    }
+
     pub fn selected_file_source(&self) -> Option<DiffSource> {
         let expanded = self.expanded_at(self.selected)?;
         let file = expanded.files.get(self.selected_file?)?;
@@ -1024,6 +1060,29 @@ mod tests {
         panel.selected_file = Some(0);
         panel.next_commit();
         assert_eq!((panel.selected, panel.selected_file), (1, None));
+    }
+
+    fn paths(sources: Vec<DiffSource>) -> Vec<String> {
+        sources.iter().map(|source| format!("{}:{}", match source {
+            DiffSource::Commit { sha, .. } => sha.as_str(),
+            _ => "?",
+        }, source.path())).collect()
+    }
+
+    #[test]
+    fn the_files_around_a_file_are_its_neighbours_across_commits() {
+        let mut panel = panel_with_expanded(&["a", "b"], &["a", "b"], &["x", "y"]);
+        panel.selected_file = Some(1);
+        assert_eq!(paths(panel.file_sources_around()), ["a:y", "b:x", "a:x"]);
+    }
+
+    #[test]
+    fn the_files_around_a_commit_are_its_first_and_the_last_above() {
+        let mut panel = panel_with_expanded(&["a", "b", "c"], &["a", "b"], &["x", "y"]);
+        panel.selected = 1;
+        assert_eq!(paths(panel.file_sources_around()), ["b:x", "a:y"]);
+        panel.selected = 2;
+        assert_eq!(paths(panel.file_sources_around()), ["b:y"]);
     }
 
     #[test]

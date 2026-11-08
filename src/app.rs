@@ -4,12 +4,13 @@
 use crate::branches::BranchesPanel;
 use crate::compare::ComparePanel;
 use crate::details::DetailsPane;
-use crate::diff::DiffPane;
+use crate::diff::{ColorCache, DiffPane, Row};
 use crate::git::{self, CommitDetails, DiffSource};
 use crate::graph::GraphPanel;
 use crate::picker::{Outcome, Picker};
 use crate::staging::StagingPanel;
 use crate::ui;
+use crate::worker::{Done, Worker};
 use anyhow::Result;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -22,6 +23,9 @@ use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 const AUTO_REFRESH: Duration = Duration::from_millis(500);
+/// How long to wait for a key before checking on the worker's results. Short,
+/// so colours appear soon after they're ready.
+const KEY_WAIT: Duration = Duration::from_millis(30);
 const GLOBAL_HINTS: &str = "? help · q quit";
 /// The preview's share of the width, focused or not. Zooming gives it all of it.
 const DIFF_PERCENT: u16 = 80;
@@ -162,6 +166,13 @@ pub struct App {
     refs_fingerprint: String,
     /// `zed` commands still running, which hand the file to Zed and exit.
     editor_commands: Vec<Child>,
+    /// The background thread doing slow reads: auto-refresh and colouring.
+    worker: Worker,
+    colors: ColorCache,
+    /// Counts the refreshes, which follow every change gclic makes. A poll
+    /// asked for before the latest one may have read the repo before a
+    /// change, so its result is dropped.
+    generation: u64,
 }
 
 impl App {
@@ -184,6 +195,9 @@ impl App {
             last_refresh: Instant::now(),
             refs_fingerprint: String::new(),
             editor_commands: Vec::new(),
+            worker: Worker::start(),
+            colors: ColorCache::default(),
+            generation: 0,
         };
         app.refresh();
         app
@@ -191,17 +205,13 @@ impl App {
 
     pub fn run(mut self, terminal: &mut DefaultTerminal) -> Result<()> {
         while !self.should_quit {
+            self.take_worker_results();
             terminal.draw(|frame| self.render(frame))?;
-            if event::poll(Duration::from_millis(100))? {
-                if let Event::Key(key) = event::read()?
-                    && key.kind == KeyEventKind::Press
-                {
-                    self.handle_key(key);
-                }
-            } else if let Some(diff) = &mut self.diff {
-                // No key for a moment, so the user has stopped moving: time to
-                // colour the diff they landed on. Held keys repeat faster.
-                diff.finish_highlighting();
+            if event::poll(KEY_WAIT)?
+                && let Event::Key(key) = event::read()?
+                && key.kind == KeyEventKind::Press
+            {
+                self.handle_key(key);
             }
             // Waits while a popup is open: it would only redraw what's behind it.
             let idle = matches!(self.modal, Modal::None);
@@ -214,13 +224,16 @@ impl App {
 
     // --------------------------------------------------------- refreshing
 
-    /// Reloads everything from git, after an action or on `r`.
+    /// Reloads everything from git, after an action or on `r`. Runs here
+    /// rather than on the worker, so a change gclic made shows straight away.
     fn refresh(&mut self) {
+        self.generation += 1;
         let result = self.reload_panels();
         self.report(result);
         self.refs_fingerprint = git::refs_fingerprint();
         self.sync_diff();
         self.sync_details();
+        self.request_colors();
         self.last_refresh = Instant::now();
     }
 
@@ -235,18 +248,114 @@ impl App {
     }
 
     /// Picks up what happened outside the app, such as git commands in another
-    /// terminal. Runs often, so the graph only reloads when a ref or HEAD moved.
+    /// terminal. The worker does the reading, and `apply_poll` the rest.
     fn auto_refresh(&mut self) {
-        if git::refs_fingerprint() != self.refs_fingerprint {
-            self.refresh();
-            return;
-        }
-        let result = self.staging.refresh();
-        self.report(result);
-        self.sync_diff();
+        let diff = self.diff.as_ref().map(|diff| diff.source.clone());
+        self.worker.poll(self.generation, diff);
         // Collects the editor commands that have finished, so none linger.
         self.editor_commands.retain_mut(|child| matches!(child.try_wait(), Ok(None)));
         self.last_refresh = Instant::now();
+    }
+
+    fn take_worker_results(&mut self) {
+        let (results, alive) = self.worker.receive();
+        for done in results {
+            match done {
+                Done::Poll { generation, fingerprint, status, diff } => {
+                    self.apply_poll(generation, fingerprint, status, diff);
+                }
+                Done::Highlight { source, text, rows } => self.apply_highlight(source, text, rows),
+            }
+        }
+        if !alive {
+            self.worker = Worker::start();
+            self.message = "The background worker stopped, so it was restarted".to_string();
+        }
+    }
+
+    /// Takes in what a poll found. The graph only reloads, with everything
+    /// else, when a ref or HEAD moved.
+    fn apply_poll(
+        &mut self,
+        generation: u64,
+        fingerprint: String,
+        status: Result<git::Status>,
+        diff: Option<(DiffSource, Result<String>)>,
+    ) {
+        if generation != self.generation {
+            return; // A refresh has run since, which read the repo more recently.
+        }
+        if fingerprint != self.refs_fingerprint {
+            self.refresh();
+            return;
+        }
+        match status {
+            Ok(status) => self.staging.set_status(status),
+            Err(error) => self.message = error.to_string(),
+        }
+        // While browsing Changes the diff follows the selection, which the new
+        // status may have moved. Otherwise it takes the newer text, if any.
+        let current = self.diff.as_ref().map(|diff| diff.source.clone());
+        let follows = self.focus == Focus::Changes && current.as_ref().is_some_and(|s| s.is_working_tree());
+        let selected = self.staging.selected_source();
+        if follows && selected != current {
+            match selected {
+                Some(source) => self.show_diff(source),
+                None => self.diff = None,
+            }
+        } else if let Some(open) = &mut self.diff
+            && let Some((source, Ok(text))) = diff
+            && open.source == source
+        {
+            open.set_text(text);
+        }
+        self.request_colors();
+    }
+
+    fn apply_highlight(&mut self, source: DiffSource, text: String, rows: Vec<Row>) {
+        if let Some(diff) = &mut self.diff
+            && diff.source == source
+            && diff.needs_colors()
+        {
+            diff.apply_colors(&text, rows.clone());
+        }
+        self.colors.insert(source, text, rows);
+    }
+
+    /// Colours the open diff from the cache if it can, and asks the worker for
+    /// the rest: the open diff if still uncoloured, then every diff one key
+    /// away in the focused list, so they're ready when the user gets there.
+    /// Without a diff open, only the file under the cursor, one enter away.
+    /// Asking again replaces what's still waiting.
+    fn request_colors(&mut self) {
+        let mut wanted = Vec::new();
+        if let Some(diff) = &mut self.diff
+            && diff.needs_colors()
+        {
+            match self.colors.get(&diff.source, diff.text()) {
+                Some(rows) => {
+                    let text = diff.text().to_string();
+                    diff.apply_colors(&text, rows);
+                }
+                None => wanted.push(diff.source.clone()),
+            }
+        }
+        let list = if self.focus == Focus::Preview { self.last_left_focus } else { self.focus };
+        let mut around = match list {
+            Focus::Changes => self.staging.sources_around(),
+            Focus::Graph => self.graph.file_sources_around(),
+            Focus::Compare => self.compare.as_ref().map(|c| c.sources_around()).unwrap_or_default(),
+            Focus::Branches | Focus::Preview => Vec::new(),
+        };
+        if self.diff.is_none() {
+            around.truncate(1);
+        }
+        for source in around {
+            if !wanted.contains(&source) && !self.colors.contains(&source) {
+                wanted.push(source);
+            }
+        }
+        self.worker.highlight(wanted);
     }
 
     /// Brings an open diff up to date. While browsing Changes it follows the
@@ -337,6 +446,8 @@ impl App {
             // Any key dismisses these.
             Modal::Error(_) | Modal::Help => {}
         }
+        // The cursor may have moved, so the diffs one key away may have changed.
+        self.request_colors();
     }
 
     fn handle_main_key(&mut self, key: KeyEvent) {

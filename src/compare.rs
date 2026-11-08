@@ -52,6 +52,10 @@ impl ComparePanel {
         self.files.selected_source()
     }
 
+    pub fn sources_around(&self) -> Vec<DiffSource> {
+        self.files.sources_around()
+    }
+
     pub fn handle_key(&mut self, key: KeyEvent) -> Action {
         if key.code == KeyCode::Esc {
             return Action::CloseCompare;

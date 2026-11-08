@@ -41,17 +41,32 @@ impl StagingPanel {
     }
 
     fn selection(&self) -> Option<(Section, &FileEntry)> {
+        self.entry_at(self.selected)
+    }
+
+    /// `index` counts the staged files, then the unstaged ones.
+    fn entry_at(&self, index: usize) -> Option<(Section, &FileEntry)> {
         let staged = self.status.staged.len();
-        if self.selected < staged {
-            Some((Section::Staged, &self.status.staged[self.selected]))
+        if index < staged {
+            Some((Section::Staged, &self.status.staged[index]))
         } else {
-            let entry = self.status.unstaged.get(self.selected - staged)?;
+            let entry = self.status.unstaged.get(index - staged)?;
             Some((Section::Changes, entry))
         }
     }
 
     pub fn selected_source(&self) -> Option<DiffSource> {
-        let (section, entry) = self.selection()?;
+        self.source_at(self.selected)
+    }
+
+    /// The diffs one key away, most likely first, for prefetching.
+    pub fn sources_around(&self) -> Vec<DiffSource> {
+        let positions = ui::one_key_away(self.selected, self.total());
+        positions.into_iter().filter_map(|index| self.source_at(index)).collect()
+    }
+
+    fn source_at(&self, index: usize) -> Option<DiffSource> {
+        let (section, entry) = self.entry_at(index)?;
         let path = entry.path.clone();
         Some(match (section, entry.status) {
             (Section::Staged, _) => DiffSource::Staged(path),

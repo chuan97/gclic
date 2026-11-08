@@ -39,6 +39,22 @@ pub fn previous_index(index: usize, len: usize) -> usize {
     if index == 0 { len.saturating_sub(1) } else { index - 1 }
 }
 
+/// The positions one key away in a list of `len`, most likely first: the
+/// selected one, then where j, k, g and G lead. Used to prefetch diffs.
+pub fn one_key_away(selected: usize, len: usize) -> Vec<usize> {
+    if len == 0 {
+        return Vec::new();
+    }
+    let mut positions = Vec::new();
+    let candidates = [selected, next_index(selected, len), previous_index(selected, len), 0, len - 1];
+    for position in candidates {
+        if !positions.contains(&position) {
+            positions.push(position);
+        }
+    }
+    positions
+}
+
 /// Draws `lines` one per row. Unlike a Paragraph, a line's background style
 /// fills its whole row, which is what makes a selection bar span the panel.
 pub fn render_lines(frame: &mut Frame, area: Rect, lines: Vec<Line>) {
@@ -78,6 +94,13 @@ mod tests {
         assert_eq!(next_index(2, 3), 0);
         assert_eq!(previous_index(1, 3), 0);
         assert_eq!(previous_index(0, 3), 2);
+    }
+
+    #[test]
+    fn one_key_away_lists_each_position_once_most_likely_first() {
+        assert_eq!(one_key_away(2, 10), [2, 3, 1, 0, 9]);
+        assert_eq!(one_key_away(0, 3), [0, 1, 2]);
+        assert!(one_key_away(0, 0).is_empty());
     }
 
     #[test]

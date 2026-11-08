@@ -107,8 +107,9 @@ fn changed_cell(number: usize, content: &str) -> Cell {
 }
 
 /// Gives each line its syntax colours. They come from the whole old and new
-/// files, as a hunk on its own can start inside a comment or a string.
-fn highlight_rows(rows: &mut [Row], source: &DiffSource) {
+/// files, as a hunk on its own can start inside a comment or a string. Slow
+/// for big files, so the worker thread does it.
+pub fn highlight_rows(rows: &mut [Row], source: &DiffSource) {
     let last_line = |side: fn(&Row) -> Option<&Cell>| {
         rows.iter().filter_map(side).map(|cell| cell.number).max().unwrap_or(0)
     };
@@ -373,8 +374,50 @@ pub struct DiffPane {
     shift: usize,
     /// Room for text on each side, past the line numbers.
     text_width: usize,
-    /// Whether the rows have their syntax colours yet. See `finish_highlighting`.
+    /// Whether the rows have their syntax colours yet. The worker thread
+    /// makes them, and `apply_colors` takes them.
     colored: bool,
+}
+
+/// The most rows the colour cache keeps, over all its diffs. Enough for the
+/// diffs around the cursor and a good few recent ones, in a few MB.
+const CACHE_ROWS: usize = 20_000;
+
+/// Diffs already coloured, so that going back to one, or to one prefetched,
+/// shows its colours straight away. The most recently used come last.
+#[derive(Default)]
+pub struct ColorCache {
+    entries: Vec<(DiffSource, String, Vec<Row>)>,
+}
+
+impl ColorCache {
+    /// The coloured rows of this diff, if they were made from this same text.
+    pub fn get(&mut self, source: &DiffSource, text: &str) -> Option<Vec<Row>> {
+        let position = self.entries.iter().position(|(s, t, _)| s == source && t == text)?;
+        let entry = self.entries.remove(position);
+        let rows = entry.2.clone();
+        self.entries.push(entry);
+        Some(rows)
+    }
+
+    /// Whether some version of this diff is cached. A working-tree file may
+    /// have changed since, which showing it will find out.
+    pub fn contains(&self, source: &DiffSource) -> bool {
+        self.entries.iter().any(|(s, ..)| s == source)
+    }
+
+    /// Adds a diff, replacing an older version of it and dropping the least
+    /// recently used ones past the limit.
+    pub fn insert(&mut self, source: DiffSource, text: String, rows: Vec<Row>) {
+        self.entries.retain(|(s, ..)| *s != source);
+        self.entries.push((source, text, rows));
+        let total = |entries: &[(DiffSource, String, Vec<Row>)]| -> usize {
+            entries.iter().map(|(.., rows)| rows.len()).sum()
+        };
+        while self.entries.len() > 1 && total(&self.entries) > CACHE_ROWS {
+            self.entries.remove(0);
+        }
+    }
 }
 
 /// The length, in characters, of the longest line on either side.
@@ -388,8 +431,7 @@ fn longest_line(rows: &[Row]) -> usize {
 
 impl DiffPane {
     /// Loads without syntax colours, which can take a moment for a big file.
-    /// That way moving through a list of files stays quick, and only the one
-    /// the user stops on gets coloured, by `finish_highlighting`.
+    /// They come from the cache or the worker thread, via `apply_colors`.
     pub fn load(source: DiffSource) -> Result<DiffPane> {
         let text = git::diff(&source)?;
         let rows = parse_diff(&text);
@@ -405,28 +447,39 @@ impl DiffPane {
         })
     }
 
-    /// Adds the syntax colours, if they're missing.
-    pub fn finish_highlighting(&mut self) {
-        if !self.colored {
-            highlight_rows(&mut self.rows, &self.source);
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    pub fn needs_colors(&self) -> bool {
+        !self.colored
+    }
+
+    /// Takes coloured rows, if they were made from the diff on screen. Ones
+    /// for an older version of it are dropped.
+    pub fn apply_colors(&mut self, text: &str, rows: Vec<Row>) {
+        if self.text == text {
+            self.rows = rows;
             self.colored = true;
         }
     }
 
     /// Fetches the diff again, for files that changed while it was on screen.
-    /// This runs every refresh, so the work only happens if the diff changed.
-    /// Colours come straight away, as an uncoloured flash would be distracting.
     pub fn reload(&mut self) -> Result<()> {
-        let text = git::diff(&self.source)?;
+        self.set_text(git::diff(&self.source)?);
+        Ok(())
+    }
+
+    /// Takes a newer version of the diff, which needs colouring again. Nothing
+    /// happens if it hasn't changed, as is usual on a refresh.
+    pub fn set_text(&mut self, text: String) {
         if text == self.text {
-            return Ok(());
+            return;
         }
         self.rows = parse_diff(&text);
-        highlight_rows(&mut self.rows, &self.source);
-        self.colored = true;
+        self.colored = false;
         self.text = text;
         self.active = self.active.min(self.rows.len().saturating_sub(1));
-        Ok(())
     }
 
     /// The first row on screen: the one that centres the active row, without
@@ -700,6 +753,40 @@ mod tests {
         assert_eq!(pane.shift, 6);
         pane.handle_key(KeyEvent::from(KeyCode::Char('h')));
         assert_eq!(pane.shift, 2);
+    }
+
+    #[test]
+    fn the_cache_only_matches_the_same_text() {
+        let mut cache = ColorCache::default();
+        let source = DiffSource::Unstaged("f".to_string());
+        cache.insert(source.clone(), "v1".to_string(), parse_diff("@@ -1 +1 @@\n-a\n+b"));
+        assert!(cache.get(&source, "v1").is_some());
+        assert!(cache.get(&source, "v2").is_none());
+        assert!(cache.contains(&source));
+    }
+
+    #[test]
+    fn the_cache_drops_the_least_recently_used_past_its_limit() {
+        let mut cache = ColorCache::default();
+        let file = |name: &str| DiffSource::Unstaged(name.to_string());
+        let rows = vec![Row::Heading("x".to_string()); CACHE_ROWS / 2];
+        cache.insert(file("a"), String::new(), rows.clone());
+        cache.insert(file("b"), String::new(), rows.clone());
+        cache.get(&file("a"), ""); // a is now the most recently used
+        cache.insert(file("c"), String::new(), rows);
+        assert!(cache.contains(&file("a")) && cache.contains(&file("c")));
+        assert!(!cache.contains(&file("b")));
+    }
+
+    #[test]
+    fn colours_for_another_version_of_the_diff_are_dropped() {
+        let mut pane = pane_with_rows(1, 10);
+        pane.text = "new".to_string();
+        pane.colored = false;
+        pane.apply_colors("old", Vec::new());
+        assert!(pane.needs_colors());
+        pane.apply_colors("new", Vec::new());
+        assert!(!pane.needs_colors());
     }
 
     #[test]

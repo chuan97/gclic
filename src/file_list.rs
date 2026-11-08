@@ -33,7 +33,17 @@ impl FileList {
     }
 
     pub fn selected_source(&self) -> Option<DiffSource> {
-        let path = self.files.get(self.selected)?.path.clone();
+        self.source_at(self.selected)
+    }
+
+    /// The diffs one key away, most likely first, for prefetching.
+    pub fn sources_around(&self) -> Vec<DiffSource> {
+        let positions = ui::one_key_away(self.selected, self.files.len());
+        positions.into_iter().filter_map(|index| self.source_at(index)).collect()
+    }
+
+    fn source_at(&self, index: usize) -> Option<DiffSource> {
+        let path = self.files.get(index)?.path.clone();
         Some(DiffSource::Refs { a: self.a.clone(), b: self.b.clone(), path })
     }
 
