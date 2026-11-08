@@ -4,7 +4,8 @@
 #     git tag v0.2.0
 #     git push origin v0.2.0
 #
-# The tag must match the version in Cargo.toml.
+# The tag must match the version in Cargo.toml. A suffix after a dash, as in
+# v0.2.0-rc.1, makes a pre-release, for trying a build before releasing it.
 name: Release
 
 on:
@@ -24,7 +25,8 @@ jobs:
         shell: bash
         run: |
           in_cargo=$(grep -m1 '^version = ' Cargo.toml | cut -d '"' -f2)
-          if [ "v$in_cargo" != "$GITHUB_REF_NAME" ]; then
+          version="${GITHUB_REF_NAME#v}"
+          if [ "${version%%-*}" != "$in_cargo" ]; then
             echo "Cargo.toml says $in_cargo, but the tag is $GITHUB_REF_NAME"
             exit 1
           fi
@@ -38,6 +40,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          prerelease=""
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            prerelease="--prerelease"
+          fi
           gh release create "$GITHUB_REF_NAME" "gclic-$GITHUB_REF_NAME-windows-x86_64.zip" \
             --title "gclic $GITHUB_REF_NAME" \
-            --generate-notes
+            --generate-notes \
+            $prerelease
