@@ -1,0 +1,43 @@
+# Builds gclic for Windows and publishes it as a GitHub Release, when a
+# version tag is pushed:
+#
+#     git tag v0.2.0
+#     git push origin v0.2.0
+#
+# The tag must match the version in Cargo.toml.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check the tag matches Cargo.toml
+        shell: bash
+        run: |
+          in_cargo=$(grep -m1 '^version = ' Cargo.toml | cut -d '"' -f2)
+          if [ "v$in_cargo" != "$GITHUB_REF_NAME" ]; then
+            echo "Cargo.toml says $in_cargo, but the tag is $GITHUB_REF_NAME"
+            exit 1
+          fi
+      - name: Build
+        run: cargo build --release --locked
+      - name: Package
+        shell: pwsh
+        run: Compress-Archive -Path target/release/gclic.exe, README.md -DestinationPath "gclic-$env:GITHUB_REF_NAME-windows-x86_64.zip"
+      - name: Publish the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "gclic-$GITHUB_REF_NAME-windows-x86_64.zip" \
+            --title "gclic $GITHUB_REF_NAME" \
+            --generate-notes

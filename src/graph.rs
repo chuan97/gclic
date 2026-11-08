@@ -208,6 +208,19 @@ fn bead_char(up: bool, down: bool, left: bool, right: bool) -> char {
     }
 }
 
+/// Whether the terminal draws the branch drawing symbols itself, so the beads
+/// can use them, going by how it identifies itself. Elsewhere they'd show as
+/// empty boxes, so plain beads are used.
+fn draws_branch_symbols() -> bool {
+    static DRAWS: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *DRAWS.get_or_init(|| {
+        let var = |name: &str| std::env::var(name).unwrap_or_default();
+        // WezTerm's nightly builds draw them too, but its stable release
+        // doesn't, so it gets plain beads.
+        var("TERM_PROGRAM") == "ghostty" || var("TERM") == "xterm-kitty" || !var("KITTY_WINDOW_ID").is_empty()
+    })
+}
+
 fn is_bead(ch: char) -> bool {
     ('\u{f5ee}'..='\u{f60d}').contains(&ch)
 }
@@ -691,7 +704,14 @@ impl GraphPanel {
         let color = glyph.commit.and_then(|i| self.commit_colors.get(i).copied());
         let color = color.unwrap_or(PALETTE[0]);
         let unpushed = glyph.commit.is_some_and(|i| self.unpushed[i]);
-        let ch = if is_bead(glyph.ch) && unpushed { hollow(glyph.ch) } else { glyph.ch };
+        let ch = match (is_bead(glyph.ch), unpushed, draws_branch_symbols()) {
+            (true, true, true) => hollow(glyph.ch),
+            // Plain beads, which every terminal can draw, though their lines
+            // don't reach them.
+            (true, true, false) => '○',
+            (true, false, false) => '●',
+            _ => glyph.ch,
+        };
         Span::styled(ch.to_string(), Style::default().fg(color))
     }
 
