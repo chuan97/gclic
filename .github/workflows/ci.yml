@@ -1,9 +1,15 @@
-# Builds and tests gclic on macOS and Windows for every push and pull request.
+# Builds and tests gclic on macOS and Windows for pull requests, or when run
+# by hand from the Actions tab.
 name: CI
 
 on:
-  push:
   pull_request:
+  workflow_dispatch:
+
+# A newer push to the same pull request cancels a run still going.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
