@@ -2,12 +2,36 @@
 
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
-use ratatui::text::Line;
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders};
 
 pub const SELECTED_BG: Color = Color::Indexed(237);
 pub const DIM: Color = Color::DarkGray;
+/// The colour of keys wherever they're listed: popups and the help.
+pub const KEY: Color = Color::Yellow;
+
+/// Keys and what they do, for a popup's bottom border: keys in `KEY` and
+/// actions in the normal colour. The key for the action named `danger`, if
+/// any, is bold red instead, as it's the key that's about to be pressed.
+pub fn key_hints(hints: &[(&str, &str)], danger: Option<&str>) -> Line<'static> {
+    let mut spans = vec![Span::raw(" ")];
+    for (i, (key, action)) in hints.iter().enumerate() {
+        if i > 0 {
+            spans.push(Span::styled(" · ", Style::default().fg(DIM)));
+        }
+        let key_style = if danger == Some(*action) {
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(KEY)
+        };
+        spans.push(Span::styled(key.to_string(), key_style));
+        // Reset rather than left unset, as a border's colour would show through.
+        spans.push(Span::styled(format!(" {action}"), Style::default().fg(Color::Reset)));
+    }
+    spans.push(Span::raw(" "));
+    Line::from(spans).right_aligned()
+}
 
 pub fn panel(title: String, focused: bool) -> Block<'static> {
     let color = if focused { Color::Cyan } else { DIM };
@@ -94,6 +118,18 @@ mod tests {
         assert_eq!(next_index(2, 3), 0);
         assert_eq!(previous_index(1, 3), 0);
         assert_eq!(previous_index(0, 3), 2);
+    }
+
+    #[test]
+    fn key_hints_colour_keys_and_the_dangerous_action() {
+        let line = key_hints(&[("enter", "discard"), ("esc", "cancel")], Some("discard"));
+        let text: String = line.spans.iter().map(|span| span.content.as_ref()).collect();
+        assert_eq!(text, " enter discard · esc cancel ");
+        let style_of = |content: &str| line.spans.iter().find(|s| s.content == content).unwrap().style;
+        assert_eq!(style_of("enter").fg, Some(Color::Red));
+        assert_eq!(style_of("esc").fg, Some(KEY));
+        assert_eq!(style_of(" discard").fg, Some(Color::Reset));
+        assert_eq!(style_of(" cancel").fg, Some(Color::Reset));
     }
 
     #[test]

@@ -52,6 +52,8 @@ pub enum Outcome {
 
 pub struct Picker {
     title: String,
+    /// Keys for its bottom border, as `ui::key_hints` shows them.
+    hints: Vec<(&'static str, &'static str)>,
     items: Vec<String>,
     query: String,
     /// Indexes into `items` that match the query, best first.
@@ -72,6 +74,7 @@ impl Picker {
         let matches = (0..items.len()).collect();
         Picker {
             title: format!(" {title} "),
+            hints: Vec::new(),
             items,
             query: String::new(),
             matches,
@@ -90,6 +93,10 @@ impl Picker {
 
     pub fn with_free_text(title: &str, items: Vec<String>) -> Picker {
         Picker { free_text: true, ..Picker::single(title, items) }
+    }
+
+    pub fn with_hints(self, hints: &[(&'static str, &'static str)]) -> Picker {
+        Picker { hints: hints.to_vec(), ..self }
     }
 
     pub fn accepts_free_text(&self) -> bool {
@@ -252,7 +259,7 @@ impl Picker {
     pub fn render(&mut self, frame: &mut Frame, area: Rect) {
         let popup = ui::centered(area, 60, 20);
         frame.render_widget(Clear, popup);
-        let block = ui::panel(self.title.clone(), true);
+        let block = ui::panel(self.title.clone(), true).title_bottom(ui::key_hints(&self.hints, None));
         let inner = block.inner(popup);
         frame.render_widget(block, popup);
         if inner.height == 0 {

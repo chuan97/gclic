@@ -29,6 +29,9 @@ const AUTO_REFRESH: Duration = Duration::from_millis(500);
 /// so colours appear soon after they're ready.
 const KEY_WAIT: Duration = Duration::from_millis(30);
 const GLOBAL_HINTS: &str = "? help · q quit";
+/// The keys shown on the pickers that choose refs to compare.
+const COMPARE_PICKER_KEYS: [(&str, &str); 4] =
+    [("i", "type"), ("p", "paste"), ("enter", "choose"), ("esc", "close")];
 /// The preview's share of the width, focused or not. Zooming gives it all of it.
 const DIFF_PERCENT: u16 = 80;
 /// The most of the left column's height that Branches and Changes can take,
@@ -742,8 +745,8 @@ impl App {
             Ok(mut items) => {
                 // Comparing a ref with itself shows nothing.
                 items.retain(|item| item.split_whitespace().next() != Some(a.as_str()));
-                let title = format!("Compare {a} with: i types, p pastes");
-                let picker = Picker::with_free_text(&title, items);
+                let title = format!("Compare {a} with");
+                let picker = Picker::with_free_text(&title, items).with_hints(&COMPARE_PICKER_KEYS);
                 self.modal = Modal::Picker(picker, PickerUse::CompareB { a });
             }
             Err(error) => self.modal = Modal::Error(error.to_string()),
@@ -801,8 +804,8 @@ impl App {
             Ok(branches) => {
                 let names = branches.into_iter().map(|b| b.name).collect();
                 let ticked = self.graph.custom_refs().to_vec();
-                let title = "Graph branches: space ticks, a/A all, enter applies";
-                let picker = Picker::multi(title, names, ticked);
+                let hints = [("space", "tick"), ("a/A", "all, none"), ("enter", "apply"), ("esc", "close")];
+                let picker = Picker::multi("Graph branches", names, ticked).with_hints(&hints);
                 self.modal = Modal::Picker(picker, PickerUse::GraphBranches);
             }
             Err(error) => self.modal = Modal::Error(error.to_string()),
@@ -812,7 +815,7 @@ impl App {
     fn open_compare_picker(&mut self) {
         match compare_items(&self.recent_yanks) {
             Ok(items) => {
-                let picker = Picker::with_free_text("Compare ref A: i types, p pastes", items);
+                let picker = Picker::with_free_text("Compare ref A", items).with_hints(&COMPARE_PICKER_KEYS);
                 self.modal = Modal::Picker(picker, PickerUse::CompareA);
             }
             Err(error) => self.modal = Modal::Error(error.to_string()),
@@ -1125,37 +1128,64 @@ impl App {
             Modal::None => {}
             Modal::Picker(picker, _) => picker.render(frame, area),
             Modal::Confirm(confirm) => {
-                let text = match confirm {
-                    Confirm::Restore(path) => {
-                        format!("Discard your changes to {path}?\n\nenter = discard · esc = cancel")
-                    }
-                    Confirm::DeleteUntracked(path) => format!(
-                        "{path} is untracked. Permanently delete it?\n\nenter = delete · esc = cancel"
+                let bold = Style::default().add_modifier(Modifier::BOLD);
+                let (title, body, action) = match confirm {
+                    Confirm::Restore(path) => (
+                        " Discard changes ",
+                        vec![Line::from(vec![
+                            Span::raw("Discard your changes to "),
+                            Span::styled(path.clone(), bold),
+                            Span::raw("?"),
+                        ])],
+                        "discard",
+                    ),
+                    Confirm::DeleteUntracked(path) => (
+                        " Delete file ",
+                        vec![Line::from(vec![
+                            Span::styled(path.clone(), bold),
+                            Span::raw(" is untracked. Permanently delete it?"),
+                        ])],
+                        "delete",
                     ),
                     Confirm::CloseCompare => {
                         let refs = self.compare.as_ref().map(|c| c.refs()).unwrap_or_default();
-                        format!(
-                            "Close the comparison {refs}?\ntab goes to Repo and keeps it.\n\nenter = close · esc = cancel"
-                        )
+                        let body = vec![
+                            Line::from(vec![
+                                Span::raw("Close the comparison "),
+                                Span::styled(refs, bold),
+                                Span::raw("?"),
+                            ]),
+                            Line::from(vec![
+                                Span::styled("tab", Style::default().fg(ui::KEY)),
+                                Span::raw(" goes to Repo and keeps it."),
+                            ]),
+                        ];
+                        (" Close comparison ", body, "close")
                     }
                 };
+                let hints = ui::key_hints(&[("enter", action), ("esc", "cancel")], Some(action));
                 // The borders, plus a row in case a long path or ref wraps.
-                let height = text.lines().count() as u16 + 3;
-                render_popup(frame, area, " Confirm ", text, (56, height), Color::Yellow);
+                let height = body.len() as u16 + 3;
+                render_popup(frame, area, title, body, hints, (56, height), Color::Cyan);
             }
             Modal::ConfirmQuit => {
-                let text = "Quit gclic?\n\nenter = quit · esc = cancel".to_string();
-                render_popup(frame, area, " Quit ", text, (40, 5), Color::Yellow);
+                // Quitting loses whatever was open: the graph's branches, the
+                // comparison, expanded commits. gclic starts from scratch.
+                let hints = ui::key_hints(&[("enter", "quit"), ("esc", "cancel")], Some("quit"));
+                let body = vec![Line::raw("Quit gclic?")];
+                render_popup(frame, area, " Quit ", body, hints, (40, 4), Color::Cyan);
             }
             Modal::CommitBox => {
-                let text = format!("{}▏", self.commit_draft);
-                let title = " Commit message: ctrl-s commits, esc cancels ";
-                render_popup(frame, area, title, text, (72, 12), Color::Cyan);
+                let draft = format!("{}▏", self.commit_draft);
+                let body = draft.split('\n').map(|line| Line::raw(line.to_string())).collect();
+                let hints = ui::key_hints(&[("ctrl-s", "commit"), ("esc", "close, keeping it")], None);
+                render_popup(frame, area, " Commit message ", body, hints, (72, 12), Color::Cyan);
             }
             Modal::Error(error) => {
-                let height = (error.lines().count() as u16 + 4).min(20);
-                let title = " Git error: any key closes ";
-                render_popup(frame, area, title, error.clone(), (72, height), Color::Red);
+                let body: Vec<Line> = error.lines().map(|line| Line::raw(line.to_string())).collect();
+                let height = (body.len() as u16 + 3).min(20);
+                let hints = ui::key_hints(&[("any key", "closes")], None);
+                render_popup(frame, area, " Git error ", body, hints, (72, height), Color::Red);
             }
             Modal::Help(help) => help.render(frame, area),
         }
@@ -1183,24 +1213,33 @@ fn render_empty_compare(frame: &mut Frame, area: Rect, focused: bool) {
     frame.render_widget(block, area);
     let line = Line::from(vec![
         Span::raw("No comparison yet. "),
-        Span::styled("c", Style::default().fg(Color::Yellow)),
+        Span::styled("c", Style::default().fg(ui::KEY)),
         Span::raw(" starts one."),
     ]);
     frame.render_widget(line, inner);
 }
 
+/// A popup in the middle of the screen: its title says what it is, and its
+/// bottom border lists the keys, as `ui::key_hints` makes them. It's wide
+/// enough for those keys, even if `width` is less. The border is cyan, so the
+/// keys' yellow and a dangerous action's red stand out from it, except for an
+/// error's, which is red.
 fn render_popup(
     frame: &mut Frame,
     area: Rect,
     title: &str,
-    text: String,
+    body: Vec<Line<'static>>,
+    hints: Line<'static>,
     (width, height): (u16, u16),
     color: Color,
 ) {
+    let width = width.max(hints.width() as u16 + 4);
     let popup = ui::centered(area, width, height);
     frame.render_widget(Clear, popup);
-    let block = ui::panel(title.to_string(), true).border_style(Style::default().fg(color));
-    let paragraph = Paragraph::new(text).block(block).wrap(Wrap { trim: false });
+    let block = ui::panel(title.to_string(), true)
+        .border_style(Style::default().fg(color))
+        .title_bottom(hints);
+    let paragraph = Paragraph::new(body).block(block).wrap(Wrap { trim: false });
     frame.render_widget(paragraph, popup);
 }
 

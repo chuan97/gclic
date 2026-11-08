@@ -146,7 +146,7 @@ impl HelpPopup {
     /// A column of sections as lines, each as wide as `width`.
     fn column(&self, sections: &[Section], width: usize) -> Vec<Line<'static>> {
         let heading = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
-        let key = Style::default().fg(Color::Yellow);
+        let key = Style::default().fg(ui::KEY);
         let mut lines = Vec::new();
         for section in sections {
             if !lines.is_empty() {
@@ -208,14 +208,14 @@ impl HelpPopup {
         self.max_scroll = lines.len().saturating_sub(self.page);
         self.scroll = self.scroll.min(self.max_scroll);
         let closing = if self.max_scroll > 0 {
-            " j/k scroll · any other key closes "
+            ui::key_hints(&[("j/k", "scroll"), ("any other key", "closes")], None)
         } else {
-            " any key closes "
+            ui::key_hints(&[("any key", "closes")], None)
         };
 
         let popup = ui::centered(area, width, height);
         frame.render_widget(Clear, popup);
-        let block = ui::panel(" Help ".to_string(), true).title_bottom(Line::from(closing).right_aligned());
+        let block = ui::panel(" Help ".to_string(), true).title_bottom(closing);
         let inner = block.inner(popup);
         frame.render_widget(block, popup);
         ui::render_lines(frame, inner, lines.into_iter().skip(self.scroll).collect());
