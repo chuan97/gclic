@@ -99,12 +99,15 @@ pub fn centered(area: Rect, width: u16, height: u16) -> Rect {
     }
 }
 
+/// The colour of a file's status letter, as VS Code's Dark Modern theme
+/// colours files in its git panel. The letters stay git's own.
 pub fn status_color(status: char) -> Color {
     match status {
-        'A' | '?' => Color::Green,
-        'D' => Color::Red,
-        'U' => Color::Magenta,
-        _ => Color::Yellow,
+        'A' => Color::Rgb(0x81, 0xB8, 0x8B), // added
+        '?' => Color::Rgb(0x73, 0xC9, 0x91), // untracked
+        'D' => Color::Rgb(0xC7, 0x4E, 0x39), // deleted
+        'U' => Color::Rgb(0xE4, 0x67, 0x6B), // conflicted
+        _ => Color::Rgb(0xE2, 0xC0, 0x8D),   // modified, and anything else
     }
 }
 
