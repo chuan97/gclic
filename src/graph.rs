@@ -365,6 +365,11 @@ impl GraphPanel {
         self.selected_file.is_some()
     }
 
+    /// The commit under the cursor, or the one its file belongs to.
+    pub fn selected_sha(&self) -> Option<&str> {
+        self.commits.get(self.selected).map(|commit| commit.sha.as_str())
+    }
+
     pub fn is_selected_expanded(&self) -> bool {
         self.expanded_at(self.selected).is_some()
     }
@@ -451,7 +456,7 @@ impl GraphPanel {
             KeyCode::Char('y') => return Action::Copy(sha),
             KeyCode::Char('i') => {
                 return match git::commit_details(&sha) {
-                    Ok(details) => Action::ShowDetails(details),
+                    Ok(details) => Action::OpenDetails(details),
                     Err(error) => Action::Error(error.to_string()),
                 };
             }

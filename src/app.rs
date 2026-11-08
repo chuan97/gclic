@@ -3,7 +3,7 @@
 
 use crate::branches::BranchesPanel;
 use crate::compare::ComparePanel;
-use crate::details::DetailsPopup;
+use crate::details::DetailsPane;
 use crate::diff::DiffPane;
 use crate::git::{self, CommitDetails, DiffSource};
 use crate::graph::GraphPanel;
@@ -23,7 +23,7 @@ use std::time::{Duration, Instant};
 
 const AUTO_REFRESH: Duration = Duration::from_millis(500);
 const GLOBAL_HINTS: &str = "? help · q quit";
-/// The diff's share of the width, focused or not. Zooming gives it all of it.
+/// The preview's share of the width, focused or not. Zooming gives it all of it.
 const DIFF_PERCENT: u16 = 80;
 /// The most of the left column's height that Branches and Changes can take,
 /// as percentages, so that the graph always keeps a good part of it.
@@ -39,7 +39,7 @@ Anywhere
   o          open the file in Zed, at the diff's active line
   j/k g/G    move                  Enter  open
   Enter      on a file: show its diff, then again to move into it
-  Esc        leave the diff, then again to close it
+  Esc        leave the diff or details, then again to close them
 
 Branches
   Enter      check out             i   start typing to filter
@@ -54,7 +54,8 @@ Graph
   n/N        next/previous commit, skipping open commits' files
   b          choose which branches to show
   Esc        collapse              y   copy sha
-  i          commit details: j/k g/G scroll, y copy sha, i/Esc close
+  i          show the commit's details, then again to move into them.
+             They follow the selected commit, and its files keep them.
 
 Compare
   r          swap A and B, also from its diff
@@ -87,7 +88,9 @@ pub enum Action {
     OpenGraphPicker,
     CloseCompare,
     Copy(String),
-    ShowDetails(CommitDetails),
+    /// Show these commit details on the right. If they're already showing,
+    /// move into them.
+    OpenDetails(CommitDetails),
 }
 
 impl Action {
@@ -112,7 +115,8 @@ enum Focus {
     Changes,
     Graph,
     Compare,
-    Diff,
+    /// The diff or the commit details on the right.
+    Preview,
 }
 
 /// What the picker's result will be used for.
@@ -129,7 +133,6 @@ enum Modal {
     Confirm(Confirm),
     CommitBox,
     ConfirmQuit,
-    Details(DetailsPopup),
     Error(String),
     Help,
 }
@@ -139,10 +142,14 @@ pub struct App {
     staging: StagingPanel,
     graph: GraphPanel,
     compare: Option<ComparePanel>,
+    /// The right-hand side shows a diff or a commit's details, never both.
+    /// Each stays in its mode: moving onto a commit leaves a diff alone, and
+    /// moving onto a file leaves the details alone.
     diff: Option<DiffPane>,
+    details: Option<DetailsPane>,
     zoomed: bool,
     focus: Focus,
-    /// The left-hand panel to return to when leaving the diff.
+    /// The left-hand panel to return to when leaving the preview.
     last_left_focus: Focus,
     modal: Modal,
     commit_draft: String,
@@ -165,6 +172,7 @@ impl App {
             graph: GraphPanel::new(),
             compare: None,
             diff: None,
+            details: None,
             zoomed: false,
             focus: Focus::Changes,
             last_left_focus: Focus::Changes,
@@ -212,6 +220,7 @@ impl App {
         self.report(result);
         self.refs_fingerprint = git::refs_fingerprint();
         self.sync_diff();
+        self.sync_details();
         self.last_refresh = Instant::now();
     }
 
@@ -258,6 +267,33 @@ impl App {
         }
     }
 
+    /// Keeps the details on the graph's selected commit, or the commit that
+    /// the selected file belongs to.
+    fn sync_details(&mut self) {
+        let Some(details) = &self.details else {
+            return;
+        };
+        let Some(sha) = self.graph.selected_sha() else {
+            self.details = None;
+            return;
+        };
+        if details.sha() != sha {
+            match git::commit_details(sha) {
+                Ok(details) => self.details = Some(DetailsPane::new(details)),
+                Err(error) => self.message = error.to_string(),
+            }
+        }
+    }
+
+    fn has_preview(&self) -> bool {
+        self.diff.is_some() || self.details.is_some()
+    }
+
+    fn close_preview(&mut self) {
+        self.diff = None;
+        self.details = None;
+    }
+
     /// Scroll is kept when the diff is the same one, reloaded.
     fn show_diff(&mut self, source: DiffSource) {
         if let Some(diff) = &mut self.diff
@@ -267,7 +303,10 @@ impl App {
                 return;
             }
         match DiffPane::load(source) {
-            Ok(diff) => self.diff = Some(diff),
+            Ok(diff) => {
+                self.diff = Some(diff);
+                self.details = None;
+            }
             Err(error) => self.modal = Modal::Error(error.to_string()),
         }
     }
@@ -295,7 +334,6 @@ impl App {
                 KeyCode::Esc => {}
                 _ => self.modal = Modal::ConfirmQuit,
             },
-            Modal::Details(popup) => self.handle_details_key(popup, key),
             // Any key dismisses these.
             Modal::Error(_) | Modal::Help => {}
         }
@@ -310,17 +348,17 @@ impl App {
                 self.send_to_focused_panel(key);
             }
             KeyCode::Char('q') => self.modal = Modal::ConfirmQuit,
-            // Inside the diff, h and l scroll it sideways.
-            KeyCode::Char('h') if self.focus != Focus::Diff => self.move_focus(false),
-            KeyCode::Char('l') if self.focus != Focus::Diff => self.move_focus(true),
+            // Inside the preview, h and l are its own: a diff scrolls sideways.
+            KeyCode::Char('h') if self.focus != Focus::Preview => self.move_focus(false),
+            KeyCode::Char('l') if self.focus != Focus::Preview => self.move_focus(true),
             KeyCode::Char('?') => self.modal = Modal::Help,
             KeyCode::Char('o') => self.open_in_editor(),
             KeyCode::Char('r') if self.compare.is_some() => self.swap_compare(),
             KeyCode::Char('C') => self.open_compare_picker(),
-            KeyCode::Char('z') if self.diff.is_some() => {
+            KeyCode::Char('z') if self.has_preview() => {
                 self.zoomed = !self.zoomed;
                 if self.zoomed {
-                    self.focus_diff();
+                    self.focus_preview();
                 }
             }
             KeyCode::Esc => self.handle_escape(),
@@ -330,14 +368,14 @@ impl App {
 
     fn handle_escape(&mut self) {
         match self.focus {
-            Focus::Diff => {
+            Focus::Preview => {
                 self.zoomed = false;
                 self.focus = self.last_left_focus;
                 if let Some(diff) = &mut self.diff {
                     diff.reset_shift();
                 }
             }
-            _ if self.diff.is_some() => self.diff = None,
+            _ if self.has_preview() => self.close_preview(),
             _ => self.send_to_focused_panel(KeyEvent::from(KeyCode::Esc)),
         }
     }
@@ -351,14 +389,26 @@ impl App {
                 Some(compare) => compare.handle_key(key),
                 None => Action::None,
             },
-            Focus::Diff => {
+            Focus::Preview => {
                 if let Some(diff) = &mut self.diff {
                     diff.handle_key(key);
+                    Action::None
+                } else if let Some(details) = &mut self.details {
+                    if key.code == KeyCode::Char('y') {
+                        Action::Copy(details.sha().to_string())
+                    } else {
+                        details.handle_key(key);
+                        Action::None
+                    }
+                } else {
+                    Action::None
                 }
-                Action::None
             }
         };
         self.apply(action);
+        if self.focus == Focus::Graph {
+            self.sync_details();
+        }
     }
 
     fn apply(&mut self, action: Action) {
@@ -366,7 +416,7 @@ impl App {
             Action::None => {}
             Action::OpenDiff(source) => {
                 if self.diff.as_ref().is_some_and(|diff| diff.source == source) {
-                    self.focus_diff();
+                    self.focus_preview();
                 } else {
                     self.show_diff(source);
                 }
@@ -382,7 +432,14 @@ impl App {
             Action::Confirm(confirm) => self.modal = Modal::Confirm(confirm),
             Action::OpenCommitBox => self.modal = Modal::CommitBox,
             Action::OpenGraphPicker => self.open_graph_picker(),
-            Action::ShowDetails(details) => self.modal = Modal::Details(DetailsPopup::new(details)),
+            Action::OpenDetails(details) => {
+                if self.details.as_ref().is_some_and(|shown| shown.sha() == details.sha) {
+                    self.focus_preview();
+                } else {
+                    self.details = Some(DetailsPane::new(details));
+                    self.diff = None;
+                }
+            }
             Action::CloseCompare => {
                 self.compare = None;
                 self.focus_left(Focus::Changes);
@@ -406,8 +463,8 @@ impl App {
         }
     }
 
-    /// Steps along the left-hand panes, wrapping around at the ends. The diff
-    /// isn't one of them: Enter goes into it and Esc comes back.
+    /// Steps along the left-hand panes, wrapping around at the ends. The preview
+    /// isn't one of them: Enter or i goes into it and Esc comes back.
     fn move_focus(&mut self, forward: bool) {
         let order = if self.compare.is_some() {
             vec![Focus::Compare]
@@ -425,10 +482,10 @@ impl App {
         }
     }
 
-    fn focus_diff(&mut self) {
-        if self.focus != Focus::Diff {
+    fn focus_preview(&mut self) {
+        if self.focus != Focus::Preview {
             self.last_left_focus = self.focus;
-            self.focus = Focus::Diff;
+            self.focus = Focus::Preview;
         }
     }
 
@@ -488,21 +545,6 @@ impl App {
         self.modal = Modal::CommitBox;
     }
 
-    fn handle_details_key(&mut self, mut popup: DetailsPopup, key: KeyEvent) {
-        match key.code {
-            KeyCode::Esc | KeyCode::Char('i') => {}
-            KeyCode::Char('y') => {
-                let sha = popup.sha().to_string();
-                self.modal = Modal::Details(popup);
-                self.apply(Action::Copy(sha));
-            }
-            _ => {
-                popup.handle_key(key);
-                self.modal = Modal::Details(popup);
-            }
-        }
-    }
-
     fn handle_picker_key(&mut self, mut picker: Picker, usage: PickerUse, key: KeyEvent) {
         // `p` pastes a ref, so a sha yanked in the graph is two keys from comparing.
         let paste = key.code == KeyCode::Char('p') && key.modifiers == KeyModifiers::NONE;
@@ -559,7 +601,7 @@ impl App {
                 match ComparePanel::new(a, git::display_ref(&first)) {
                     Ok(compare) => {
                         self.compare = Some(compare);
-                        self.diff = None;
+                        self.close_preview();
                         self.focus_left(Focus::Compare);
                     }
                     Err(error) => self.modal = Modal::Error(error.to_string()),
@@ -597,9 +639,9 @@ impl App {
         let [main, status] =
             Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(frame.area());
 
-        match (self.diff.is_some(), self.zoomed) {
+        match (self.has_preview(), self.zoomed) {
             (false, _) => self.render_left(frame, main),
-            (true, true) => self.render_diff(frame, main),
+            (true, true) => self.render_preview(frame, main),
             (true, false) => {
                 let [left, right] = Layout::horizontal([
                     Constraint::Percentage(100 - DIFF_PERCENT),
@@ -607,7 +649,7 @@ impl App {
                 ])
                 .areas(main);
                 self.render_left(frame, left);
-                self.render_diff(frame, right);
+                self.render_preview(frame, right);
             }
         }
         self.render_status_line(frame, status);
@@ -657,10 +699,12 @@ impl App {
         }
     }
 
-    fn render_diff(&mut self, frame: &mut Frame, area: Rect) {
-        let focused = self.focus == Focus::Diff;
+    fn render_preview(&mut self, frame: &mut Frame, area: Rect) {
+        let focused = self.focus == Focus::Preview;
         if let Some(diff) = &mut self.diff {
             diff.render(frame, area, focused);
+        } else if let Some(details) = &mut self.details {
+            details.render(frame, area, focused);
         }
     }
 
@@ -728,13 +772,13 @@ impl App {
             Focus::Graph if self.graph.is_on_file() => {
                 hints.extend(self.enter_diff_hint(self.graph.selected_file_source()));
                 hints.push("n/N commit");
-                hints.extend(["i details", "y copy sha"]);
+                hints.extend([self.details_hint(), "y copy sha"]);
                 esc = Some("esc collapse");
             }
             Focus::Graph => {
                 let expanded = self.graph.is_selected_expanded();
                 hints.push(if expanded { "enter collapse" } else { "enter expand" });
-                hints.extend(["i details", "y copy sha", "b choose branches"]);
+                hints.extend([self.details_hint(), "y copy sha", "b choose branches"]);
                 // Only worth it when open commits' files are in the way.
                 if self.graph.has_expanded() {
                     hints.push("n/N commit");
@@ -751,8 +795,12 @@ impl App {
                 hints.push("r swap A and B");
                 esc = Some("esc close compare");
             }
-            Focus::Diff => {
-                hints.extend(["j/k move", "h/l sideways", "ctrl-d/u page", "n/N hunk"]);
+            Focus::Preview => {
+                if self.diff.is_some() {
+                    hints.extend(["j/k move", "h/l sideways", "ctrl-d/u page", "n/N hunk"]);
+                } else {
+                    hints.extend(["j/k scroll", "ctrl-d/u page", "y copy sha"]);
+                }
                 hints.push(if self.zoomed { "z unzoom" } else { "z zoom" });
                 esc = Some("esc back");
             }
@@ -760,8 +808,12 @@ impl App {
         if self.focused_file().is_some() {
             hints.push("o open in zed");
         }
-        if self.diff.is_some() && self.focus != Focus::Diff {
-            esc = Some("esc close diff");
+        if self.focus != Focus::Preview {
+            if self.diff.is_some() {
+                esc = Some("esc close diff");
+            } else if self.details.is_some() {
+                esc = Some("esc close details");
+            }
         }
         hints.extend(esc);
         hints.join(" · ")
@@ -775,7 +827,17 @@ impl App {
             Focus::Changes => self.staging.selected_source(),
             Focus::Graph => self.graph.selected_file_source(),
             Focus::Compare => self.compare.as_ref().and_then(|compare| compare.selected_source()),
-            Focus::Diff => self.diff.as_ref().map(|diff| diff.source.clone()),
+            Focus::Preview => self.diff.as_ref().map(|diff| diff.source.clone()),
+        }
+    }
+
+    /// i shows the selected commit's details, or moves into them if they show.
+    fn details_hint(&self) -> &'static str {
+        let showing = self.details.as_ref().map(|details| details.sha());
+        if showing.is_some() && showing == self.graph.selected_sha() {
+            "i focus details"
+        } else {
+            "i details"
         }
     }
 
@@ -828,7 +890,6 @@ impl App {
         match &mut self.modal {
             Modal::None => {}
             Modal::Picker(picker, _) => picker.render(frame, area),
-            Modal::Details(popup) => popup.render(frame, area),
             Modal::Confirm(confirm) => {
                 let text = match confirm {
                     Confirm::Restore(path) => {

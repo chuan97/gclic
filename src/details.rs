@@ -1,4 +1,4 @@
-//! The popup showing a commit's message and metadata.
+//! A commit's message and metadata, shown on the right like a diff.
 
 use crate::git::CommitDetails;
 use crate::ui;
@@ -7,11 +7,9 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Clear, Paragraph, Wrap};
+use ratatui::widgets::{Paragraph, Wrap};
 
-const WIDTH: u16 = 80;
-
-pub struct DetailsPopup {
+pub struct DetailsPane {
     details: CommitDetails,
     scroll: usize,
     /// Rows of text on screen, known once drawn.
@@ -20,9 +18,9 @@ pub struct DetailsPopup {
     max_scroll: usize,
 }
 
-impl DetailsPopup {
-    pub fn new(details: CommitDetails) -> DetailsPopup {
-        DetailsPopup { details, scroll: 0, page: 0, max_scroll: 0 }
+impl DetailsPane {
+    pub fn new(details: CommitDetails) -> DetailsPane {
+        DetailsPane { details, scroll: 0, page: 0, max_scroll: 0 }
     }
 
     pub fn sha(&self) -> &str {
@@ -61,14 +59,11 @@ impl DetailsPopup {
         lines
     }
 
-    pub fn render(&mut self, frame: &mut Frame, area: Rect) {
-        let width = WIDTH.min(area.width.saturating_sub(4));
+    pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
         let paragraph = Paragraph::new(self.lines()).wrap(Wrap { trim: false });
-        let total = paragraph.line_count(width.saturating_sub(2));
-
-        // As tall as the text needs, up to nearly the whole screen.
-        let height = (total + 2).min(area.height.saturating_sub(2) as usize);
-        let page = height.saturating_sub(2);
+        // Borders take a row or column on each side.
+        let total = paragraph.line_count(area.width.saturating_sub(2));
+        let page = area.height.saturating_sub(2) as usize;
         let max_scroll = total.saturating_sub(page);
         let scroll = self.scroll.min(max_scroll);
 
@@ -78,12 +73,8 @@ impl DetailsPopup {
         } else {
             String::new()
         };
-        let block = ui::panel(format!(" Commit {short_sha}{position} "), true)
-            .title_bottom(" j/k scroll · y copy sha · esc close ");
-
-        let popup = ui::centered(area, width, height as u16);
-        frame.render_widget(Clear, popup);
-        frame.render_widget(paragraph.block(block).scroll((scroll as u16, 0)), popup);
+        let block = ui::panel(format!(" Commit {short_sha}{position} "), focused);
+        frame.render_widget(paragraph.block(block).scroll((scroll as u16, 0)), area);
 
         self.page = page;
         self.max_scroll = max_scroll;
@@ -97,8 +88,8 @@ mod tests {
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
-    fn popup(message: &str) -> DetailsPopup {
-        DetailsPopup::new(CommitDetails {
+    fn popup(message: &str) -> DetailsPane {
+        DetailsPane::new(CommitDetails {
             sha: "abc1234def".to_string(),
             author: "Ann".to_string(),
             date: "today".to_string(),
@@ -106,18 +97,18 @@ mod tests {
         })
     }
 
-    fn draw(popup: &mut DetailsPopup, width: u16, height: u16) {
+    fn draw(popup: &mut DetailsPane, width: u16, height: u16) {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-        terminal.draw(|frame| popup.render(frame, frame.area())).unwrap();
+        terminal.draw(|frame| popup.render(frame, frame.area(), true)).unwrap();
     }
 
-    fn press(popup: &mut DetailsPopup, ch: char) {
+    fn press(popup: &mut DetailsPane, ch: char) {
         popup.handle_key(KeyEvent::from(KeyCode::Char(ch)));
     }
 
     #[test]
     fn scrolling_stops_at_both_ends() {
-        // 4 lines of header plus 50 of message, in 10 rows of text.
+        // 4 lines of header plus 50 of message, in 12 rows of text.
         let mut popup = popup(&vec!["line"; 50].join("\n"));
         draw(&mut popup, 100, 14);
         press(&mut popup, 'k');
@@ -127,12 +118,12 @@ mod tests {
         draw(&mut popup, 100, 14);
         press(&mut popup, 'j');
         draw(&mut popup, 100, 14);
-        assert_eq!(popup.scroll, 54 - 10);
+        assert_eq!(popup.scroll, 54 - 12);
     }
 
     #[test]
     fn wrapped_lines_count_towards_the_end() {
-        // A 42-column screen leaves 36 for text, so this one line takes many rows.
+        // A 42-column pane leaves 40 for text, so this one line takes many rows.
         let mut popup = popup(&"word ".repeat(150));
         draw(&mut popup, 42, 14);
         press(&mut popup, 'G');
