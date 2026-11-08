@@ -183,11 +183,17 @@ impl App {
     pub fn run(mut self, terminal: &mut DefaultTerminal) -> Result<()> {
         while !self.should_quit {
             terminal.draw(|frame| self.render(frame))?;
-            if event::poll(Duration::from_millis(100))?
-                && let Event::Key(key) = event::read()?
-                    && key.kind == KeyEventKind::Press {
-                        self.handle_key(key);
-                    }
+            if event::poll(Duration::from_millis(100))? {
+                if let Event::Key(key) = event::read()?
+                    && key.kind == KeyEventKind::Press
+                {
+                    self.handle_key(key);
+                }
+            } else if let Some(diff) = &mut self.diff {
+                // No key for a moment, so the user has stopped moving: time to
+                // colour the diff they landed on. Held keys repeat faster.
+                diff.finish_highlighting();
+            }
             // Waits while a popup is open: it would only redraw what's behind it.
             let idle = matches!(self.modal, Modal::None);
             if idle && self.last_refresh.elapsed() >= AUTO_REFRESH {

@@ -1,6 +1,7 @@
 //! The side-by-side diff pane, used by every feature.
 
 use crate::git::{self, DiffSource};
+use crate::highlight::{self, ColoredLine};
 use crate::ui;
 use anyhow::Result;
 use ratatui::Frame;
@@ -10,10 +11,12 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use std::ops::Range;
 
-const REMOVED_BG: Color = Color::Indexed(52);
-const ADDED_BG: Color = Color::Indexed(22);
-const REMOVED_WORD_BG: Color = Color::Indexed(88);
-const ADDED_WORD_BG: Color = Color::Indexed(28);
+// Muted tints rather than pure red and green, so the syntax colours on top
+// stay readable. Changed words get a stronger tint of the same colour.
+const REMOVED_BG: Color = Color::Rgb(58, 30, 34);
+const ADDED_BG: Color = Color::Rgb(28, 52, 38);
+const REMOVED_WORD_BG: Color = Color::Rgb(112, 48, 54);
+const ADDED_WORD_BG: Color = Color::Rgb(46, 96, 62);
 const FILLER_BG: Color = Color::Indexed(235);
 /// A changed line sharing less than this with its partner is a rewrite, not an
 /// edit, and marking most of it would only add noise.
@@ -35,6 +38,8 @@ pub struct Cell {
     pub changed: bool,
     /// Byte ranges of `text` that differ from the line opposite.
     pub marks: Vec<Range<usize>>,
+    /// The syntax colour of each byte range of `text`. Empty if not known.
+    pub colors: Vec<(Range<usize>, Color)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -78,7 +83,13 @@ pub fn parse_diff(text: &str) -> Vec<Row> {
             // Context line. `\ No newline at end of file` is ignored.
             flush_change(&mut rows, &mut removed, &mut added);
             let content = clean(line.strip_prefix(' ').unwrap_or(line));
-            let context = |number, text| Cell { number, text, changed: false, marks: Vec::new() };
+            let context = |number, text| Cell {
+                number,
+                text,
+                changed: false,
+                marks: Vec::new(),
+                colors: Vec::new(),
+            };
             rows.push(Row::Lines {
                 left: Some(context(old_number, content.clone())),
                 right: Some(context(new_number, content)),
@@ -92,7 +103,51 @@ pub fn parse_diff(text: &str) -> Vec<Row> {
 }
 
 fn changed_cell(number: usize, content: &str) -> Cell {
-    Cell { number, text: clean(content), changed: true, marks: Vec::new() }
+    Cell { number, text: clean(content), changed: true, marks: Vec::new(), colors: Vec::new() }
+}
+
+/// Gives each line its syntax colours. They come from the whole old and new
+/// files, as a hunk on its own can start inside a comment or a string.
+fn highlight_rows(rows: &mut [Row], source: &DiffSource) {
+    let last_line = |side: fn(&Row) -> Option<&Cell>| {
+        rows.iter().filter_map(side).map(|cell| cell.number).max().unwrap_or(0)
+    };
+    let last_old = last_line(|row| match row {
+        Row::Lines { left, .. } => left.as_ref(),
+        Row::Heading(_) => None,
+    });
+    let last_new = last_line(|row| match row {
+        Row::Lines { right, .. } => right.as_ref(),
+        Row::Heading(_) => None,
+    });
+    if last_old == 0 && last_new == 0 {
+        return; // Nothing to colour, as in a binary file's diff.
+    }
+    let (old, new) = git::file_versions(source);
+    let colored = |text: Option<String>, last: usize| {
+        text.map(|text| highlight::highlight(source.path(), &text, last)).unwrap_or_default()
+    };
+    let (old, new) = (colored(old, last_old), colored(new, last_new));
+    for row in rows {
+        if let Row::Lines { left, right } = row {
+            color_cell(left.as_mut(), &old);
+            color_cell(right.as_mut(), &new);
+        }
+    }
+}
+
+/// Only takes the colours when the file's line is the one in the diff, in case
+/// the two don't match, say because the file changed between reading them.
+fn color_cell(cell: Option<&mut Cell>, lines: &[ColoredLine]) {
+    let Some(cell) = cell else {
+        return;
+    };
+    let line = cell.number.checked_sub(1).and_then(|index| lines.get(index));
+    if let Some(line) = line
+        && line.text == cell.text
+    {
+        cell.colors = line.colors.clone();
+    }
 }
 
 /// Lines up held-back lines, pairing each removed line with the added line it
@@ -307,6 +362,8 @@ fn clean(text: &str) -> String {
 
 pub struct DiffPane {
     pub source: DiffSource,
+    /// The diff as git printed it, to tell whether a reload changed anything.
+    text: String,
     rows: Vec<Row>,
     /// The row under the cursor. The view keeps it in the middle, except near
     /// the ends, where it moves on without scrolling further.
@@ -316,6 +373,8 @@ pub struct DiffPane {
     shift: usize,
     /// Room for text on each side, past the line numbers.
     text_width: usize,
+    /// Whether the rows have their syntax colours yet. See `finish_highlighting`.
+    colored: bool,
 }
 
 /// The length, in characters, of the longest line on either side.
@@ -328,14 +387,44 @@ fn longest_line(rows: &[Row]) -> usize {
 }
 
 impl DiffPane {
+    /// Loads without syntax colours, which can take a moment for a big file.
+    /// That way moving through a list of files stays quick, and only the one
+    /// the user stops on gets coloured, by `finish_highlighting`.
     pub fn load(source: DiffSource) -> Result<DiffPane> {
-        let rows = parse_diff(&git::diff(&source)?);
-        Ok(DiffPane { source, rows, active: 0, height: 0, shift: 0, text_width: 0 })
+        let text = git::diff(&source)?;
+        let rows = parse_diff(&text);
+        Ok(DiffPane {
+            source,
+            text,
+            rows,
+            active: 0,
+            height: 0,
+            shift: 0,
+            text_width: 0,
+            colored: false,
+        })
+    }
+
+    /// Adds the syntax colours, if they're missing.
+    pub fn finish_highlighting(&mut self) {
+        if !self.colored {
+            highlight_rows(&mut self.rows, &self.source);
+            self.colored = true;
+        }
     }
 
     /// Fetches the diff again, for files that changed while it was on screen.
+    /// This runs every refresh, so the work only happens if the diff changed.
+    /// Colours come straight away, as an uncoloured flash would be distracting.
     pub fn reload(&mut self) -> Result<()> {
-        self.rows = parse_diff(&git::diff(&self.source)?);
+        let text = git::diff(&self.source)?;
+        if text == self.text {
+            return Ok(());
+        }
+        self.rows = parse_diff(&text);
+        highlight_rows(&mut self.rows, &self.source);
+        self.colored = true;
+        self.text = text;
         self.active = self.active.min(self.rows.len().saturating_sub(1));
         Ok(())
     }
@@ -482,22 +571,28 @@ fn side_line(
     let gutter = Span::styled(format!("{:>4} ", cell.number), gutter_style);
     let mut spans = vec![gutter];
 
-    // The text as plain and marked pieces, cut where the visible part starts.
+    // The visible text, cut wherever a syntax colour or a changed word starts
+    // or ends, so each piece has one text colour and one background.
     let text = &cell.text;
     let start = text.char_indices().nth(shift).map_or(text.len(), |(i, _)| i);
-    let mut pieces = Vec::new();
-    let mut position = 0;
-    for mark in &cell.marks {
-        pieces.push((position..mark.start, Style::default()));
-        pieces.push((mark.clone(), Style::default().bg(word_bg)));
-        position = mark.end;
-    }
-    pieces.push((position..text.len(), Style::default()));
-    for (range, style) in pieces {
-        let visible = range.start.max(start)..range.end;
-        if !visible.is_empty() {
-            spans.push(Span::styled(&text[visible], style));
+    let mut cuts = vec![start, text.len()];
+    let edges = cell.marks.iter().chain(cell.colors.iter().map(|(range, _)| range));
+    cuts.extend(edges.flat_map(|range| [range.start, range.end]).filter(|&cut| cut > start));
+    cuts.sort_unstable();
+    cuts.dedup();
+    for piece in cuts.windows(2) {
+        let (from, to) = (piece[0], piece[1].min(text.len()));
+        if from >= to {
+            continue;
         }
+        let mut style = Style::default();
+        if let Some((_, color)) = cell.colors.iter().find(|(range, _)| range.contains(&from)) {
+            style = style.fg(*color);
+        }
+        if cell.marks.iter().any(|mark| mark.contains(&from)) {
+            style = style.bg(word_bg);
+        }
+        spans.push(Span::styled(&text[from..to], style));
     }
     let line = Line::from(spans);
     if cell.changed {
@@ -512,7 +607,7 @@ mod tests {
     use super::*;
 
     fn cell(number: usize, text: &str, changed: bool) -> Option<Cell> {
-        Some(Cell { number, text: text.to_string(), changed, marks: Vec::new() })
+        Some(Cell { number, text: text.to_string(), changed, marks: Vec::new(), colors: Vec::new() })
     }
 
     fn marked<'a>(text: &'a str, marks: &[Range<usize>]) -> Vec<&'a str> {
@@ -522,11 +617,13 @@ mod tests {
     fn pane_with_rows(count: usize, height: usize) -> DiffPane {
         DiffPane {
             source: DiffSource::Unstaged("f".to_string()),
+            text: String::new(),
             rows: vec![Row::Heading("x".to_string()); count],
             active: 0,
             height,
             shift: 0,
             text_width: 0,
+            colored: true,
         }
     }
 
@@ -536,7 +633,13 @@ mod tests {
 
     #[test]
     fn scrolling_sideways_keeps_the_line_number_and_the_marks() {
-        let cell = Cell { number: 7, text: "héllo wörld".to_string(), changed: true, marks: vec![7..13] };
+        let cell = Cell {
+            number: 7,
+            text: "héllo wörld".to_string(),
+            changed: true,
+            marks: vec![7..13],
+            colors: Vec::new(),
+        };
         let line = side_line(Some(&cell), 3, false, ADDED_BG, ADDED_WORD_BG);
         assert_eq!(text_of(&line), "   7 lo wörld");
         let marked = line.spans.iter().find(|span| span.style.bg == Some(ADDED_WORD_BG));
@@ -544,8 +647,45 @@ mod tests {
     }
 
     #[test]
+    fn syntax_colours_and_changed_words_combine() {
+        let (red, blue) = (Color::Rgb(255, 0, 0), Color::Rgb(0, 0, 255));
+        let cell = Cell {
+            number: 1,
+            text: "let x = 1;".to_string(),
+            changed: true,
+            marks: vec![8..9],
+            colors: vec![(0..3, red), (3..10, blue)],
+        };
+        let line = side_line(Some(&cell), 0, false, ADDED_BG, ADDED_WORD_BG);
+        let pieces: Vec<_> = line.spans[1..]
+            .iter()
+            .map(|span| (span.content.as_ref(), span.style.fg, span.style.bg))
+            .collect();
+        assert_eq!(
+            pieces,
+            [
+                ("let", Some(red), None),
+                (" x = ", Some(blue), None),
+                ("1", Some(blue), Some(ADDED_WORD_BG)),
+                (";", Some(blue), None),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_line_that_differs_from_the_file_gets_no_colours() {
+        let lines = [ColoredLine { text: "other".to_string(), colors: vec![(0..5, Color::Red)] }];
+        let mut cell = cell(1, "mine", false).unwrap();
+        color_cell(Some(&mut cell), &lines);
+        assert!(cell.colors.is_empty());
+        let mut cell = Cell { text: "other".to_string(), ..cell };
+        color_cell(Some(&mut cell), &lines);
+        assert_eq!(cell.colors.len(), 1);
+    }
+
+    #[test]
     fn scrolling_past_a_short_line_leaves_only_its_number() {
-        let cell = Cell { number: 1, text: "ab".to_string(), changed: false, marks: Vec::new() };
+        let cell = Cell { number: 1, text: "ab".to_string(), changed: false, marks: Vec::new(), colors: Vec::new() };
         assert_eq!(text_of(&side_line(Some(&cell), 10, false, ADDED_BG, ADDED_WORD_BG)), "   1 ");
     }
 

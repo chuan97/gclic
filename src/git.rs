@@ -201,6 +201,22 @@ pub fn diff(source: &DiffSource) -> Result<String> {
     }
 }
 
+/// The whole file on each side of a diff, old then new. None for a side where
+/// the file doesn't exist, or can't be read.
+pub fn file_versions(source: &DiffSource) -> (Option<String>, Option<String>) {
+    let show = |revision: &str, path: &str| run(&["show", &format!("{revision}:{path}")]).ok();
+    let on_disk = |path: &str| std::fs::read(path).ok().map(|bytes| String::from_utf8_lossy(&bytes).into_owned());
+    match source {
+        // `:path` is the file as staged in the index.
+        DiffSource::Unstaged(path) => (show("", path), on_disk(path)),
+        DiffSource::Staged(path) => (show("HEAD", path), show("", path)),
+        DiffSource::Untracked(path) => (None, on_disk(path)),
+        // The diff is against the first parent, which `^` names.
+        DiffSource::Commit { sha, path } => (show(&format!("{sha}^"), path), show(sha, path)),
+        DiffSource::Refs { a, b, path } => (show(a, path), show(b, path)),
+    }
+}
+
 /// Parses `--name-status -z` output: `M\0path\0A\0other\0`.
 fn parse_name_status(text: &str) -> Vec<FileEntry> {
     let mut files = Vec::new();
