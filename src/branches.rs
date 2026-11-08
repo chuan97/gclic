@@ -102,6 +102,11 @@ impl BranchesPanel {
         Ok(())
     }
 
+    /// Every branch, local and remote, as of the last refresh.
+    pub fn list(&self) -> &[Branch] {
+        &self.branches
+    }
+
     fn find(&self, name: &str) -> Option<&Branch> {
         self.branches.iter().find(|branch| branch.name == name)
     }

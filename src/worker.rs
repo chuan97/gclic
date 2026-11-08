@@ -124,15 +124,23 @@ fn work(shared: &Shared, sender: &Sender<Done>) {
 
 fn run(job: Job) -> Option<Done> {
     match job {
-        Job::Poll { generation, diff } => Some(Done::Poll {
-            generation,
-            fingerprint: git::refs_fingerprint(),
-            status: git::status(),
-            diff: diff.map(|source| {
-                let text = git::diff(&source);
-                (source, text)
-            }),
-        }),
+        // Three separate git calls, so they run at once.
+        Job::Poll { generation, diff } => Some(thread::scope(|scope| {
+            let fingerprint = scope.spawn(git::refs_fingerprint);
+            let diff = scope.spawn(|| {
+                diff.map(|source| {
+                    let text = git::diff(&source);
+                    (source, text)
+                })
+            });
+            let status = git::status();
+            Done::Poll {
+                generation,
+                fingerprint: fingerprint.join().unwrap_or_default(),
+                status,
+                diff: diff.join().unwrap_or(None),
+            }
+        })),
         Job::Highlight(source) => {
             // Without its diff there's nothing to colour, and the UI shows the
             // error when it loads the diff itself.

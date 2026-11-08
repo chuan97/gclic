@@ -3,7 +3,7 @@
 
 use crate::app::Action;
 use crate::file_list::file_line;
-use crate::git::{self, Commit, DiffSource, FileEntry};
+use crate::git::{self, Branch, Commit, DiffSource, FileEntry};
 use crate::ui;
 use anyhow::Result;
 use ratatui::Frame;
@@ -11,7 +11,8 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::thread;
 
 /// Also read by the app, which writes key marks right after it.
 pub const TITLE: &str = " Graph ";
@@ -353,12 +354,14 @@ impl GraphPanel {
         &self.custom_refs
     }
 
-    pub fn set_refs(&mut self, refs: Vec<String>) -> Result<()> {
+    pub fn set_refs(&mut self, refs: Vec<String>, branches: &[Branch]) -> Result<()> {
         self.custom_refs = refs;
         self.expanded.clear();
         self.selected = 0;
         self.selected_file = None;
-        self.refresh()
+        let result = self.refresh();
+        self.color_by(branches);
+        result
     }
 
     pub fn is_on_file(&self) -> bool {
@@ -394,38 +397,28 @@ impl GraphPanel {
         } else {
             self.custom_refs.clone()
         };
+        let shas = git::resolve_all(&refs);
         self.tips = refs
             .into_iter()
-            .filter_map(|name| {
-                let sha = git::resolve(&name)?;
-                Some(Tip { name, sha })
-            })
+            .zip(shas)
+            .filter_map(|(name, sha)| Some(Tip { name, sha: sha? }))
             .collect();
 
         let names: Vec<String> = self.tips.iter().map(|tip| tip.name.clone()).collect();
-        let branches = git::branches()?;
-        let color_keys: Vec<String> = names
-            .iter()
-            .map(|name| {
-                let branch = branches.iter().find(|branch| branch.name == *name);
-                branch.map_or(name.clone(), |branch| branch.local_name.clone())
-            })
-            .collect();
-        self.colors = ref_colors(&color_keys);
-        let shas: Vec<String> = self.tips.iter().map(|tip| tip.sha.clone()).collect();
-        self.commits = if names.is_empty() {
-            Vec::new()
+        let (commits, unpushed) = if names.is_empty() {
+            (Vec::new(), HashSet::new())
         } else {
-            git::log(&names, COMMIT_LIMIT)?
+            // Two separate git calls, so they run at once.
+            thread::scope(|scope| {
+                let unpushed = scope.spawn(|| git::unpushed(&names));
+                let commits = git::log(&names, COMMIT_LIMIT);
+                let unpushed = unpushed.join().unwrap_or_else(|_| Err(anyhow::anyhow!("git crashed")));
+                Ok::<_, anyhow::Error>((commits?, unpushed?))
+            })?
         };
+        self.commits = commits;
         self.rows = layout(&self.commits);
-        self.commit_colors = commit_colors(&reach_masks(&self.commits, &shas), &self.colors);
-        self.unpushed = if names.is_empty() {
-            Vec::new()
-        } else {
-            let unpushed = git::unpushed(&names)?;
-            self.commits.iter().map(|commit| unpushed.contains(&commit.sha)).collect()
-        };
+        self.unpushed = self.commits.iter().map(|commit| unpushed.contains(&commit.sha)).collect();
 
         let commits = &self.commits;
         self.expanded
@@ -442,6 +435,23 @@ impl GraphPanel {
             self.selected_file = None;
         }
         Ok(())
+    }
+
+    /// Colours the refs and commits, which needs the list of branches: a
+    /// branch and its remotes share a colour. Kept apart from `refresh` so the
+    /// list is fetched once, by the Branches pane, while the graph loads.
+    pub fn color_by(&mut self, branches: &[Branch]) {
+        let color_keys: Vec<String> = self
+            .tips
+            .iter()
+            .map(|tip| {
+                let branch = branches.iter().find(|branch| branch.name == tip.name);
+                branch.map_or(tip.name.clone(), |branch| branch.local_name.clone())
+            })
+            .collect();
+        self.colors = ref_colors(&color_keys);
+        let shas: Vec<String> = self.tips.iter().map(|tip| tip.sha.clone()).collect();
+        self.commit_colors = commit_colors(&reach_masks(&self.commits, &shas), &self.colors);
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Action {
@@ -677,7 +687,8 @@ impl GraphPanel {
     }
 
     fn glyph_span(&self, glyph: &Glyph) -> Span<'static> {
-        let color = glyph.commit.map_or(PALETTE[0], |i| self.commit_colors[i]);
+        let color = glyph.commit.and_then(|i| self.commit_colors.get(i).copied());
+        let color = color.unwrap_or(PALETTE[0]);
         let unpushed = glyph.commit.is_some_and(|i| self.unpushed[i]);
         let ch = if is_bead(glyph.ch) && unpushed { hollow(glyph.ch) } else { glyph.ch };
         Span::styled(ch.to_string(), Style::default().fg(color))

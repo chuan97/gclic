@@ -3,7 +3,10 @@
 
 use anyhow::{Result, anyhow, bail};
 use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::OnceLock;
+use std::thread;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileEntry {
@@ -203,17 +206,42 @@ pub fn diff(source: &DiffSource) -> Result<String> {
 
 /// The whole file on each side of a diff, old then new. None for a side where
 /// the file doesn't exist, or can't be read.
+/// Both versions are read at once, as each is a git call of its own.
 pub fn file_versions(source: &DiffSource) -> (Option<String>, Option<String>) {
-    let show = |revision: &str, path: &str| run(&["show", &format!("{revision}:{path}")]).ok();
-    let on_disk = |path: &str| std::fs::read(path).ok().map(|bytes| String::from_utf8_lossy(&bytes).into_owned());
-    match source {
-        // `:path` is the file as staged in the index.
-        DiffSource::Unstaged(path) => (show("", path), on_disk(path)),
-        DiffSource::Staged(path) => (show("HEAD", path), show("", path)),
-        DiffSource::Untracked(path) => (None, on_disk(path)),
+    let path = source.path();
+    let (old, new) = match source {
+        // An empty revision makes `:path`, the file as staged in the index.
+        DiffSource::Unstaged(_) => (Version::At(String::new()), Version::OnDisk),
+        DiffSource::Staged(_) => (Version::At("HEAD".to_string()), Version::At(String::new())),
+        DiffSource::Untracked(_) => (Version::Missing, Version::OnDisk),
         // The diff is against the first parent, which `^` names.
-        DiffSource::Commit { sha, path } => (show(&format!("{sha}^"), path), show(sha, path)),
-        DiffSource::Refs { a, b, path } => (show(a, path), show(b, path)),
+        DiffSource::Commit { sha, .. } => (Version::At(format!("{sha}^")), Version::At(sha.clone())),
+        DiffSource::Refs { a, b, .. } => (Version::At(a.clone()), Version::At(b.clone())),
+    };
+    thread::scope(|scope| {
+        let old = scope.spawn(|| old.read(path));
+        let new = new.read(path);
+        (old.join().unwrap_or(None), new)
+    })
+}
+
+/// Where to read one side of a diff from.
+enum Version {
+    At(String),
+    OnDisk,
+    Missing,
+}
+
+impl Version {
+    fn read(&self, path: &str) -> Option<String> {
+        match self {
+            Version::At(revision) => run(&["show", &format!("{revision}:{path}")]).ok(),
+            Version::OnDisk => {
+                let bytes = std::fs::read(path).ok()?;
+                Some(String::from_utf8_lossy(&bytes).into_owned())
+            }
+            Version::Missing => None,
+        }
     }
 }
 
@@ -231,10 +259,6 @@ fn parse_name_status(text: &str) -> Vec<FileEntry> {
 }
 
 // ------------------------------------------------------------------ graph
-
-fn has_commits() -> bool {
-    try_run(&["rev-parse", "--verify", "-q", "HEAD"]).is_some()
-}
 
 /// Commits reachable from `refs`, newest first. `--topo-order` guarantees that
 /// children come before their parents, which the graph layout relies on.
@@ -269,32 +293,63 @@ pub fn unpushed(refs: &[String]) -> Result<HashSet<String>> {
 }
 
 /// Changes whenever a ref or HEAD moves, for spotting commits, checkouts and
-/// fetches made outside the app without reloading the whole graph.
+/// fetches made outside the app without reloading the whole graph. HEAD names
+/// the checked-out branch, whose commit is among the refs, or a commit itself.
 pub fn refs_fingerprint() -> String {
     let refs = try_run(&["for-each-ref", "--format=%(objectname) %(refname)"]);
-    let head = try_run(&["rev-parse", "HEAD", "--symbolic-full-name", "HEAD"]);
-    format!("{}\n{}", refs.unwrap_or_default(), head.unwrap_or_default())
+    format!("{}\n{}", refs.unwrap_or_default(), read_head().unwrap_or_default())
+}
+
+/// The repo's git directory, asked for once. Some questions are answered by
+/// reading its files, which is much quicker than starting git.
+fn git_dir() -> Option<&'static Path> {
+    static GIT_DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
+    GIT_DIR
+        .get_or_init(|| try_run(&["rev-parse", "--absolute-git-dir"]).map(PathBuf::from))
+        .as_deref()
+}
+
+/// What HEAD holds: `ref: refs/heads/main`, or a commit's sha when detached.
+fn read_head() -> Option<String> {
+    let head = std::fs::read_to_string(git_dir()?.join("HEAD")).ok()?;
+    Some(head.trim().to_string())
 }
 
 /// The checked-out branch. None on a detached HEAD.
 pub fn current_branch() -> Option<String> {
-    try_run(&["symbolic-ref", "--short", "-q", "HEAD"])
+    read_head()?.strip_prefix("ref: refs/heads/").map(str::to_string)
 }
 
-/// The default graph view: the current branch and its remote counterpart.
+/// The default graph view: the current branch and its remote counterpart,
+/// which is its upstream or else origin's branch of the same name. Refs that
+/// don't exist, like that one or a branch with no commits yet, are dropped
+/// later, when `resolve_all` finds nothing for them.
 pub fn default_refs() -> Vec<String> {
-    if !has_commits() {
-        return Vec::new();
-    }
     let Some(branch) = current_branch() else {
         return vec!["HEAD".to_string()]; // detached HEAD
     };
     let upstream = try_run(&["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
-    let origin = format!("origin/{branch}");
-    let remote = upstream.or_else(|| resolve(&origin).map(|_| origin));
-    let mut refs = vec![branch];
-    refs.extend(remote);
-    refs
+    let remote = upstream.unwrap_or_else(|| format!("origin/{branch}"));
+    vec![branch, remote]
+}
+
+/// The commit each ref points at, in the same order, with None for those that
+/// don't exist. One git call does them all, unless one of them doesn't exist,
+/// which fails it: then they're asked for one by one.
+pub fn resolve_all(refs: &[String]) -> Vec<Option<String>> {
+    // A ref starting with a dash would be read as a flag.
+    if !refs.is_empty() && refs.iter().all(|reference| !reference.starts_with('-')) {
+        let commits: Vec<String> = refs.iter().map(|r| format!("{r}^{{commit}}")).collect();
+        let mut args = vec!["rev-parse"];
+        args.extend(commits.iter().map(String::as_str));
+        if let Ok(text) = run(&args) {
+            let shas: Vec<Option<String>> = text.lines().map(|sha| Some(sha.to_string())).collect();
+            if shas.len() == refs.len() {
+                return shas;
+            }
+        }
+    }
+    refs.iter().map(|reference| resolve(reference)).collect()
 }
 
 /// The commit sha a ref points at, if it exists.
@@ -487,5 +542,38 @@ mod tests {
         assert_eq!(branches[0].upstream.as_deref(), Some("origin/main"));
         assert!(!branches[0].is_remote);
         assert!(branches[1].is_remote);
+    }
+
+    // These run against gclic's own repo, comparing the quick answers with
+    // what git itself says.
+
+    #[test]
+    fn current_branch_agrees_with_git() {
+        let from_git = try_run(&["symbolic-ref", "--short", "-q", "HEAD"]);
+        assert_eq!(current_branch(), from_git);
+    }
+
+    #[test]
+    fn resolving_several_refs_at_once_matches_one_at_a_time() {
+        let refs = ["HEAD".to_string(), "HEAD~1".to_string()];
+        let expected: Vec<_> = refs.iter().map(|r| resolve(r)).collect();
+        assert!(expected.iter().all(Option::is_some));
+        assert_eq!(resolve_all(&refs), expected);
+    }
+
+    #[test]
+    fn a_missing_ref_resolves_to_nothing_without_losing_the_others() {
+        let refs = ["HEAD".to_string(), "no-such-branch-here".to_string(), "-x".to_string()];
+        let shas = resolve_all(&refs);
+        assert_eq!(shas[0], resolve("HEAD"));
+        assert_eq!(shas[1..], [None, None]);
+    }
+
+    #[test]
+    fn both_versions_of_a_file_come_back() {
+        let source = DiffSource::Commit { sha: "HEAD".to_string(), path: "Cargo.toml".to_string() };
+        let (old, new) = file_versions(&source);
+        assert!(old.is_some_and(|text| text.contains("[package]")));
+        assert!(new.is_some_and(|text| text.contains("[package]")));
     }
 }

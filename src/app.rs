@@ -20,6 +20,7 @@ use ratatui::widgets::{Clear, Paragraph, Wrap};
 use ratatui::{DefaultTerminal, Frame};
 use std::io::Write;
 use std::process::{Child, Command, Stdio};
+use std::thread;
 use std::time::{Duration, Instant};
 
 const AUTO_REFRESH: Duration = Duration::from_millis(500);
@@ -230,21 +231,36 @@ impl App {
         self.generation += 1;
         let result = self.reload_panels();
         self.report(result);
-        self.refs_fingerprint = git::refs_fingerprint();
         self.sync_diff();
         self.sync_details();
         self.request_colors();
         self.last_refresh = Instant::now();
     }
 
+    /// The panes' refreshes don't depend on each other, so they run at once,
+    /// along with the refs fingerprint: each is a few git calls, and most of
+    /// their time is waiting for git. The graph's colours wait for the branch
+    /// list, which the Branches pane fetches.
     fn reload_panels(&mut self) -> Result<()> {
-        self.branches.refresh()?;
-        self.staging.refresh()?;
-        self.graph.refresh()?;
-        if let Some(compare) = &mut self.compare {
-            compare.refresh()?;
-        }
-        Ok(())
+        let App { branches, staging, graph, compare, .. } = self;
+        let (fingerprint, results) = thread::scope(|scope| {
+            let fingerprint = scope.spawn(git::refs_fingerprint);
+            let staged = scope.spawn(|| staging.refresh());
+            let graphed = scope.spawn(|| graph.refresh());
+            let compared = scope.spawn(|| compare.as_mut().map_or(Ok(()), |c| c.refresh()));
+            let listed = branches.refresh();
+            let crashed = || Err(anyhow::anyhow!("A refresh crashed"));
+            let results = [
+                listed,
+                staged.join().unwrap_or_else(|_| crashed()),
+                graphed.join().unwrap_or_else(|_| crashed()),
+                compared.join().unwrap_or_else(|_| crashed()),
+            ];
+            (fingerprint.join().unwrap_or_default(), results)
+        });
+        self.refs_fingerprint = fingerprint;
+        self.graph.color_by(self.branches.list());
+        results.into_iter().collect()
     }
 
     /// Picks up what happened outside the app, such as git commands in another
@@ -684,7 +700,7 @@ impl App {
         let first = first.unwrap_or_default().to_string();
         match usage {
             PickerUse::GraphBranches => {
-                let result = self.graph.set_refs(picked);
+                let result = self.graph.set_refs(picked, self.branches.list());
                 self.report(result);
             }
             PickerUse::CompareA => {
