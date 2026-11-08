@@ -264,6 +264,17 @@ impl BranchesPanel {
 
         let mark = if is_current { "* " } else { "  " };
         let mut spans = vec![Span::styled(format!("{mark}{name}"), style)];
+        // How it stands against its upstream, only when it's not in sync, so
+        // that unpushed work shows at a glance, even with the pane collapsed.
+        if let Some((ahead, behind)) = branch.and_then(|branch| branch.ahead_behind) {
+            if ahead > 0 {
+                spans.push(Span::styled(format!("  ↑{ahead}"), Style::default().fg(Color::Green)));
+            }
+            if behind > 0 {
+                let gap = if ahead > 0 { " " } else { "  " };
+                spans.push(Span::styled(format!("{gap}↓{behind}"), Style::default().fg(Color::Red)));
+            }
+        }
         let count = match branch {
             Some(local) if !local.is_remote => remotes_of(&self.branches, local).len(),
             _ => 0,
@@ -308,6 +319,7 @@ mod tests {
             local_name: name.to_string(),
             is_remote: false,
             upstream: upstream.map(str::to_string),
+            ahead_behind: upstream.map(|_| (0, 0)),
         }
     }
 
@@ -318,6 +330,25 @@ mod tests {
         panel.picker.select_item(highlighted);
         panel.current = Some(current.to_string());
         panel
+    }
+
+    fn line_text(panel: &BranchesPanel, name: &str) -> String {
+        let line = panel.branch_line(name, false);
+        line.spans.iter().map(|span| span.content.as_ref()).collect()
+    }
+
+    #[test]
+    fn a_branch_line_shows_how_it_stands_against_its_upstream() {
+        let mut panel = panel_on(&["main"], "main", "main");
+        panel.branches[0].ahead_behind = Some((2, 0));
+        assert_eq!(line_text(&panel, "main"), "* main  ↑2");
+        panel.branches[0].ahead_behind = Some((2, 1));
+        assert_eq!(line_text(&panel, "main"), "* main  ↑2 ↓1");
+        panel.branches[0].ahead_behind = Some((0, 3));
+        assert_eq!(line_text(&panel, "main"), "* main  ↓3");
+        // In sync, nothing is added.
+        panel.branches[0].ahead_behind = Some((0, 0));
+        assert_eq!(line_text(&panel, "main"), "* main");
     }
 
     #[test]
@@ -340,6 +371,7 @@ mod tests {
             local_name: name.split_once('/').unwrap().1.to_string(),
             is_remote: true,
             upstream: None,
+            ahead_behind: None,
         }
     }
 

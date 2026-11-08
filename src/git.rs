@@ -46,6 +46,9 @@ pub struct Branch {
     pub is_remote: bool,
     /// The remote branch this one tracks, for a local branch that has one.
     pub upstream: Option<String>,
+    /// How many commits it's ahead of and behind its upstream. None without
+    /// one, or if the upstream was deleted on the remote.
+    pub ahead_behind: Option<(usize, usize)>,
 }
 
 /// What a diff pane is showing. One variant per place a diff can come from.
@@ -412,7 +415,7 @@ pub fn commit_files(sha: &str) -> Result<Vec<FileEntry>> {
 pub fn branches() -> Result<Vec<Branch>> {
     let text = run(&[
         "for-each-ref",
-        "--format=%(refname)%00%(refname:short)%00%(refname:lstrip=3)%00%(upstream:short)",
+        "--format=%(refname)%00%(refname:short)%00%(refname:lstrip=3)%00%(upstream:short)%00%(upstream:track,nobracket)",
         "refs/heads",
         "refs/remotes",
     ])?;
@@ -423,7 +426,7 @@ fn parse_branches(text: &str) -> Vec<Branch> {
     let mut branches = Vec::new();
     for line in text.lines() {
         let fields: Vec<&str> = line.split('\0').collect();
-        let [full, short, without_remote, upstream] = fields[..] else { continue };
+        let [full, short, without_remote, upstream, track] = fields[..] else { continue };
         if full.starts_with("refs/remotes/") {
             // `origin/HEAD` is only a pointer to the remote's default branch.
             if without_remote != "HEAD" {
@@ -432,6 +435,7 @@ fn parse_branches(text: &str) -> Vec<Branch> {
                     local_name: without_remote.to_string(),
                     is_remote: true,
                     upstream: None,
+                    ahead_behind: None,
                 });
             }
         } else {
@@ -440,10 +444,26 @@ fn parse_branches(text: &str) -> Vec<Branch> {
                 local_name: short.to_string(),
                 is_remote: false,
                 upstream: (!upstream.is_empty()).then(|| upstream.to_string()),
+                ahead_behind: if upstream.is_empty() { None } else { parse_track(track) },
             });
         }
     }
     branches
+}
+
+/// Reads `%(upstream:track,nobracket)`: empty when in sync, `ahead 2`,
+/// `behind 1`, `ahead 2, behind 1`, or `gone` when the upstream was deleted.
+fn parse_track(track: &str) -> Option<(usize, usize)> {
+    if track == "gone" {
+        return None;
+    }
+    let count = |word: &str| -> usize {
+        track
+            .split(", ")
+            .find_map(|part| part.strip_prefix(word)?.trim().parse().ok())
+            .unwrap_or(0)
+    };
+    Some((count("ahead "), count("behind ")))
 }
 
 pub fn tags() -> Result<Vec<String>> {
@@ -530,16 +550,27 @@ mod tests {
     }
 
     #[test]
+    fn upstream_tracking_reads_every_form_git_prints() {
+        assert_eq!(parse_track(""), Some((0, 0)));
+        assert_eq!(parse_track("ahead 2"), Some((2, 0)));
+        assert_eq!(parse_track("behind 13"), Some((0, 13)));
+        assert_eq!(parse_track("ahead 2, behind 1"), Some((2, 1)));
+        assert_eq!(parse_track("gone"), None);
+    }
+
+    #[test]
     fn branches_skip_remote_head_and_strip_the_remote() {
-        let text = "refs/heads/main\0main\0\0origin/main\n\
-                    refs/remotes/origin/HEAD\0origin\0HEAD\0\n\
-                    refs/remotes/origin/a/b\0origin/a/b\0a/b\0\n";
+        let text = "refs/heads/main\0main\0\0origin/main\0ahead 2\n\
+                    refs/remotes/origin/HEAD\0origin\0HEAD\0\0\n\
+                    refs/remotes/origin/a/b\0origin/a/b\0a/b\0\0\n";
         let branches = parse_branches(text);
         assert_eq!(branches.len(), 2);
         assert_eq!(branches[0].local_name, "main");
         assert_eq!(branches[1].name, "origin/a/b");
         assert_eq!(branches[1].local_name, "a/b");
         assert_eq!(branches[0].upstream.as_deref(), Some("origin/main"));
+        assert_eq!(branches[0].ahead_behind, Some((2, 0)));
+        assert_eq!(branches[1].ahead_behind, None);
         assert!(!branches[0].is_remote);
         assert!(branches[1].is_remote);
     }
