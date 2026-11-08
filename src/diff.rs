@@ -6,7 +6,7 @@ use anyhow::Result;
 use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use std::ops::Range;
 
@@ -308,7 +308,9 @@ fn clean(text: &str) -> String {
 pub struct DiffPane {
     pub source: DiffSource,
     rows: Vec<Row>,
-    scroll: usize,
+    /// The row under the cursor. The view keeps it in the middle, except near
+    /// the ends, where it moves on without scrolling further.
+    active: usize,
     height: usize,
     /// How many characters each side's text is scrolled to the left.
     shift: usize,
@@ -328,14 +330,33 @@ fn longest_line(rows: &[Row]) -> usize {
 impl DiffPane {
     pub fn load(source: DiffSource) -> Result<DiffPane> {
         let rows = parse_diff(&git::diff(&source)?);
-        Ok(DiffPane { source, rows, scroll: 0, height: 0, shift: 0, text_width: 0 })
+        Ok(DiffPane { source, rows, active: 0, height: 0, shift: 0, text_width: 0 })
     }
 
     /// Fetches the diff again, for files that changed while it was on screen.
     pub fn reload(&mut self) -> Result<()> {
         self.rows = parse_diff(&git::diff(&self.source)?);
-        self.scroll = self.scroll.min(self.rows.len().saturating_sub(1));
+        self.active = self.active.min(self.rows.len().saturating_sub(1));
         Ok(())
+    }
+
+    /// The first row on screen: the one that centres the active row, without
+    /// going past either end.
+    fn scroll(&self) -> usize {
+        let furthest = self.rows.len().saturating_sub(self.height);
+        self.active.saturating_sub(self.height / 2).min(furthest)
+    }
+
+    /// The line number in the current file at the active row. Rows without
+    /// one, such as hunk headings and removed lines, take the next line's, or
+    /// the previous one's at the very end.
+    pub fn active_line(&self) -> Option<usize> {
+        let new_line = |row: &Row| match row {
+            Row::Lines { right: Some(cell), .. } => Some(cell.number),
+            _ => None,
+        };
+        let below = self.rows.iter().skip(self.active).find_map(new_line);
+        below.or_else(|| self.rows.iter().take(self.active).rev().find_map(new_line))
     }
 
     /// Back to the start of the lines, for when the diff loses focus, as h and l
@@ -359,33 +380,29 @@ impl DiffPane {
         }
     }
 
+    /// Moves the active row, stopping at the ends.
     pub fn handle_key(&mut self, key: KeyEvent) {
-        // The furthest scroll that still fills the screen. Going past it wraps.
-        let last = self.rows.len().saturating_sub(self.height);
+        let last = self.rows.len().saturating_sub(1);
         let half_page = (self.height / 2).max(1);
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
-            KeyCode::Char('d') if ctrl => self.scroll = (self.scroll + half_page).min(last),
-            KeyCode::Char('u') if ctrl => self.scroll = self.scroll.saturating_sub(half_page),
-            KeyCode::Char('j') | KeyCode::Down => {
-                self.scroll = if self.scroll >= last { 0 } else { self.scroll + 1 };
-            }
-            KeyCode::Char('k') | KeyCode::Up => {
-                self.scroll = if self.scroll == 0 { last } else { self.scroll - 1 };
-            }
-            KeyCode::Char('g') => self.scroll = 0,
-            KeyCode::Char('G') => self.scroll = last,
+            KeyCode::Char('d') if ctrl => self.active = (self.active + half_page).min(last),
+            KeyCode::Char('u') if ctrl => self.active = self.active.saturating_sub(half_page),
+            KeyCode::Char('j') | KeyCode::Down => self.active = (self.active + 1).min(last),
+            KeyCode::Char('k') | KeyCode::Up => self.active = self.active.saturating_sub(1),
+            KeyCode::Char('g') => self.active = 0,
+            KeyCode::Char('G') => self.active = last,
             KeyCode::Char('h') | KeyCode::Left => self.shift = self.shift.saturating_sub(SIDE_STEP),
             KeyCode::Char('l') | KeyCode::Right => {
                 self.shift = (self.shift + SIDE_STEP).min(self.max_shift());
             }
             KeyCode::Char('n') => {
-                let next = (self.scroll + 1..self.rows.len()).find(|&i| self.is_heading(i));
-                self.scroll = next.unwrap_or(self.scroll);
+                let next = (self.active + 1..self.rows.len()).find(|&i| self.is_heading(i));
+                self.active = next.unwrap_or(self.active);
             }
             KeyCode::Char('p') => {
-                let previous = (0..self.scroll).rev().find(|&i| self.is_heading(i));
-                self.scroll = previous.unwrap_or(self.scroll);
+                let previous = (0..self.active).rev().find(|&i| self.is_heading(i));
+                self.active = previous.unwrap_or(self.active);
             }
             _ => {}
         }
@@ -412,13 +429,17 @@ impl DiffPane {
         self.text_width = (column_width as usize).saturating_sub(GUTTER_WIDTH);
         // The pane may have widened since the last scroll.
         self.shift = self.shift.min(self.max_shift());
-        let visible = self.rows.iter().skip(self.scroll).take(self.height);
-        for (i, row) in visible.enumerate() {
+        let scroll = self.scroll();
+        let visible = self.rows.iter().enumerate().skip(scroll).take(self.height);
+        for (i, (index, row)) in visible.enumerate() {
             let y = inner.y + i as u16;
             let full = Rect { y, height: 1, ..inner };
+            // Like a list's selection, the active row only shows while focused.
+            let active = focused && index == self.active;
             match row {
                 Row::Heading(text) => {
                     let line = Line::styled(text.as_str(), Style::default().fg(Color::Cyan));
+                    let line = if active { line.style(Style::default().bg(ui::SELECTED_BG)) } else { line };
                     frame.render_widget(line, full);
                 }
                 Row::Lines { left, right } => {
@@ -429,8 +450,8 @@ impl DiffPane {
                         width: inner.width.saturating_sub(column_width + 1),
                         ..full
                     };
-                    let left = side_line(left.as_ref(), self.shift, REMOVED_BG, REMOVED_WORD_BG);
-                    let right = side_line(right.as_ref(), self.shift, ADDED_BG, ADDED_WORD_BG);
+                    let left = side_line(left.as_ref(), self.shift, active, REMOVED_BG, REMOVED_WORD_BG);
+                    let right = side_line(right.as_ref(), self.shift, active, ADDED_BG, ADDED_WORD_BG);
                     frame.render_widget(left, left_area);
                     frame.render_widget(Line::styled("│", Style::default().fg(ui::DIM)), separator);
                     frame.render_widget(right, right_area);
@@ -441,12 +462,24 @@ impl DiffPane {
 }
 
 /// One side of a row, with its text scrolled `shift` characters to the left.
-/// The line number stays put.
-fn side_line(cell: Option<&Cell>, shift: usize, changed_bg: Color, word_bg: Color) -> Line<'_> {
+/// The line number stays put, and stands out on the active row. Only the number
+/// does, so that the colours of a change stay readable.
+fn side_line(
+    cell: Option<&Cell>,
+    shift: usize,
+    active: bool,
+    changed_bg: Color,
+    word_bg: Color,
+) -> Line<'_> {
     let Some(cell) = cell else {
         return Line::default().style(Style::default().bg(FILLER_BG));
     };
-    let gutter = Span::styled(format!("{:>4} ", cell.number), Style::default().fg(ui::DIM));
+    let gutter_style = if active {
+        Style::default().fg(Color::White).bg(ui::SELECTED_BG).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(ui::DIM)
+    };
+    let gutter = Span::styled(format!("{:>4} ", cell.number), gutter_style);
     let mut spans = vec![gutter];
 
     // The text as plain and marked pieces, cut where the visible part starts.
@@ -490,7 +523,7 @@ mod tests {
         DiffPane {
             source: DiffSource::Unstaged("f".to_string()),
             rows: vec![Row::Heading("x".to_string()); count],
-            scroll: 0,
+            active: 0,
             height,
             shift: 0,
             text_width: 0,
@@ -504,7 +537,7 @@ mod tests {
     #[test]
     fn scrolling_sideways_keeps_the_line_number_and_the_marks() {
         let cell = Cell { number: 7, text: "héllo wörld".to_string(), changed: true, marks: vec![7..13] };
-        let line = side_line(Some(&cell), 3, ADDED_BG, ADDED_WORD_BG);
+        let line = side_line(Some(&cell), 3, false, ADDED_BG, ADDED_WORD_BG);
         assert_eq!(text_of(&line), "   7 lo wörld");
         let marked = line.spans.iter().find(|span| span.style.bg == Some(ADDED_WORD_BG));
         assert_eq!(marked.unwrap().content, "wörld");
@@ -513,7 +546,7 @@ mod tests {
     #[test]
     fn scrolling_past_a_short_line_leaves_only_its_number() {
         let cell = Cell { number: 1, text: "ab".to_string(), changed: false, marks: Vec::new() };
-        assert_eq!(text_of(&side_line(Some(&cell), 10, ADDED_BG, ADDED_WORD_BG)), "   1 ");
+        assert_eq!(text_of(&side_line(Some(&cell), 10, false, ADDED_BG, ADDED_WORD_BG)), "   1 ");
     }
 
     #[test]
@@ -530,21 +563,44 @@ mod tests {
     }
 
     #[test]
-    fn scrolling_wraps_around_both_ends() {
+    fn the_active_row_stops_at_both_ends() {
         let mut pane = pane_with_rows(5, 2);
         pane.handle_key(KeyEvent::from(KeyCode::Char('k')));
-        assert_eq!(pane.scroll, 3); // the last screenful
+        assert_eq!(pane.active, 0);
+        pane.handle_key(KeyEvent::from(KeyCode::Char('G')));
         pane.handle_key(KeyEvent::from(KeyCode::Char('j')));
-        assert_eq!(pane.scroll, 0);
+        assert_eq!(pane.active, 4);
+    }
+
+    #[test]
+    fn the_view_centres_the_active_row_except_near_the_ends() {
+        let mut pane = pane_with_rows(20, 6);
+        pane.active = 10;
+        assert_eq!(pane.scroll(), 7);
+        pane.active = 1;
+        assert_eq!(pane.scroll(), 0);
+        pane.active = 19;
+        assert_eq!(pane.scroll(), 14);
     }
 
     #[test]
     fn a_diff_that_fits_on_screen_doesnt_scroll() {
         let mut pane = pane_with_rows(2, 10);
         pane.handle_key(KeyEvent::from(KeyCode::Char('j')));
-        assert_eq!(pane.scroll, 0);
-        pane.handle_key(KeyEvent::from(KeyCode::Char('k')));
-        assert_eq!(pane.scroll, 0);
+        assert_eq!(pane.scroll(), 0);
+    }
+
+    #[test]
+    fn the_active_line_is_the_next_one_in_the_current_file() {
+        let mut pane = pane_with_rows(0, 10);
+        pane.rows = parse_diff("@@ -4,2 +4,1 @@\n-gone\n same\n-also gone");
+        // The heading and a removed line both lead to `same`, line 4 now.
+        assert_eq!(pane.active_line(), Some(4));
+        pane.active = 1;
+        assert_eq!(pane.active_line(), Some(4));
+        // At the end, with nothing below, it takes the line above.
+        pane.active = 3;
+        assert_eq!(pane.active_line(), Some(4));
     }
 
     fn texts(rows: &[Row]) -> Vec<(Option<&str>, Option<&str>)> {

@@ -18,7 +18,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph, Wrap};
 use ratatui::{DefaultTerminal, Frame};
 use std::io::Write;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 const AUTO_REFRESH: Duration = Duration::from_millis(500);
@@ -36,6 +36,7 @@ Anywhere
   h/l        previous/next pane    C   compare two refs
   ?          this help
   z          zoom diff             q   quit
+  o          open the file in Zed, at the diff's active line
   j/k g/G    move                  Enter  open
   Enter      on a file: show its diff, then again to move into it
   Esc        leave the diff, then again to close it
@@ -58,6 +59,7 @@ Compare
   r          swap A and B, also from its diff
 
 Diff
+  j/k g/G    move the active line, which the view keeps centred
   Ctrl-d/u   half page             n/p  next/previous hunk
   h/l        scroll sideways
 
@@ -150,6 +152,8 @@ pub struct App {
     last_refresh: Instant,
     /// How refs and HEAD looked at the last full reload.
     refs_fingerprint: String,
+    /// `zed` commands still running, which hand the file to Zed and exit.
+    editor_commands: Vec<Child>,
 }
 
 impl App {
@@ -170,6 +174,7 @@ impl App {
             should_quit: false,
             last_refresh: Instant::now(),
             refs_fingerprint: String::new(),
+            editor_commands: Vec::new(),
         };
         app.refresh();
         app
@@ -223,6 +228,8 @@ impl App {
         let result = self.staging.refresh();
         self.report(result);
         self.sync_diff();
+        // Collects the editor commands that have finished, so none linger.
+        self.editor_commands.retain_mut(|child| matches!(child.try_wait(), Ok(None)));
         self.last_refresh = Instant::now();
     }
 
@@ -300,6 +307,7 @@ impl App {
             KeyCode::Char('h') if self.focus != Focus::Diff => self.move_focus(false),
             KeyCode::Char('l') if self.focus != Focus::Diff => self.move_focus(true),
             KeyCode::Char('?') => self.modal = Modal::Help,
+            KeyCode::Char('o') => self.open_in_editor(),
             KeyCode::Char('r') if self.compare.is_some() => self.swap_compare(),
             KeyCode::Char('C') => self.open_compare_picker(),
             KeyCode::Char('z') if self.diff.is_some() => {
@@ -732,16 +740,68 @@ impl App {
                 esc = Some("esc close compare");
             }
             Focus::Diff => {
-                hints.extend(["j/k scroll", "h/l sideways", "ctrl-d/u page", "n/p hunk"]);
+                hints.extend(["j/k move", "h/l sideways", "ctrl-d/u page", "n/p hunk"]);
                 hints.push(if self.zoomed { "z unzoom" } else { "z zoom" });
                 esc = Some("esc back");
             }
+        }
+        if self.focused_file().is_some() {
+            hints.push("o open in zed");
         }
         if self.diff.is_some() && self.focus != Focus::Diff {
             esc = Some("esc close diff");
         }
         hints.extend(esc);
         hints.join(" · ")
+    }
+
+    /// The file under the cursor: the focused diff's, or the one selected in
+    /// the focused pane.
+    fn focused_file(&self) -> Option<DiffSource> {
+        match self.focus {
+            Focus::Branches => None,
+            Focus::Changes => self.staging.selected_source(),
+            Focus::Graph => self.graph.selected_file_source(),
+            Focus::Compare => self.compare.as_ref().and_then(|compare| compare.selected_source()),
+            Focus::Diff => self.diff.as_ref().map(|diff| diff.source.clone()),
+        }
+    }
+
+    /// Opens the focused file in Zed, which comes to the front, while gclic
+    /// carries on. It opens at the diff's active line, or at the file's first
+    /// change without a diff. History opens the file as it is now, so the line
+    /// may have moved since.
+    fn open_in_editor(&mut self) {
+        let Some(source) = self.focused_file() else {
+            return;
+        };
+        let line = match &self.diff {
+            Some(diff) if diff.source == source => diff.active_line(),
+            _ => DiffPane::load(source.clone()).ok().and_then(|diff| diff.active_line()),
+        };
+        // gclic runs from the repo root, which paths are relative to.
+        let path = match std::env::current_dir() {
+            Ok(root) => root.join(source.path()),
+            Err(error) => {
+                self.modal = Modal::Error(error.to_string());
+                return;
+            }
+        };
+        if !path.exists() {
+            self.message = format!("{} isn't in the working tree", source.path());
+            return;
+        }
+        let target = format!("{}:{}", path.display(), line.unwrap_or(1));
+        let command = Command::new("zed")
+            .arg(target)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
+        match command {
+            Ok(child) => self.editor_commands.push(child),
+            Err(error) => self.modal = Modal::Error(format!("Couldn't run zed: {error}")),
+        }
     }
 
     /// Enter on a file shows its diff, or moves into the diff if it's showing.

@@ -38,11 +38,9 @@ impl DetailsPopup {
             }
             KeyCode::Char('u') if ctrl => self.scroll = self.scroll.saturating_sub(half_page),
             KeyCode::Char('j') | KeyCode::Down => {
-                self.scroll = if self.scroll >= self.max_scroll { 0 } else { self.scroll + 1 };
+                self.scroll = (self.scroll + 1).min(self.max_scroll);
             }
-            KeyCode::Char('k') | KeyCode::Up => {
-                self.scroll = if self.scroll == 0 { self.max_scroll } else { self.scroll - 1 };
-            }
+            KeyCode::Char('k') | KeyCode::Up => self.scroll = self.scroll.saturating_sub(1),
             KeyCode::Char('g') => self.scroll = 0,
             KeyCode::Char('G') => self.scroll = self.max_scroll,
             _ => {}
@@ -118,19 +116,16 @@ mod tests {
     }
 
     #[test]
-    fn scrolling_wraps_around_both_ends() {
+    fn scrolling_stops_at_both_ends() {
         // 4 lines of header plus 50 of message, in 10 rows of text.
         let mut popup = popup(&vec!["line"; 50].join("\n"));
         draw(&mut popup, 100, 14);
-        press(&mut popup, 'G');
-        draw(&mut popup, 100, 14);
-        assert_eq!(popup.scroll, 54 - 10);
-
-        press(&mut popup, 'j');
-        draw(&mut popup, 100, 14);
+        press(&mut popup, 'k');
         assert_eq!(popup.scroll, 0);
 
-        press(&mut popup, 'k');
+        press(&mut popup, 'G');
+        draw(&mut popup, 100, 14);
+        press(&mut popup, 'j');
         draw(&mut popup, 100, 14);
         assert_eq!(popup.scroll, 54 - 10);
     }

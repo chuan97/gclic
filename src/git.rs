@@ -60,6 +60,14 @@ impl DiffSource {
     pub fn is_working_tree(&self) -> bool {
         matches!(self, DiffSource::Unstaged(_) | DiffSource::Staged(_) | DiffSource::Untracked(_))
     }
+
+    /// The file's path, relative to the repo root.
+    pub fn path(&self) -> &str {
+        match self {
+            DiffSource::Unstaged(path) | DiffSource::Staged(path) | DiffSource::Untracked(path) => path,
+            DiffSource::Commit { path, .. } | DiffSource::Refs { path, .. } => path,
+        }
+    }
 }
 
 fn git(args: &[&str]) -> Result<std::process::Output> {
