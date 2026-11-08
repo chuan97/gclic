@@ -18,6 +18,12 @@ const ADDED_BG: Color = Color::Rgb(28, 52, 38);
 const REMOVED_WORD_BG: Color = Color::Rgb(112, 48, 54);
 const ADDED_WORD_BG: Color = Color::Rgb(46, 96, 62);
 const FILLER_BG: Color = Color::Indexed(235);
+// A conflict's two sides, as VS Code tints them: green for the current
+// change, which is yours, and blue for the incoming one.
+const CURRENT_BG: Color = Color::Rgb(26, 52, 46);
+const CURRENT_WORD_BG: Color = Color::Rgb(40, 98, 84);
+const INCOMING_BG: Color = Color::Rgb(26, 42, 64);
+const INCOMING_WORD_BG: Color = Color::Rgb(42, 74, 116);
 /// A changed line sharing less than this with its partner is a rewrite, not an
 /// edit, and marking most of it would only add noise.
 const MIN_SIMILARITY: f32 = 0.3;
@@ -99,6 +105,80 @@ pub fn parse_diff(text: &str) -> Vec<Row> {
         }
     }
     flush_change(&mut rows, &mut removed, &mut added);
+    rows
+}
+
+/// The rows for a diff's text: a unified diff, or for a conflict the file
+/// itself, with its markers.
+pub fn rows_for(source: &DiffSource, text: &str) -> Vec<Row> {
+    match source {
+        DiffSource::Conflict(_) => parse_conflict(text),
+        _ => parse_diff(text),
+    }
+}
+
+/// Shows a file with merge conflicts as its two sides: lines outside the
+/// conflicts as context, and each conflict as yours on the left and theirs on
+/// the right, under a heading, paired as a diff's lines are. Line numbers are
+/// the file's own, markers included, so opening it in an editor at the active
+/// line lands on the conflict. A diff3 base section, if any, is left out.
+pub fn parse_conflict(text: &str) -> Vec<Row> {
+    if text.is_empty() {
+        return vec![Row::Heading("Deleted on one side: stage or remove it to resolve".to_string())];
+    }
+    enum Part {
+        Outside,
+        Ours,
+        Base,
+        Theirs,
+    }
+    let mut rows = Vec::new();
+    let mut part = Part::Outside;
+    let (mut ours, mut theirs) = (Vec::new(), Vec::new());
+    let mut ours_label = String::new();
+    let mut conflicts = 0;
+    for (index, line) in text.lines().enumerate() {
+        let number = index + 1;
+        match part {
+            Part::Outside if line.starts_with("<<<<<<<") => {
+                ours_label = line.trim_start_matches('<').trim().to_string();
+                part = Part::Ours;
+            }
+            Part::Outside => {
+                let text = clean(line);
+                let context = |text: String| Cell { number, text, changed: false, marks: Vec::new(), colors: Vec::new() };
+                rows.push(Row::Lines { left: Some(context(text.clone())), right: Some(context(text)) });
+            }
+            Part::Ours | Part::Base if line.starts_with("=======") => part = Part::Theirs,
+            Part::Ours if line.starts_with("|||||||") => part = Part::Base,
+            Part::Ours => ours.push(changed_cell(number, line)),
+            Part::Base => {}
+            Part::Theirs if line.starts_with(">>>>>>>") => {
+                conflicts += 1;
+                let theirs_label = line.trim_start_matches('>').trim();
+                rows.push(Row::Heading(format!("Conflict {conflicts}: {ours_label} ↔ {theirs_label}")));
+                flush_change(&mut rows, &mut ours, &mut theirs);
+                part = Part::Outside;
+            }
+            Part::Theirs => theirs.push(changed_cell(number, line)),
+        }
+    }
+    // A conflict cut off by the end of the file still shows what it has.
+    flush_change(&mut rows, &mut ours, &mut theirs);
+    if conflicts == 0 {
+        rows.insert(0, Row::Heading("No conflicts left: stage the file to mark it resolved".to_string()));
+    } else {
+        // Now that the total is known, every heading can say "n of total".
+        let mut seen = 0;
+        for row in &mut rows {
+            if let Row::Heading(heading) = row
+                && heading.starts_with("Conflict ")
+            {
+                seen += 1;
+                *heading = heading.replacen(&format!("Conflict {seen}:"), &format!("Conflict {seen} of {conflicts}:"), 1);
+            }
+        }
+    }
     rows
 }
 
@@ -443,7 +523,7 @@ impl DiffPane {
     /// They come from the cache or the worker thread, via `apply_colors`.
     pub fn load(source: DiffSource) -> Result<DiffPane> {
         let text = git::diff(&source)?;
-        let rows = parse_diff(&text);
+        let rows = rows_for(&source, &text);
         Ok(DiffPane::new(source, text, rows, false))
     }
 
@@ -485,7 +565,7 @@ impl DiffPane {
         if text == self.text {
             return;
         }
-        self.rows = parse_diff(&text);
+        self.rows = rows_for(&self.source, &text);
         self.colored = false;
         self.text = text;
         self.active = self.active.min(self.rows.len().saturating_sub(1));
@@ -525,6 +605,7 @@ impl DiffPane {
         match &self.source {
             DiffSource::Unstaged(path) => format!(" {path} "),
             DiffSource::Untracked(path) => format!(" {path} (untracked) "),
+            DiffSource::Conflict(path) => format!(" {path} (conflict: yours ↔ theirs) "),
             DiffSource::Staged(path) => format!(" {path} (staged) "),
             DiffSource::Commit { sha, path } => format!(" {path} @ {} ", &sha[..sha.len().min(7)]),
             DiffSource::Refs { a, b, path } => format!(" {path}: {a} → {b} "),
@@ -601,8 +682,14 @@ impl DiffPane {
                         width: inner.width.saturating_sub(column_width + 1),
                         ..full
                     };
-                    let left = side_line(left.as_ref(), self.shift, active, REMOVED_BG, REMOVED_WORD_BG);
-                    let right = side_line(right.as_ref(), self.shift, active, ADDED_BG, ADDED_WORD_BG);
+                    let conflict = matches!(self.source, DiffSource::Conflict(_));
+                    let ((left_bg, left_word), (right_bg, right_word)) = if conflict {
+                        ((CURRENT_BG, CURRENT_WORD_BG), (INCOMING_BG, INCOMING_WORD_BG))
+                    } else {
+                        ((REMOVED_BG, REMOVED_WORD_BG), (ADDED_BG, ADDED_WORD_BG))
+                    };
+                    let left = side_line(left.as_ref(), self.shift, active, left_bg, left_word);
+                    let right = side_line(right.as_ref(), self.shift, active, right_bg, right_word);
                     frame.render_widget(left, left_area);
                     frame.render_widget(Line::styled("│", Style::default().fg(ui::DIM)), separator);
                     frame.render_widget(right, right_area);
@@ -762,6 +849,36 @@ mod tests {
         assert_eq!(pane.shift, 6);
         pane.handle_key(KeyEvent::from(KeyCode::Char('h')));
         assert_eq!(pane.shift, 2);
+    }
+
+    #[test]
+    fn a_conflict_shows_yours_against_theirs_with_the_files_line_numbers() {
+        let file = "a\n<<<<<<< HEAD\nreturn 3\n=======\nreturn 2\n>>>>>>> other\nz\n";
+        let rows = parse_conflict(file);
+        assert_eq!(rows[1], Row::Heading("Conflict 1 of 1: HEAD ↔ other".to_string()));
+        let Row::Lines { left: Some(ours), right: Some(theirs) } = &rows[2] else { panic!() };
+        assert_eq!((ours.text.as_str(), ours.number), ("return 3", 3));
+        assert_eq!((theirs.text.as_str(), theirs.number), ("return 2", 5));
+        assert_eq!(marked(&ours.text, &ours.marks), ["3"]);
+        assert_eq!(texts(&rows[3..]), [(Some("z"), Some("z"))]);
+    }
+
+    #[test]
+    fn a_diff3_base_is_left_out_and_conflicts_are_counted() {
+        let file = "<<<<<<< ours\nx\n||||||| base\nold\n=======\ny\n>>>>>>> theirs\n\
+                    <<<<<<< ours\np\n=======\nq\n>>>>>>> theirs\n";
+        let rows = parse_conflict(file);
+        let headings: Vec<_> = rows.iter().filter(|row| matches!(row, Row::Heading(_))).collect();
+        assert_eq!(headings.len(), 2);
+        assert_eq!(headings[1], &Row::Heading("Conflict 2 of 2: ours ↔ theirs".to_string()));
+        assert!(!texts(&rows).iter().any(|(left, right)| *left == Some("old") || *right == Some("old")));
+    }
+
+    #[test]
+    fn a_resolved_or_deleted_file_says_so() {
+        let resolved = parse_conflict("all fine\n");
+        assert!(matches!(&resolved[0], Row::Heading(h) if h.starts_with("No conflicts left")));
+        assert!(matches!(&parse_conflict("")[0], Row::Heading(h) if h.starts_with("Deleted on one side")));
     }
 
     #[test]

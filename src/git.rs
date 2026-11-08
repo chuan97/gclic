@@ -49,6 +49,9 @@ pub struct Branch {
     /// How many commits it's ahead of and behind its upstream. None without
     /// one, or if the upstream was deleted on the remote.
     pub ahead_behind: Option<(usize, usize)>,
+    /// The worktree it's checked out in, for a local branch that is, which
+    /// may be this one or another.
+    pub worktree: Option<String>,
 }
 
 /// What a diff pane is showing. One variant per place a diff can come from.
@@ -57,6 +60,8 @@ pub enum DiffSource {
     Unstaged(String),
     Staged(String),
     Untracked(String),
+    /// A file with merge conflicts: its two sides, from the conflict markers.
+    Conflict(String),
     Commit { sha: String, path: String },
     Refs { a: String, b: String, path: String },
 }
@@ -64,13 +69,19 @@ pub enum DiffSource {
 impl DiffSource {
     /// Whether this comes from the Changes pane, rather than from history.
     pub fn is_working_tree(&self) -> bool {
-        matches!(self, DiffSource::Unstaged(_) | DiffSource::Staged(_) | DiffSource::Untracked(_))
+        matches!(
+            self,
+            DiffSource::Unstaged(_) | DiffSource::Staged(_) | DiffSource::Untracked(_) | DiffSource::Conflict(_)
+        )
     }
 
     /// The file's path, relative to the repo root.
     pub fn path(&self) -> &str {
         match self {
-            DiffSource::Unstaged(path) | DiffSource::Staged(path) | DiffSource::Untracked(path) => path,
+            DiffSource::Unstaged(path)
+            | DiffSource::Staged(path)
+            | DiffSource::Untracked(path)
+            | DiffSource::Conflict(path) => path,
             DiffSource::Commit { path, .. } | DiffSource::Refs { path, .. } => path,
         }
     }
@@ -193,6 +204,11 @@ pub fn diff(source: &DiffSource) -> Result<String> {
             let output = git(&["diff", EXT, COLOR, "--no-index", "--", "/dev/null", path])?;
             Ok(String::from_utf8_lossy(&output.stdout).into_owned())
         }
+        // Not a diff: the file itself, whose conflict markers hold both sides.
+        // Empty if one side deleted it.
+        DiffSource::Conflict(path) => Ok(std::fs::read(path)
+            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+            .unwrap_or_default()),
         DiffSource::Commit { sha, path } => run(&[
             "show",
             EXT,
@@ -217,6 +233,8 @@ pub fn file_versions(source: &DiffSource) -> (Option<String>, Option<String>) {
         DiffSource::Unstaged(_) => (Version::At(String::new()), Version::OnDisk),
         DiffSource::Staged(_) => (Version::At("HEAD".to_string()), Version::At(String::new())),
         DiffSource::Untracked(_) => (Version::Missing, Version::OnDisk),
+        // Both sides are lines of the file as it is, markers and all.
+        DiffSource::Conflict(_) => (Version::OnDisk, Version::OnDisk),
         // The diff is against the first parent, which `^` names.
         DiffSource::Commit { sha, .. } => (Version::At(format!("{sha}^")), Version::At(sha.clone())),
         DiffSource::Refs { a, b, .. } => (Version::At(a.clone()), Version::At(b.clone())),
@@ -318,6 +336,35 @@ fn read_head() -> Option<String> {
     Some(head.trim().to_string())
 }
 
+/// A merge, rebase, cherry-pick or revert that stopped halfway, usually on
+/// conflicts, as the files git leaves in its directory while one is going.
+pub fn operation_in_progress() -> Option<&'static str> {
+    let dir = git_dir()?;
+    let operations = [
+        ("MERGE_HEAD", "merging"),
+        ("rebase-merge", "rebasing"),
+        ("rebase-apply", "rebasing"),
+        ("CHERRY_PICK_HEAD", "cherry-picking"),
+        ("REVERT_HEAD", "reverting"),
+    ];
+    operations.iter().find(|(file, _)| dir.join(file).exists()).map(|(_, name)| *name)
+}
+
+/// Where a branch is checked out, if that's another worktree than this one:
+/// `../name` when it's next to this one, as worktrees usually are, or else the
+/// whole path. None for this worktree.
+pub fn other_worktree(path: &str) -> Option<String> {
+    let here = std::env::current_dir().ok()?.canonicalize().ok()?;
+    let there = Path::new(path).canonicalize().unwrap_or_else(|_| PathBuf::from(path));
+    if there == here {
+        return None;
+    }
+    match (there.parent(), here.parent(), there.file_name()) {
+        (Some(a), Some(b), Some(name)) if a == b => Some(format!("../{}", name.to_string_lossy())),
+        _ => Some(path.to_string()),
+    }
+}
+
 /// The checked-out branch. None on a detached HEAD.
 pub fn current_branch() -> Option<String> {
     read_head()?.strip_prefix("ref: refs/heads/").map(str::to_string)
@@ -415,7 +462,7 @@ pub fn commit_files(sha: &str) -> Result<Vec<FileEntry>> {
 pub fn branches() -> Result<Vec<Branch>> {
     let text = run(&[
         "for-each-ref",
-        "--format=%(refname)%00%(refname:short)%00%(refname:lstrip=3)%00%(upstream:short)%00%(upstream:track,nobracket)",
+        "--format=%(refname)%00%(refname:short)%00%(refname:lstrip=3)%00%(upstream:short)%00%(upstream:track,nobracket)%00%(worktreepath)",
         "refs/heads",
         "refs/remotes",
     ])?;
@@ -426,7 +473,7 @@ fn parse_branches(text: &str) -> Vec<Branch> {
     let mut branches = Vec::new();
     for line in text.lines() {
         let fields: Vec<&str> = line.split('\0').collect();
-        let [full, short, without_remote, upstream, track] = fields[..] else { continue };
+        let [full, short, without_remote, upstream, track, worktree] = fields[..] else { continue };
         if full.starts_with("refs/remotes/") {
             // `origin/HEAD` is only a pointer to the remote's default branch.
             if without_remote != "HEAD" {
@@ -436,6 +483,7 @@ fn parse_branches(text: &str) -> Vec<Branch> {
                     is_remote: true,
                     upstream: None,
                     ahead_behind: None,
+                    worktree: None,
                 });
             }
         } else {
@@ -445,6 +493,7 @@ fn parse_branches(text: &str) -> Vec<Branch> {
                 is_remote: false,
                 upstream: (!upstream.is_empty()).then(|| upstream.to_string()),
                 ahead_behind: if upstream.is_empty() { None } else { parse_track(track) },
+                worktree: (!worktree.is_empty()).then(|| worktree.to_string()),
             });
         }
     }
@@ -560,9 +609,9 @@ mod tests {
 
     #[test]
     fn branches_skip_remote_head_and_strip_the_remote() {
-        let text = "refs/heads/main\0main\0\0origin/main\0ahead 2\n\
-                    refs/remotes/origin/HEAD\0origin\0HEAD\0\0\n\
-                    refs/remotes/origin/a/b\0origin/a/b\0a/b\0\0\n";
+        let text = "refs/heads/main\0main\0\0origin/main\0ahead 2\0/repos/main\n\
+                    refs/remotes/origin/HEAD\0origin\0HEAD\0\0\0\n\
+                    refs/remotes/origin/a/b\0origin/a/b\0a/b\0\0\0\n";
         let branches = parse_branches(text);
         assert_eq!(branches.len(), 2);
         assert_eq!(branches[0].local_name, "main");
@@ -571,6 +620,8 @@ mod tests {
         assert_eq!(branches[0].upstream.as_deref(), Some("origin/main"));
         assert_eq!(branches[0].ahead_behind, Some((2, 0)));
         assert_eq!(branches[1].ahead_behind, None);
+        assert_eq!(branches[0].worktree.as_deref(), Some("/repos/main"));
+        assert_eq!(branches[1].worktree, None);
         assert!(!branches[0].is_remote);
         assert!(branches[1].is_remote);
     }

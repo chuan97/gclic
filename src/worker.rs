@@ -145,7 +145,7 @@ fn run(job: Job) -> Option<Done> {
             // Without its diff there's nothing to colour, and the UI shows the
             // error when it loads the diff itself.
             let text = git::diff(&source).ok()?;
-            let mut rows = diff::parse_diff(&text);
+            let mut rows = diff::rows_for(&source, &text);
             diff::highlight_rows(&mut rows, &source);
             Some(Done::Highlight { source, text, rows })
         }

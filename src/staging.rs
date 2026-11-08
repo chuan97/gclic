@@ -22,6 +22,8 @@ enum Section {
 
 pub struct StagingPanel {
     status: Status,
+    /// A merge, rebase or the like that stopped halfway, shown in the title.
+    operation: Option<&'static str>,
     /// Index into the staged files followed by the unstaged files.
     selected: usize,
     scroll: usize,
@@ -29,7 +31,7 @@ pub struct StagingPanel {
 
 impl StagingPanel {
     pub fn new() -> StagingPanel {
-        StagingPanel { status: Status::default(), selected: 0, scroll: 0 }
+        StagingPanel { status: Status::default(), operation: None, selected: 0, scroll: 0 }
     }
 
     pub fn has_staged(&self) -> bool {
@@ -71,6 +73,7 @@ impl StagingPanel {
         Some(match (section, entry.status) {
             (Section::Staged, _) => DiffSource::Staged(path),
             (Section::Changes, '?') => DiffSource::Untracked(path),
+            (Section::Changes, 'U') => DiffSource::Conflict(path),
             (Section::Changes, _) => DiffSource::Unstaged(path),
         })
     }
@@ -79,7 +82,18 @@ impl StagingPanel {
     /// is still there. If not (it was just staged, say) the selection stays at
     /// the same position in its section, so pressing the stage key repeatedly
     /// walks down the list.
+    /// The pane's title, which says when a merge or the like is under way, as
+    /// that's when conflicts turn up here.
+    pub fn title(&self) -> String {
+        match self.operation {
+            Some(operation) => format!("{}· {operation} ", TITLE),
+            None => TITLE.to_string(),
+        }
+    }
+
     pub fn set_status(&mut self, status: Status) {
+        // Reading a few file names, so cheap enough for every refresh.
+        self.operation = git::operation_in_progress();
         let previous = self
             .selection()
             .map(|(section, entry)| (section, entry.path.clone()));
@@ -150,11 +164,26 @@ impl StagingPanel {
         }
     }
 
+    /// Whether d can restore the selected file: a change not yet staged, other
+    /// than a conflict or a submodule, which restoring doesn't handle.
+    pub fn can_restore(&self) -> bool {
+        matches!(self.selection(), Some((Section::Changes, entry)) if entry.status != 'U' && !is_folder(&entry.path))
+    }
+
     fn ask_to_restore(&self) -> Action {
         match self.selection() {
             Some((Section::Staged, _)) => {
                 Action::Message("Unstage the file before restoring it".to_string())
             }
+            Some((Section::Changes, entry)) if entry.status == 'U' => Action::Message(
+                "Resolve the conflict in your editor (o), then stage it (space)".to_string(),
+            ),
+            // git lists a submodule, or a repo nested inside this one, as a
+            // folder. Restoring one isn't a plain restore, so it's left to git.
+            Some((Section::Changes, entry)) if is_folder(&entry.path) => Action::Message(format!(
+                "{} is a submodule or a nested repo: reset it with git, e.g. git submodule update",
+                entry.path.trim_end_matches('/')
+            )),
             Some((Section::Changes, entry)) if entry.status == '?' => {
                 Action::Confirm(Confirm::DeleteUntracked(entry.path.clone()))
             }
@@ -176,7 +205,7 @@ impl StagingPanel {
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
         let staged = self.status.staged.len();
-        let block = ui::panel(TITLE.to_string(), focused);
+        let block = ui::panel(self.title(), focused);
         let inner = block.inner(area);
         frame.render_widget(block, area);
 
@@ -206,6 +235,10 @@ impl StagingPanel {
     }
 }
 
+fn is_folder(path: &str) -> bool {
+    std::path::Path::new(path).is_dir()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -220,6 +253,7 @@ mod tests {
     fn panel(staged: &[&str], unstaged: &[&str], selected: usize) -> StagingPanel {
         StagingPanel {
             status: Status { staged: entries(staged), unstaged: entries(unstaged) },
+            operation: None,
             selected,
             scroll: 0,
         }

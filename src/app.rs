@@ -907,9 +907,10 @@ impl App {
 
         // The panes that h and l lead to say so next to their title, in place
         // of a hint. With three panes and wrapping, those are the two not focused.
+        let changes_title = self.staging.title();
         let panes = [
             (Focus::Branches, branches, crate::branches::TITLE),
-            (Focus::Changes, changes, crate::staging::TITLE),
+            (Focus::Changes, changes, changes_title.as_str()),
             (Focus::Graph, graph, crate::graph::TITLE),
         ];
         if let Some(current) = panes.iter().position(|(pane, ..)| *pane == self.focus) {
@@ -983,7 +984,7 @@ impl App {
                     hints.push("a/A stage/unstage all");
                 }
                 hints.extend(self.enter_diff_hint(source.clone()));
-                if matches!(source, Some(DiffSource::Unstaged(_) | DiffSource::Untracked(_))) {
+                if self.staging.can_restore() {
                     hints.push("d restore");
                 }
                 if self.staging.has_staged() {

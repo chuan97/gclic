@@ -181,6 +181,10 @@ impl BranchesPanel {
 
     fn check_out(&mut self, name: &str) -> Action {
         self.picker.stop_typing();
+        // git won't check out a branch in two worktrees at once, so say why first.
+        if let Some(elsewhere) = self.find(name).and_then(other_worktree) {
+            return Action::Message(format!("{name} is checked out in {elsewhere}, so not here too"));
+        }
         let is_remote = self.find(name).is_some_and(|branch| branch.is_remote);
         let result = if is_remote { git::switch_track(name) } else { git::switch(name) };
         if result.is_ok() {
@@ -283,6 +287,9 @@ impl BranchesPanel {
             let noun = if count == 1 { "remote" } else { "remotes" };
             spans.push(Span::styled(format!("  {count} {noun}"), Style::default().fg(ui::DIM)));
         }
+        if let Some(elsewhere) = branch.and_then(other_worktree) {
+            spans.push(Span::styled(format!("  in {elsewhere}"), Style::default().fg(ui::DIM)));
+        }
 
         let line = Line::from(spans);
         if selected {
@@ -291,6 +298,11 @@ impl BranchesPanel {
             line
         }
     }
+}
+
+/// The other worktree a branch is checked out in, if any.
+fn other_worktree(branch: &Branch) -> Option<String> {
+    git::other_worktree(branch.worktree.as_deref()?)
 }
 
 fn remote_line(remote: &RemoteRow) -> Line<'static> {
@@ -320,6 +332,7 @@ mod tests {
             is_remote: false,
             upstream: upstream.map(str::to_string),
             ahead_behind: upstream.map(|_| (0, 0)),
+            worktree: None,
         }
     }
 
@@ -372,6 +385,7 @@ mod tests {
             is_remote: true,
             upstream: None,
             ahead_behind: None,
+            worktree: None,
         }
     }
 
