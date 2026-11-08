@@ -14,7 +14,7 @@ use anyhow::Result;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Style};
-use ratatui::text::Line;
+use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph, Wrap};
 use ratatui::{DefaultTerminal, Frame};
 use std::io::Write;
@@ -22,6 +22,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 const AUTO_REFRESH: Duration = Duration::from_millis(500);
+const GLOBAL_HINTS: &str = "? help · q quit";
 /// The diff's share of the width, focused or not. Zooming gives it all of it.
 const DIFF_PERCENT: u16 = 80;
 /// The most of the left column's height that Branches and Changes can take,
@@ -425,13 +426,19 @@ impl App {
 
     // -------------------------------------------------------------- modals
 
+    /// Like quitting: enter goes ahead, esc cancels, and other keys are ignored
+    /// so that a stray one can't do either.
     fn handle_confirm_key(&mut self, confirm: Confirm, key: KeyEvent) {
-        if key.code == KeyCode::Char('y') {
-            let result = match &confirm {
-                Confirm::Restore(path) => git::restore(path),
-                Confirm::DeleteUntracked(path) => git::delete_untracked(path),
-            };
-            self.apply(Action::after_change(result));
+        match key.code {
+            KeyCode::Enter => {
+                let result = match &confirm {
+                    Confirm::Restore(path) => git::restore(path),
+                    Confirm::DeleteUntracked(path) => git::delete_untracked(path),
+                };
+                self.apply(Action::after_change(result));
+            }
+            KeyCode::Esc => {}
+            _ => self.modal = Modal::Confirm(confirm),
         }
     }
 
@@ -619,6 +626,20 @@ impl App {
         self.branches.render(frame, branches, self.focus == Focus::Branches);
         self.staging.render(frame, changes, self.focus == Focus::Changes);
         self.graph.render(frame, graph, self.focus == Focus::Graph);
+
+        // The panes that h and l lead to say so next to their title, in place
+        // of a hint. With three panes and wrapping, those are the two not focused.
+        let panes = [
+            (Focus::Branches, branches, crate::branches::TITLE),
+            (Focus::Changes, changes, crate::staging::TITLE),
+            (Focus::Graph, graph, crate::graph::TITLE),
+        ];
+        if let Some(current) = panes.iter().position(|(pane, ..)| *pane == self.focus) {
+            let (_, previous, title) = panes[(current + 2) % 3];
+            mark_key(frame, previous, title, "h");
+            let (_, next, title) = panes[(current + 1) % 3];
+            mark_key(frame, next, title, "l");
+        }
     }
 
     fn render_diff(&mut self, frame: &mut Frame, area: Rect) {
@@ -628,24 +649,106 @@ impl App {
         }
     }
 
+    /// The pane's own keys, then the keys that work everywhere.
     fn render_status_line(&self, frame: &mut Frame, area: Rect) {
-        let line = if self.message.is_empty() {
-            Line::styled(self.hints(), Style::default().fg(ui::DIM))
+        // A popup takes every key and lists its own on its border.
+        if !matches!(self.modal, Modal::None) {
+            return;
+        }
+        // A column of margin at each end, which also lines the text up with
+        // the text inside the panes' borders.
+        let area = Rect { x: area.x + 1, width: area.width.saturating_sub(2), ..area };
+        let dim = Style::default().fg(ui::DIM);
+        let mut spans = if self.message.is_empty() {
+            vec![Span::styled(self.hints(), dim)]
         } else {
-            Line::styled(self.message.as_str(), Style::default().fg(Color::Yellow))
+            vec![Span::styled(self.message.as_str(), Style::default().fg(Color::Yellow))]
         };
-        frame.render_widget(line, area);
+        // The keys that work everywhere follow, set apart from the pane's own.
+        // While typing a branch search, ? and q are typed into it instead.
+        if !(self.focus == Focus::Branches && self.branches.is_typing()) {
+            if !spans[0].content.is_empty() {
+                spans.push(Span::styled("   │   ", dim));
+            }
+            spans.push(Span::styled(GLOBAL_HINTS, dim));
+        }
+        frame.render_widget(Line::from(spans), area);
     }
 
-    fn hints(&self) -> &'static str {
+    /// The keys that do something right now in the focused pane, so the line
+    /// only lists what applies.
+    fn hints(&self) -> String {
+        let mut hints: Vec<&str> = Vec::new();
+        // What esc does in the focused pane, unless an open diff takes it.
+        let mut esc = None;
         match self.focus {
-            Focus::Branches => "enter check out · space remotes · i search · esc clear search · h/l panes · ? help · q quit",
-            Focus::Changes => "space stage · enter diff, again to enter it · d restore · c commit · h/l panes · ? help · q quit",
-            Focus::Graph if self.graph.is_on_file() => "enter diff, again to enter it · esc collapse · j/k move · i details · y copy sha · ? help",
-            Focus::Graph => "enter expand · i details · y copy sha · b choose branches · h/l panes · ? help · q quit",
-            Focus::Compare => "enter diff, again to enter it · r swap A and B · esc close · h/l panes · ? help · q quit",
-            Focus::Diff => "j/k scroll · h/l sideways · ctrl-d/u page · n/p hunk · z zoom · esc back · ? help",
+            Focus::Branches if self.branches.is_typing() => {
+                // Every other key is typed into the search, ? and q included.
+                return "type to filter · enter check out · esc stop typing".to_string();
+            }
+            Focus::Branches => {
+                hints.extend(["enter check out", "space remotes", "i search"]);
+                if self.branches.is_searching() {
+                    esc = Some("esc clear search");
+                }
+            }
+            Focus::Changes => {
+                let source = self.staging.selected_source();
+                match &source {
+                    Some(DiffSource::Staged(_)) => hints.push("space unstage"),
+                    Some(_) => hints.push("space stage"),
+                    None => {}
+                }
+                if source.is_some() {
+                    hints.push("a/A stage/unstage all");
+                }
+                hints.extend(self.enter_diff_hint(source.clone()));
+                if matches!(source, Some(DiffSource::Unstaged(_) | DiffSource::Untracked(_))) {
+                    hints.push("d restore");
+                }
+                if self.staging.has_staged() {
+                    hints.push("c commit");
+                }
+            }
+            Focus::Graph if self.graph.is_on_file() => {
+                hints.extend(self.enter_diff_hint(self.graph.selected_file_source()));
+                hints.extend(["i details", "y copy sha"]);
+                esc = Some("esc collapse");
+            }
+            Focus::Graph => {
+                let expanded = self.graph.is_selected_expanded();
+                hints.push(if expanded { "enter collapse" } else { "enter expand" });
+                hints.extend(["i details", "y copy sha", "b choose branches"]);
+                if expanded {
+                    esc = Some("esc collapse");
+                } else if self.graph.has_expanded() {
+                    esc = Some("esc collapse all");
+                }
+            }
+            Focus::Compare => {
+                let source = self.compare.as_ref().and_then(|compare| compare.selected_source());
+                hints.extend(self.enter_diff_hint(source));
+                hints.push("r swap A and B");
+                esc = Some("esc close compare");
+            }
+            Focus::Diff => {
+                hints.extend(["j/k scroll", "h/l sideways", "ctrl-d/u page", "n/p hunk"]);
+                hints.push(if self.zoomed { "z unzoom" } else { "z zoom" });
+                esc = Some("esc back");
+            }
         }
+        if self.diff.is_some() && self.focus != Focus::Diff {
+            esc = Some("esc close diff");
+        }
+        hints.extend(esc);
+        hints.join(" · ")
+    }
+
+    /// Enter on a file shows its diff, or moves into the diff if it's showing.
+    fn enter_diff_hint(&self, source: Option<DiffSource>) -> Option<&'static str> {
+        let source = source?;
+        let showing = self.diff.as_ref().is_some_and(|diff| diff.source == source);
+        Some(if showing { "enter focus diff" } else { "enter diff" })
     }
 
     fn render_modal(&mut self, frame: &mut Frame) {
@@ -656,12 +759,13 @@ impl App {
             Modal::Details(popup) => popup.render(frame, area),
             Modal::Confirm(confirm) => {
                 let text = match confirm {
-                    Confirm::Restore(path) => format!("Discard your changes to {path}?"),
-                    Confirm::DeleteUntracked(path) => {
-                        format!("{path} is untracked. Permanently delete it?")
+                    Confirm::Restore(path) => {
+                        format!("Discard your changes to {path}?\n\nenter = discard · esc = cancel")
                     }
+                    Confirm::DeleteUntracked(path) => format!(
+                        "{path} is untracked. Permanently delete it?\n\nenter = delete · esc = cancel"
+                    ),
                 };
-                let text = format!("{text}\n\ny = yes · any other key = cancel");
                 render_popup(frame, area, " Confirm ", text, (56, 7), Color::Yellow);
             }
             Modal::ConfirmQuit => {
@@ -685,6 +789,20 @@ impl App {
             }
         }
     }
+}
+
+/// Writes `[key]` on a pane's top border, right after its title.
+fn mark_key(frame: &mut Frame, pane: Rect, title: &str, key: &str) {
+    // The trailing space keeps it apart from the border line, like the title.
+    let label = format!("[{key}] ");
+    // One column for the corner, and one more to leave before the other corner.
+    let start = 1 + title.chars().count() as u16;
+    let width = label.len() as u16;
+    if pane.height == 0 || start + width + 1 > pane.width {
+        return;
+    }
+    let area = Rect { x: pane.x + start, y: pane.y, width, height: 1 };
+    frame.render_widget(Line::styled(label, Style::default().fg(Color::Gray)), area);
 }
 
 fn render_popup(

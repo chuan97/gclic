@@ -11,6 +11,9 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::Line;
 
+/// Also read by the app, which writes key marks right after it.
+pub const TITLE: &str = " Changes ";
+
 #[derive(Clone, Copy, PartialEq)]
 enum Section {
     Staged,
@@ -27,6 +30,10 @@ pub struct StagingPanel {
 impl StagingPanel {
     pub fn new() -> StagingPanel {
         StagingPanel { status: Status::default(), selected: 0, scroll: 0 }
+    }
+
+    pub fn has_staged(&self) -> bool {
+        !self.status.staged.is_empty()
     }
 
     fn total(&self) -> usize {
@@ -154,7 +161,7 @@ impl StagingPanel {
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
         let staged = self.status.staged.len();
-        let block = ui::panel(" Changes ".to_string(), focused);
+        let block = ui::panel(TITLE.to_string(), focused);
         let inner = block.inner(area);
         frame.render_widget(block, area);
 

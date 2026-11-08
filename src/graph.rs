@@ -13,6 +13,9 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use std::collections::HashMap;
 
+/// Also read by the app, which writes key marks right after it.
+pub const TITLE: &str = " Graph ";
+
 const COMMIT_LIMIT: usize = 500;
 /// The number of refs that fit in the bitmask `reach_masks` builds.
 const MAX_MASK_BITS: usize = 64;
@@ -362,6 +365,14 @@ impl GraphPanel {
         self.selected_file.is_some()
     }
 
+    pub fn is_selected_expanded(&self) -> bool {
+        self.expanded_at(self.selected).is_some()
+    }
+
+    pub fn has_expanded(&self) -> bool {
+        !self.expanded.is_empty()
+    }
+
     /// The drop-down of the commit at `index`, if it is open.
     fn expanded_at(&self, index: usize) -> Option<&Expanded> {
         let sha = &self.commits.get(index)?.sha;
@@ -511,7 +522,7 @@ impl GraphPanel {
             .and_then(|expanded| expanded.files.len().checked_sub(1));
     }
 
-    fn selected_file_source(&self) -> Option<DiffSource> {
+    pub fn selected_file_source(&self) -> Option<DiffSource> {
         let expanded = self.expanded_at(self.selected)?;
         let file = expanded.files.get(self.selected_file?)?;
         Some(DiffSource::Commit { sha: expanded.sha.clone(), path: file.path.clone() })
@@ -539,7 +550,7 @@ impl GraphPanel {
     }
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
-        let block = ui::panel(" Graph ".to_string(), focused);
+        let block = ui::panel(TITLE.to_string(), focused);
         let inner = block.inner(area);
         frame.render_widget(block, area);
 

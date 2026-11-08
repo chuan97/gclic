@@ -2,7 +2,7 @@
 
 use crate::app::Action;
 use crate::file_list::FileList;
-use crate::git;
+use crate::git::{self, DiffSource};
 use crate::ui;
 use anyhow::Result;
 use ratatui::Frame;
@@ -46,6 +46,10 @@ impl ComparePanel {
             Some(source) => Action::PreviewDiff(source),
             None => Action::None,
         }
+    }
+
+    pub fn selected_source(&self) -> Option<DiffSource> {
+        self.files.selected_source()
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Action {

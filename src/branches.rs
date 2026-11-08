@@ -11,6 +11,9 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 
+/// Also read by the app, which writes key marks right after it.
+pub const TITLE: &str = " Branches ";
+
 /// A remote's copy of a local branch, for the drop-down.
 struct RemoteRow {
     name: String,
@@ -73,6 +76,11 @@ impl BranchesPanel {
 
     pub fn is_typing(&self) -> bool {
         self.picker.is_typing()
+    }
+
+    /// Whether a search is filtering the list, typed or not.
+    pub fn is_searching(&self) -> bool {
+        self.picker.is_searching()
     }
 
     pub fn refresh(&mut self) -> Result<()> {
@@ -171,7 +179,7 @@ impl BranchesPanel {
     }
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
-        let block = ui::panel(" Branches ".to_string(), focused);
+        let block = ui::panel(TITLE.to_string(), focused);
         let mut list = block.inner(area);
         frame.render_widget(block, area);
 
