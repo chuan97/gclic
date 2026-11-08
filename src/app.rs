@@ -51,6 +51,7 @@ Changes
 
 Graph
   Enter      expand commit or open file diff
+  n/N        next/previous commit, skipping open commits' files
   b          choose which branches to show
   Esc        collapse              y   copy sha
   i          commit details: j/k g/G scroll, y copy sha, i/Esc close
@@ -60,7 +61,7 @@ Compare
 
 Diff
   j/k g/G    move the active line, which the view keeps centred
-  Ctrl-d/u   half page             n/p  next/previous hunk
+  Ctrl-d/u   half page             n/N  next/previous hunk
   h/l        scroll sideways
 
 Picker
@@ -726,6 +727,7 @@ impl App {
             }
             Focus::Graph if self.graph.is_on_file() => {
                 hints.extend(self.enter_diff_hint(self.graph.selected_file_source()));
+                hints.push("n/N commit");
                 hints.extend(["i details", "y copy sha"]);
                 esc = Some("esc collapse");
             }
@@ -733,6 +735,10 @@ impl App {
                 let expanded = self.graph.is_selected_expanded();
                 hints.push(if expanded { "enter collapse" } else { "enter expand" });
                 hints.extend(["i details", "y copy sha", "b choose branches"]);
+                // Only worth it when open commits' files are in the way.
+                if self.graph.has_expanded() {
+                    hints.push("n/N commit");
+                }
                 if expanded {
                     esc = Some("esc collapse");
                 } else if self.graph.has_expanded() {
@@ -746,7 +752,7 @@ impl App {
                 esc = Some("esc close compare");
             }
             Focus::Diff => {
-                hints.extend(["j/k move", "h/l sideways", "ctrl-d/u page", "n/p hunk"]);
+                hints.extend(["j/k move", "h/l sideways", "ctrl-d/u page", "n/N hunk"]);
                 hints.push(if self.zoomed { "z unzoom" } else { "z zoom" });
                 esc = Some("esc back");
             }

@@ -489,7 +489,7 @@ impl DiffPane {
                 let next = (self.active + 1..self.rows.len()).find(|&i| self.is_heading(i));
                 self.active = next.unwrap_or(self.active);
             }
-            KeyCode::Char('p') => {
+            KeyCode::Char('N') => {
                 let previous = (0..self.active).rev().find(|&i| self.is_heading(i));
                 self.active = previous.unwrap_or(self.active);
             }

@@ -464,6 +464,8 @@ impl GraphPanel {
             KeyCode::Char('k') | KeyCode::Up => self.move_up(),
             KeyCode::Char('g') => self.select_commit(0),
             KeyCode::Char('G') => self.select_commit(last),
+            KeyCode::Char('n') => self.next_commit(),
+            KeyCode::Char('N') => self.previous_commit(),
             KeyCode::Enter => return self.open_selection(sha),
             KeyCode::Esc => {
                 self.collapse();
@@ -508,6 +510,22 @@ impl GraphPanel {
             }
         }
         self.select_commit(ui::next_index(self.selected, self.commits.len()));
+    }
+
+    /// Jumps to the next commit, past the files of an expanded one.
+    fn next_commit(&mut self) {
+        self.select_commit(ui::next_index(self.selected, self.commits.len()));
+    }
+
+    /// Jumps to the previous commit, past the files of an expanded one. From
+    /// one of a commit's files, goes back up to the commit first, like going
+    /// to the start of a hunk.
+    fn previous_commit(&mut self) {
+        if self.selected_file.is_some() {
+            self.selected_file = None;
+        } else {
+            self.select_commit(ui::previous_index(self.selected, self.commits.len()));
+        }
     }
 
     /// The mirror of `move_down`: into the files of an expanded commit from below.
@@ -971,6 +989,36 @@ mod tests {
         assert_eq!((panel.selected, panel.selected_file), (1, Some(0)));
         panel.move_down();
         assert_eq!((panel.selected, panel.selected_file), (2, None));
+    }
+
+    #[test]
+    fn n_and_shift_n_skip_over_the_files_of_open_commits() {
+        let mut panel = panel_with_expanded(&["a", "b", "c"], &["a", "b"], &["x", "y"]);
+        panel.next_commit();
+        assert_eq!((panel.selected, panel.selected_file), (1, None));
+        panel.next_commit();
+        assert_eq!((panel.selected, panel.selected_file), (2, None));
+        panel.previous_commit();
+        assert_eq!((panel.selected, panel.selected_file), (1, None));
+    }
+
+    #[test]
+    fn shift_n_on_a_file_goes_back_to_its_commit() {
+        let mut panel = panel_with_expanded(&["a", "b"], &["b"], &["x", "y"]);
+        panel.selected = 1;
+        panel.selected_file = Some(1);
+        panel.previous_commit();
+        assert_eq!((panel.selected, panel.selected_file), (1, None));
+        panel.previous_commit();
+        assert_eq!((panel.selected, panel.selected_file), (0, None));
+    }
+
+    #[test]
+    fn n_on_a_file_goes_to_the_next_commit() {
+        let mut panel = panel_with_expanded(&["a", "b"], &["a"], &["x", "y"]);
+        panel.selected_file = Some(0);
+        panel.next_commit();
+        assert_eq!((panel.selected, panel.selected_file), (1, None));
     }
 
     #[test]
