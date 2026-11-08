@@ -6,6 +6,7 @@ mod diff;
 mod file_list;
 mod git;
 mod graph;
+mod help;
 mod highlight;
 mod picker;
 mod staging;

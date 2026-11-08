@@ -7,6 +7,7 @@ use crate::details::DetailsPane;
 use crate::diff::{ColorCache, DiffPane, Row};
 use crate::git::{self, CommitDetails, DiffSource};
 use crate::graph::GraphPanel;
+use crate::help::HelpPopup;
 use crate::picker::{Outcome, Picker};
 use crate::staging::StagingPanel;
 use crate::ui;
@@ -35,47 +36,6 @@ const DIFF_PERCENT: u16 = 80;
 const BRANCHES_MAX_PERCENT: u16 = 40;
 const CHANGES_MAX_PERCENT: u16 = 30;
 const CHANGES_FOCUSED_MAX_PERCENT: u16 = 50;
-
-const HELP: &str = "\
-Anywhere
-  h/l        previous/next pane    C   compare two refs
-  ?          this help
-  z          zoom diff             q   quit
-  o          open the file in Zed, at the diff's active line
-  j/k g/G    move                  Enter  open
-  Enter      on a file: show its diff, then again to move into it
-  Esc        leave the diff or details, then again to close them
-
-Branches
-  Enter      check out             i   start typing to filter
-  Space      show a branch's remotes
-
-Changes
-  Space/s    stage or unstage      a/A  stage/unstage all
-  d          restore file          c    commit staged
-
-Graph
-  Enter      expand commit or open file diff
-  n/N        next/previous commit, skipping open commits' files
-  b          choose which branches to show
-  Esc        collapse              y   copy sha
-  i          show the commit's details, then again to move into them.
-             They follow the selected commit, and its files keep them.
-
-Compare
-  r          swap A and B, also from its diff
-
-Diff
-  j/k g/G    move the active line, which the view keeps centred
-  Ctrl-d/u   half page             n/N  next/previous hunk
-  h/l        scroll sideways
-
-Picker
-  j/k g/G    move                  i   start typing to filter
-  Esc        stop typing, or close
-  Space      tick (multi-select)   a/A  tick/untick all shown
-  Enter      confirm (nothing ticked means the default view)
-  p          paste a ref from the clipboard, when comparing";
 
 /// What a panel wants the app to do after handling a key.
 pub enum Action {
@@ -139,7 +99,7 @@ enum Modal {
     CommitBox,
     ConfirmQuit,
     Error(String),
-    Help,
+    Help(HelpPopup),
 }
 
 pub struct App {
@@ -459,8 +419,13 @@ impl App {
                 KeyCode::Esc => {}
                 _ => self.modal = Modal::ConfirmQuit,
             },
-            // Any key dismisses these.
-            Modal::Error(_) | Modal::Help => {}
+            Modal::Help(mut help) => {
+                if help.handle_key(key) {
+                    self.modal = Modal::Help(help);
+                }
+            }
+            // Any key dismisses it.
+            Modal::Error(_) => {}
         }
         // The cursor may have moved, so the diffs one key away may have changed.
         self.request_colors();
@@ -478,7 +443,7 @@ impl App {
             // Inside the preview, h and l are its own: a diff scrolls sideways.
             KeyCode::Char('h') if self.focus != Focus::Preview => self.move_focus(false),
             KeyCode::Char('l') if self.focus != Focus::Preview => self.move_focus(true),
-            KeyCode::Char('?') => self.modal = Modal::Help,
+            KeyCode::Char('?') => self.modal = Modal::Help(HelpPopup::new(self.help_section())),
             KeyCode::Char('o') => self.open_in_editor(),
             KeyCode::Char('r') if self.compare.is_some() => self.swap_compare(),
             KeyCode::Char('C') => self.open_compare_picker(),
@@ -958,6 +923,18 @@ impl App {
         }
     }
 
+    /// The help section for where the user is, which help marks.
+    fn help_section(&self) -> &'static str {
+        match self.focus {
+            Focus::Branches => "Branches",
+            Focus::Changes => "Changes",
+            Focus::Graph => "Graph",
+            Focus::Compare => "Compare",
+            Focus::Preview if self.diff.is_some() => "Diff",
+            Focus::Preview => "Commit details",
+        }
+    }
+
     /// i shows the selected commit's details, or moves into them if they show.
     fn details_hint(&self) -> &'static str {
         let showing = self.details.as_ref().map(|details| details.sha());
@@ -1042,11 +1019,7 @@ impl App {
                 let title = " Git error: any key closes ";
                 render_popup(frame, area, title, error.clone(), (72, height), Color::Red);
             }
-            Modal::Help => {
-                let height = HELP.lines().count() as u16 + 2;
-                let title = " Help: any key closes ";
-                render_popup(frame, area, title, HELP.to_string(), (68, height), Color::Cyan);
-            }
+            Modal::Help(help) => help.render(frame, area),
         }
     }
 }
