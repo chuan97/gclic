@@ -151,10 +151,11 @@ fn commit_glyphs(
     // of the nearest one, and every line shows up to where it ends.
     sideways.sort_by_key(|(lane, _)| std::cmp::Reverse(lane.abs_diff(column)));
     for &(lane, commit) in &sideways {
-        for x in lane.min(column) * 2..=lane.max(column) * 2 {
-            glyphs[x].commit = commit;
+        let (from, to) = (lane.min(column) * 2, lane.max(column) * 2);
+        for (x, glyph) in glyphs.iter_mut().enumerate().take(to + 1).skip(from) {
+            glyph.commit = commit;
             if x % 2 == 1 {
-                glyphs[x].ch = '─';
+                glyph.ch = '─';
             }
         }
     }

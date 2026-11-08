@@ -22,6 +22,13 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 const AUTO_REFRESH: Duration = Duration::from_millis(500);
+/// The diff's share of the width, focused or not. Zooming gives it all of it.
+const DIFF_PERCENT: u16 = 80;
+/// The most of the left column's height that Branches and Changes can take,
+/// as percentages, so that the graph always keeps a good part of it.
+const BRANCHES_MAX_PERCENT: u16 = 40;
+const CHANGES_MAX_PERCENT: u16 = 30;
+const CHANGES_FOCUSED_MAX_PERCENT: u16 = 50;
 
 const HELP: &str = "\
 Anywhere
@@ -29,7 +36,8 @@ Anywhere
   ?          this help
   z          zoom diff             q   quit
   j/k g/G    move                  Enter  open
-  Esc        close the diff, or go back
+  Enter      on a file: show its diff, then again to move into it
+  Esc        leave the diff, then again to close it
 
 Branches
   Enter      check out             i   start typing to filter
@@ -50,6 +58,7 @@ Compare
 
 Diff
   Ctrl-d/u   half page             n/p  next/previous hunk
+  h/l        scroll sideways
 
 Picker
   j/k g/G    move                  i   start typing to filter
@@ -61,7 +70,8 @@ Picker
 /// What a panel wants the app to do after handling a key.
 pub enum Action {
     None,
-    /// Show this diff, opening the pane if needed.
+    /// Show this diff, opening the pane if needed. If it's already showing,
+    /// move into it.
     OpenDiff(DiffSource),
     /// The selection moved: update the diff, but only if one is already open.
     PreviewDiff(DiffSource),
@@ -285,8 +295,9 @@ impl App {
                 self.send_to_focused_panel(key);
             }
             KeyCode::Char('q') => self.modal = Modal::ConfirmQuit,
-            KeyCode::Char('h') => self.move_focus(false),
-            KeyCode::Char('l') => self.move_focus(true),
+            // Inside the diff, h and l scroll it sideways.
+            KeyCode::Char('h') if self.focus != Focus::Diff => self.move_focus(false),
+            KeyCode::Char('l') if self.focus != Focus::Diff => self.move_focus(true),
             KeyCode::Char('?') => self.modal = Modal::Help,
             KeyCode::Char('r') if self.compare.is_some() => self.swap_compare(),
             KeyCode::Char('C') => self.open_compare_picker(),
@@ -306,6 +317,9 @@ impl App {
             Focus::Diff => {
                 self.zoomed = false;
                 self.focus = self.last_left_focus;
+                if let Some(diff) = &mut self.diff {
+                    diff.reset_shift();
+                }
             }
             _ if self.diff.is_some() => self.diff = None,
             _ => self.send_to_focused_panel(KeyEvent::from(KeyCode::Esc)),
@@ -334,7 +348,13 @@ impl App {
     fn apply(&mut self, action: Action) {
         match action {
             Action::None => {}
-            Action::OpenDiff(source) => self.show_diff(source),
+            Action::OpenDiff(source) => {
+                if self.diff.as_ref().is_some_and(|diff| diff.source == source) {
+                    self.focus_diff();
+                } else {
+                    self.show_diff(source);
+                }
+            }
             Action::PreviewDiff(source) => {
                 if self.diff.is_some() {
                     self.show_diff(source);
@@ -370,25 +390,21 @@ impl App {
         }
     }
 
-    /// Steps along the panes from left to right, wrapping around at the ends.
+    /// Steps along the left-hand panes, wrapping around at the ends. The diff
+    /// isn't one of them: Enter goes into it and Esc comes back.
     fn move_focus(&mut self, forward: bool) {
-        let mut order = if self.compare.is_some() {
+        let order = if self.compare.is_some() {
             vec![Focus::Compare]
         } else {
             vec![Focus::Branches, Focus::Changes, Focus::Graph]
         };
-        if self.diff.is_some() {
-            order.push(Focus::Diff);
-        }
         let current = order.iter().position(|f| *f == self.focus).unwrap_or(0);
         let next = if forward {
             ui::next_index(current, order.len())
         } else {
             ui::previous_index(current, order.len())
         };
-        if order[next] == Focus::Diff {
-            self.focus_diff();
-        } else if next != current {
+        if next != current {
             self.focus_left(order[next]);
         }
     }
@@ -563,9 +579,11 @@ impl App {
             (false, _) => self.render_left(frame, main),
             (true, true) => self.render_diff(frame, main),
             (true, false) => {
-                let [left, right] =
-                    Layout::horizontal([Constraint::Percentage(40), Constraint::Percentage(60)])
-                        .areas(main);
+                let [left, right] = Layout::horizontal([
+                    Constraint::Percentage(100 - DIFF_PERCENT),
+                    Constraint::Percentage(DIFF_PERCENT),
+                ])
+                .areas(main);
                 self.render_left(frame, left);
                 self.render_diff(frame, right);
             }
@@ -579,10 +597,23 @@ impl App {
             compare.render(frame, area, self.focus == Focus::Compare);
             return;
         }
+        // Branches and Changes take the rows they ask for, up to a share of the
+        // height, and the graph gets the rest. Borders add two rows to each.
+        let fit = |rows: u16, max_percent: u16| (rows + 2).min(area.height * max_percent / 100).max(3);
+        let branches_height = fit(
+            self.branches.wanted_height(self.focus == Focus::Branches),
+            BRANCHES_MAX_PERCENT,
+        );
+        let changes_max = if self.focus == Focus::Changes {
+            CHANGES_FOCUSED_MAX_PERCENT
+        } else {
+            CHANGES_MAX_PERCENT
+        };
+        let changes_height = fit(self.staging.wanted_height(), changes_max);
         let [branches, changes, graph] = Layout::vertical([
-            Constraint::Percentage(20),
-            Constraint::Percentage(30),
-            Constraint::Percentage(50),
+            Constraint::Length(branches_height),
+            Constraint::Length(changes_height),
+            Constraint::Min(0),
         ])
         .areas(area);
         self.branches.render(frame, branches, self.focus == Focus::Branches);
@@ -609,11 +640,11 @@ impl App {
     fn hints(&self) -> &'static str {
         match self.focus {
             Focus::Branches => "enter check out · space remotes · i search · esc clear search · h/l panes · ? help · q quit",
-            Focus::Changes => "space stage · enter diff · d restore · c commit · h/l panes · ? help · q quit",
-            Focus::Graph if self.graph.is_on_file() => "enter diff · esc collapse · j/k move · i details · y copy sha · ? help",
+            Focus::Changes => "space stage · enter diff, again to enter it · d restore · c commit · h/l panes · ? help · q quit",
+            Focus::Graph if self.graph.is_on_file() => "enter diff, again to enter it · esc collapse · j/k move · i details · y copy sha · ? help",
             Focus::Graph => "enter expand · i details · y copy sha · b choose branches · h/l panes · ? help · q quit",
-            Focus::Compare => "enter diff · r swap A and B · esc close · h/l panes · ? help · q quit",
-            Focus::Diff => "j/k scroll · ctrl-d/u page · n/p hunk · z zoom · h panes · esc back · ? help",
+            Focus::Compare => "enter diff, again to enter it · r swap A and B · esc close · h/l panes · ? help · q quit",
+            Focus::Diff => "j/k scroll · h/l sideways · ctrl-d/u page · n/p hunk · z zoom · esc back · ? help",
         }
     }
 

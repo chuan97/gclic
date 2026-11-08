@@ -160,10 +160,29 @@ impl BranchesPanel {
         Action::after_change(result)
     }
 
+    /// The rows it asks for: the checked-out branch alone while unfocused,
+    /// the whole list while focused.
+    pub fn wanted_height(&self, focused: bool) -> u16 {
+        if !focused {
+            return 1;
+        }
+        let search = usize::from(self.picker.is_searching());
+        (self.list_lines(true).0.len().max(1) + search) as u16
+    }
+
     pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
         let block = ui::panel(" Branches ".to_string(), focused);
         let mut list = block.inner(area);
         frame.render_widget(block, area);
+
+        if !focused {
+            let line = match &self.current {
+                Some(name) => self.branch_line(name, false),
+                None => Line::styled("detached HEAD", Style::default().fg(ui::DIM)),
+            };
+            frame.render_widget(line, list);
+            return;
+        }
 
         // The search line only takes up room while it's in use.
         if self.picker.is_searching() && list.height > 0 {

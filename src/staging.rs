@@ -143,11 +143,26 @@ impl StagingPanel {
         }
     }
 
+    /// The rows it asks for: both lists with their headings, or one line if
+    /// there's nothing to show.
+    pub fn wanted_height(&self) -> u16 {
+        match self.total() {
+            0 => 1,
+            files => (files + 2) as u16,
+        }
+    }
+
     pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
         let staged = self.status.staged.len();
         let block = ui::panel(" Changes ".to_string(), focused);
         let inner = block.inner(area);
         frame.render_widget(block, area);
+
+        if self.total() == 0 {
+            let note = Line::styled("No changes", Style::default().fg(ui::DIM));
+            frame.render_widget(note, inner);
+            return;
+        }
 
         let heading = Style::default().fg(ui::DIM).add_modifier(Modifier::BOLD);
         let mut lines = vec![Line::styled(format!("Staged ({staged})"), heading)];

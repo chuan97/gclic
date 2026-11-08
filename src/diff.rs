@@ -20,6 +20,10 @@ const FILLER_BG: Color = Color::Indexed(235);
 const MIN_SIMILARITY: f32 = 0.3;
 /// Comparing two lines costs tokens x tokens, so very long ones are skipped.
 const MAX_TOKEN_PAIRS: usize = 250_000;
+/// Columns moved by one sideways scroll.
+const SIDE_STEP: usize = 4;
+/// The line number in front of each side's text, as drawn by `side_line`.
+const GUTTER_WIDTH: usize = 5;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Cell {
@@ -210,12 +214,25 @@ pub struct DiffPane {
     rows: Vec<Row>,
     scroll: usize,
     height: usize,
+    /// How many characters each side's text is scrolled to the left.
+    shift: usize,
+    /// Room for text on each side, past the line numbers.
+    text_width: usize,
+}
+
+/// The length, in characters, of the longest line on either side.
+fn longest_line(rows: &[Row]) -> usize {
+    let cells = rows.iter().flat_map(|row| match row {
+        Row::Lines { left, right } => [left.as_ref(), right.as_ref()],
+        Row::Heading(_) => [None, None],
+    });
+    cells.flatten().map(|cell| cell.text.chars().count()).max().unwrap_or(0)
 }
 
 impl DiffPane {
     pub fn load(source: DiffSource) -> Result<DiffPane> {
         let rows = parse_diff(&git::diff(&source)?);
-        Ok(DiffPane { source, rows, scroll: 0, height: 0 })
+        Ok(DiffPane { source, rows, scroll: 0, height: 0, shift: 0, text_width: 0 })
     }
 
     /// Fetches the diff again, for files that changed while it was on screen.
@@ -223,6 +240,17 @@ impl DiffPane {
         self.rows = parse_diff(&git::diff(&self.source)?);
         self.scroll = self.scroll.min(self.rows.len().saturating_sub(1));
         Ok(())
+    }
+
+    /// Back to the start of the lines, for when the diff loses focus, as h and l
+    /// stop scrolling it then.
+    pub fn reset_shift(&mut self) {
+        self.shift = 0;
+    }
+
+    /// The furthest sideways scroll that still shows the end of the longest line.
+    fn max_shift(&self) -> usize {
+        longest_line(&self.rows).saturating_sub(self.text_width)
     }
 
     fn title(&self) -> String {
@@ -251,6 +279,10 @@ impl DiffPane {
             }
             KeyCode::Char('g') => self.scroll = 0,
             KeyCode::Char('G') => self.scroll = last,
+            KeyCode::Char('h') | KeyCode::Left => self.shift = self.shift.saturating_sub(SIDE_STEP),
+            KeyCode::Char('l') | KeyCode::Right => {
+                self.shift = (self.shift + SIDE_STEP).min(self.max_shift());
+            }
             KeyCode::Char('n') => {
                 let next = (self.scroll + 1..self.rows.len()).find(|&i| self.is_heading(i));
                 self.scroll = next.unwrap_or(self.scroll);
@@ -280,6 +312,10 @@ impl DiffPane {
         }
 
         let column_width = inner.width.saturating_sub(1) / 2;
+        // Both sides get the same room, as the right one only gains a spare column.
+        self.text_width = (column_width as usize).saturating_sub(GUTTER_WIDTH);
+        // The pane may have widened since the last scroll.
+        self.shift = self.shift.min(self.max_shift());
         let visible = self.rows.iter().skip(self.scroll).take(self.height);
         for (i, row) in visible.enumerate() {
             let y = inner.y + i as u16;
@@ -297,28 +333,43 @@ impl DiffPane {
                         width: inner.width.saturating_sub(column_width + 1),
                         ..full
                     };
-                    frame.render_widget(side_line(left.as_ref(), REMOVED_BG, REMOVED_WORD_BG), left_area);
+                    let left = side_line(left.as_ref(), self.shift, REMOVED_BG, REMOVED_WORD_BG);
+                    let right = side_line(right.as_ref(), self.shift, ADDED_BG, ADDED_WORD_BG);
+                    frame.render_widget(left, left_area);
                     frame.render_widget(Line::styled("│", Style::default().fg(ui::DIM)), separator);
-                    frame.render_widget(side_line(right.as_ref(), ADDED_BG, ADDED_WORD_BG), right_area);
+                    frame.render_widget(right, right_area);
                 }
             }
         }
     }
 }
 
-fn side_line(cell: Option<&Cell>, changed_bg: Color, word_bg: Color) -> Line<'_> {
+/// One side of a row, with its text scrolled `shift` characters to the left.
+/// The line number stays put.
+fn side_line(cell: Option<&Cell>, shift: usize, changed_bg: Color, word_bg: Color) -> Line<'_> {
     let Some(cell) = cell else {
         return Line::default().style(Style::default().bg(FILLER_BG));
     };
     let gutter = Span::styled(format!("{:>4} ", cell.number), Style::default().fg(ui::DIM));
     let mut spans = vec![gutter];
+
+    // The text as plain and marked pieces, cut where the visible part starts.
+    let text = &cell.text;
+    let start = text.char_indices().nth(shift).map_or(text.len(), |(i, _)| i);
+    let mut pieces = Vec::new();
     let mut position = 0;
     for mark in &cell.marks {
-        spans.push(Span::raw(&cell.text[position..mark.start]));
-        spans.push(Span::styled(&cell.text[mark.clone()], Style::default().bg(word_bg)));
+        pieces.push((position..mark.start, Style::default()));
+        pieces.push((mark.clone(), Style::default().bg(word_bg)));
         position = mark.end;
     }
-    spans.push(Span::raw(&cell.text[position..]));
+    pieces.push((position..text.len(), Style::default()));
+    for (range, style) in pieces {
+        let visible = range.start.max(start)..range.end;
+        if !visible.is_empty() {
+            spans.push(Span::styled(&text[visible], style));
+        }
+    }
     let line = Line::from(spans);
     if cell.changed {
         line.style(Style::default().bg(changed_bg))
@@ -345,7 +396,41 @@ mod tests {
             rows: vec![Row::Heading("x".to_string()); count],
             scroll: 0,
             height,
+            shift: 0,
+            text_width: 0,
         }
+    }
+
+    fn text_of(line: &Line) -> String {
+        line.spans.iter().map(|span| span.content.as_ref()).collect()
+    }
+
+    #[test]
+    fn scrolling_sideways_keeps_the_line_number_and_the_marks() {
+        let cell = Cell { number: 7, text: "héllo wörld".to_string(), changed: true, marks: vec![7..13] };
+        let line = side_line(Some(&cell), 3, ADDED_BG, ADDED_WORD_BG);
+        assert_eq!(text_of(&line), "   7 lo wörld");
+        let marked = line.spans.iter().find(|span| span.style.bg == Some(ADDED_WORD_BG));
+        assert_eq!(marked.unwrap().content, "wörld");
+    }
+
+    #[test]
+    fn scrolling_past_a_short_line_leaves_only_its_number() {
+        let cell = Cell { number: 1, text: "ab".to_string(), changed: false, marks: Vec::new() };
+        assert_eq!(text_of(&side_line(Some(&cell), 10, ADDED_BG, ADDED_WORD_BG)), "   1 ");
+    }
+
+    #[test]
+    fn scrolling_sideways_stops_once_the_longest_line_ends() {
+        let mut pane = pane_with_rows(1, 10);
+        pane.rows = vec![Row::Lines { left: cell(1, &"x".repeat(10), false), right: None }];
+        pane.text_width = 4;
+        for _ in 0..5 {
+            pane.handle_key(KeyEvent::from(KeyCode::Char('l')));
+        }
+        assert_eq!(pane.shift, 6);
+        pane.handle_key(KeyEvent::from(KeyCode::Char('h')));
+        assert_eq!(pane.shift, 2);
     }
 
     #[test]
