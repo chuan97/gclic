@@ -20,6 +20,9 @@ const FILLER_BG: Color = Color::Indexed(235);
 const MIN_SIMILARITY: f32 = 0.3;
 /// Comparing two lines costs tokens x tokens, so very long ones are skipped.
 const MAX_TOKEN_PAIRS: usize = 250_000;
+/// Pairing lines compares every removed line with every added one, so bigger
+/// changes than this many comparisons are paired by position instead.
+const MAX_LINE_PAIRS: usize = 400;
 /// Columns moved by one sideways scroll.
 const SIDE_STEP: usize = 4;
 /// The line number in front of each side's text, as drawn by `side_line`.
@@ -92,20 +95,82 @@ fn changed_cell(number: usize, content: &str) -> Cell {
     Cell { number, text: clean(content), changed: true, marks: Vec::new() }
 }
 
-/// Pairs held-back lines row by row. The shorter side gets blank fillers.
+/// Lines up held-back lines, pairing each removed line with the added line it
+/// most resembles. Lines left between two pairs share rows as far as they go,
+/// and the shorter side gets blank fillers.
 fn flush_change(rows: &mut Vec<Row>, removed: &mut Vec<Cell>, added: &mut Vec<Cell>) {
+    let (total_left, total_right) = (removed.len(), added.len());
+    let pairs = pair_lines(removed, added);
     let mut left = removed.drain(..);
     let mut right = added.drain(..);
-    loop {
-        let (mut l, mut r) = (left.next(), right.next());
-        if l.is_none() && r.is_none() {
-            break;
+    let (mut next_left, mut next_right) = (0, 0);
+    // The last, made-up pair at the ends flushes the lines after the real ones.
+    for (i, j) in pairs.into_iter().chain([(total_left, total_right)]) {
+        for k in 0..(i - next_left).max(j - next_right) {
+            let l = if next_left + k < i { left.next() } else { None };
+            let r = if next_right + k < j { right.next() } else { None };
+            push_row(rows, l, r);
         }
-        if let (Some(l), Some(r)) = (&mut l, &mut r) {
-            (l.marks, r.marks) = word_marks(&l.text, &r.text);
+        if i < total_left {
+            push_row(rows, left.next(), right.next());
         }
-        rows.push(Row::Lines { left: l, right: r });
+        (next_left, next_right) = (i + 1, j + 1);
     }
+}
+
+fn push_row(rows: &mut Vec<Row>, mut left: Option<Cell>, mut right: Option<Cell>) {
+    if let (Some(l), Some(r)) = (&mut left, &mut right) {
+        (l.marks, r.marks) = word_marks(&l.text, &r.text);
+    }
+    rows.push(Row::Lines { left, right });
+}
+
+/// Which removed line goes with which added line, as index pairs. Each pair
+/// is similar enough to mark its changed words, both sides stay in order, and
+/// the pairs are the ones with the highest total similarity. So a line added
+/// above an edited one doesn't pair with it and shift every pair below.
+fn pair_lines(removed: &[Cell], added: &[Cell]) -> Vec<(usize, usize)> {
+    let (m, n) = (removed.len(), added.len());
+    if m * n > MAX_LINE_PAIRS {
+        return (0..m.min(n)).map(|i| (i, i)).collect();
+    }
+    let similar: Vec<Vec<Option<f32>>> = removed
+        .iter()
+        .map(|old| {
+            added
+                .iter()
+                .map(|new| Some(line_similarity(&old.text, &new.text)).filter(|s| *s >= MIN_SIMILARITY))
+                .collect()
+        })
+        .collect();
+
+    // best[i][j] is the highest total similarity pairing removed[i..] with added[j..].
+    let mut best = vec![vec![0.0f32; n + 1]; m + 1];
+    for i in (0..m).rev() {
+        for j in (0..n).rev() {
+            let skip = best[i + 1][j].max(best[i][j + 1]);
+            best[i][j] = match similar[i][j] {
+                Some(score) => skip.max(score + best[i + 1][j + 1]),
+                None => skip,
+            };
+        }
+    }
+
+    // Walks the choices that gave each best total, from the top.
+    let mut pairs = Vec::new();
+    let (mut i, mut j) = (0, 0);
+    while i < m && j < n {
+        if similar[i][j].is_some_and(|score| best[i][j] == score + best[i + 1][j + 1]) {
+            pairs.push((i, j));
+            i += 1;
+            j += 1;
+        } else if best[i][j] == best[i + 1][j] {
+            i += 1;
+        } else {
+            j += 1;
+        }
+    }
+    pairs
 }
 
 /// Splits a line into words and single other characters, as byte ranges.
@@ -124,12 +189,20 @@ fn tokenize(text: &str) -> Vec<Range<usize>> {
     tokens
 }
 
-/// Finds which words differ between two versions of a line, using a longest
-/// common subsequence over their tokens. Returns the marks for each side.
-fn word_marks(old: &str, new: &str) -> (Vec<Range<usize>>, Vec<Range<usize>>) {
+/// Two lines split into tokens, with which of them belong to the lines'
+/// longest common subsequence.
+struct TokenMatch {
+    old: Vec<Range<usize>>,
+    new: Vec<Range<usize>>,
+    old_in_common: Vec<bool>,
+    new_in_common: Vec<bool>,
+}
+
+/// None when the lines are too long to compare.
+fn match_tokens(old: &str, new: &str) -> Option<TokenMatch> {
     let (a, b) = (tokenize(old), tokenize(new));
     if a.len() * b.len() > MAX_TOKEN_PAIRS {
-        return (Vec::new(), Vec::new());
+        return None;
     }
     let same = |i: usize, j: usize| old[a[i].clone()] == new[b[j].clone()];
 
@@ -159,18 +232,41 @@ fn word_marks(old: &str, new: &str) -> (Vec<Range<usize>>, Vec<Range<usize>>) {
             j += 1;
         }
     }
+    Some(TokenMatch { old: a, new: b, old_in_common: in_common_a, new_in_common: in_common_b })
+}
 
-    // Whitespace doesn't count, or any two lines of code would look related.
+/// How much of two lines they share, from 0 to 1. Whitespace doesn't count,
+/// or any two lines of code would look related.
+fn similarity(old: &str, new: &str, matched: &TokenMatch) -> f32 {
     let visible = |text: &str| text.chars().filter(|ch| !ch.is_whitespace()).count();
-    let common: usize = (0..a.len())
-        .filter(|&i| in_common_a[i])
-        .map(|i| visible(&old[a[i].clone()]))
+    let common: usize = matched
+        .old
+        .iter()
+        .zip(&matched.old_in_common)
+        .filter(|(_, in_common)| **in_common)
+        .map(|(token, _)| visible(&old[token.clone()]))
         .sum();
     let total = visible(old) + visible(new);
-    if total > 0 && (2 * common) as f32 / (total as f32) < MIN_SIMILARITY {
+    if total == 0 { 1.0 } else { (2 * common) as f32 / total as f32 }
+}
+
+fn line_similarity(old: &str, new: &str) -> f32 {
+    match_tokens(old, new).map_or(0.0, |matched| similarity(old, new, &matched))
+}
+
+/// Finds which words differ between two versions of a line. Returns the marks
+/// for each side, or none if the lines have too little in common.
+fn word_marks(old: &str, new: &str) -> (Vec<Range<usize>>, Vec<Range<usize>>) {
+    let Some(matched) = match_tokens(old, new) else {
+        return (Vec::new(), Vec::new());
+    };
+    if similarity(old, new, &matched) < MIN_SIMILARITY {
         return (Vec::new(), Vec::new());
     }
-    (merged_marks(&a, &in_common_a), merged_marks(&b, &in_common_b))
+    (
+        merged_marks(&matched.old, &matched.old_in_common),
+        merged_marks(&matched.new, &matched.new_in_common),
+    )
 }
 
 /// The tokens not in common, with neighbours joined into one range.
@@ -449,6 +545,63 @@ mod tests {
         assert_eq!(pane.scroll, 0);
         pane.handle_key(KeyEvent::from(KeyCode::Char('k')));
         assert_eq!(pane.scroll, 0);
+    }
+
+    fn texts(rows: &[Row]) -> Vec<(Option<&str>, Option<&str>)> {
+        rows.iter()
+            .filter_map(|row| match row {
+                Row::Lines { left, right } => Some((
+                    left.as_ref().map(|c| c.text.as_str()),
+                    right.as_ref().map(|c| c.text.as_str()),
+                )),
+                Row::Heading(_) => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_line_added_above_an_edit_does_not_shift_the_pairing() {
+        let diff = "@@ -1,2 +1,3 @@\n-let total = count + 1;\n+log(\"start\");\n+let total = count + 2;\n print(total);";
+        let rows = parse_diff(diff);
+        assert_eq!(
+            texts(&rows),
+            [
+                (None, Some("log(\"start\");")),
+                (Some("let total = count + 1;"), Some("let total = count + 2;")),
+                (Some("print(total);"), Some("print(total);")),
+            ]
+        );
+        let Row::Lines { left: Some(left), right: Some(right) } = &rows[2] else { panic!() };
+        assert_eq!(marked(&left.text, &left.marks), ["1"]);
+        assert_eq!(marked(&right.text, &right.marks), ["2"]);
+    }
+
+    #[test]
+    fn unrelated_lines_still_share_a_row() {
+        let rows = parse_diff("@@ -1 +1 @@\n-completely different\n+nothing shared here");
+        assert_eq!(texts(&rows), [(Some("completely different"), Some("nothing shared here"))]);
+    }
+
+    #[test]
+    fn a_removed_line_between_edits_stands_alone() {
+        let diff = "@@ -1,3 +1,2 @@\n-let a = 1;\n-obsolete();\n-let b = 2;\n+let a = 10;\n+let b = 20;";
+        assert_eq!(
+            texts(&parse_diff(diff)),
+            [
+                (Some("let a = 1;"), Some("let a = 10;")),
+                (Some("obsolete();"), None),
+                (Some("let b = 2;"), Some("let b = 20;")),
+            ]
+        );
+    }
+
+    #[test]
+    fn big_changes_are_paired_by_position() {
+        let cells = |text: &str| -> Vec<Cell> {
+            (0..21).map(|i| changed_cell(i, &format!("{text} {i}"))).collect()
+        };
+        let pairs = pair_lines(&cells("old"), &cells("new"));
+        assert_eq!(pairs, (0..21).map(|i| (i, i)).collect::<Vec<_>>());
     }
 
     #[test]
