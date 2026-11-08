@@ -10,9 +10,10 @@ use syntect::highlighting::{Theme, ThemeSet};
 use syntect::parsing::{SyntaxReference, SyntaxSet};
 use syntect::util::LinesWithEndings;
 
-/// One of syntect's built-in themes. Dark, and readable on the red and green
-/// of changed lines. Only its text colours are used.
-const THEME: &str = "base16-ocean.dark";
+/// The colours of VS Code's default dark theme, Dark Modern, as Zed's
+/// "VSCode Dark Modern" theme has them, mapped onto TextMate scopes, which
+/// syntect's grammars use. Only its text colours are used.
+const THEME: &str = include_str!("../assets/vscode-dark-modern.tmTheme");
 
 /// A line of a file as the diff shows it, with tabs expanded, and the colour
 /// of each byte range of it.
@@ -30,7 +31,10 @@ fn syntaxes() -> &'static SyntaxSet {
 
 fn theme() -> &'static Theme {
     static THEME_LOADED: OnceLock<Theme> = OnceLock::new();
-    THEME_LOADED.get_or_init(|| ThemeSet::load_defaults().themes.remove(THEME).unwrap_or_default())
+    THEME_LOADED.get_or_init(|| {
+        let mut reader = std::io::Cursor::new(THEME);
+        ThemeSet::load_from_reader(&mut reader).unwrap_or_default()
+    })
 }
 
 /// The language of a file, from its extension, its whole name (for names like
@@ -89,6 +93,32 @@ mod tests {
         // A keyword and a comment get different colours.
         let color_at = |at: usize| lines[1].colors.iter().find(|(r, _)| r.contains(&at)).unwrap().1;
         assert_ne!(color_at(4), color_at(18));
+    }
+
+    /// The colour of the first piece of `line` whose text is `token`.
+    fn color_of(line: &ColoredLine, token: &str) -> Color {
+        let start = line.text.find(token).unwrap();
+        line.colors.iter().find(|(range, _)| range.contains(&start)).unwrap().1
+    }
+
+    #[test]
+    fn python_gets_vs_code_dark_modern_colours() {
+        let code = "import os\n@cache\nclass Point(Base):\n    def area(self, n=2):\n        return len(self.name)  # x\n";
+        let lines = highlight("x.py", code, 10);
+        let rgb = |hex: u32| Color::Rgb((hex >> 16) as u8, (hex >> 8) as u8, hex as u8);
+        assert_eq!(color_of(&lines[0], "import"), rgb(0xC586C0));
+        assert_eq!(color_of(&lines[0], "os"), rgb(0x9CDCFE));
+        assert_eq!(color_of(&lines[1], "@"), rgb(0xDCDCAA));
+        assert_eq!(color_of(&lines[2], "class"), rgb(0x569CD6));
+        assert_eq!(color_of(&lines[2], "Point"), rgb(0x4EC9B0));
+        assert_eq!(color_of(&lines[3], "area"), rgb(0xDCDCAA));
+        assert_eq!(color_of(&lines[3], "n="), rgb(0x9CDCFE));
+        assert_eq!(color_of(&lines[3], "2"), rgb(0xB5CEA8));
+        assert_eq!(color_of(&lines[4], "return"), rgb(0xC586C0));
+        assert_eq!(color_of(&lines[4], "len"), rgb(0xDCDCAA));
+        assert_eq!(color_of(&lines[4], "self"), rgb(0x569CD6));
+        assert_eq!(color_of(&lines[4], "name"), rgb(0x9CDCFE));
+        assert_eq!(color_of(&lines[4], "# x"), rgb(0x6A9955));
     }
 
     #[test]

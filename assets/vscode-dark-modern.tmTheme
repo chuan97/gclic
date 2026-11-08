@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>name</key>
+  <string>VSCode Dark Modern</string>
+  <key>settings</key>
+  <array>
+    <dict>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key><string>#CCCCCC</string>
+        <key>background</key><string>#1F1F1F</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key><string>Comments</string>
+      <key>scope</key><string>comment, punctuation.definition.comment</string>
+      <key>settings</key><dict><key>foreground</key><string>#6A9955</string></dict>
+    </dict>
+    <dict>
+      <key>name</key><string>Strings</string>
+      <key>scope</key><string>string, punctuation.definition.string</string>
+      <key>settings</key><dict><key>foreground</key><string>#CE9178</string></dict>
+    </dict>
+    <dict>
+      <key>name</key><string>String escapes and placeholders</string>
+      <key>scope</key><string>constant.character.escape, constant.other.placeholder, constant.character.format</string>
+      <key>settings</key><dict><key>foreground</key><string>#D7BA7D</string></dict>
+    </dict>
+    <dict>
+      <key>name</key><string>Regular expressions</string>
+      <key>scope</key><string>string.regexp</string>
+      <key>settings</key><dict><key>foreground</key><string>#D16969</string></dict>
+    </dict>
+    <dict>
+      <key>name</key><string>Numbers</string>
+      <key>scope</key><string>constant.numeric</string>
+      <key>settings</key><dict><key>foreground</key><string>#B5CEA8</string></dict>
+    </dict>
+    <dict>
+      <key>name</key><string>Language constants: True, False, None, null</string>
+      <key>scope</key><string>constant.language</string>
+      <key>settings</key><dict><key>foreground</key><string>#569CD6</string></dict>
+    </dict>
+    <dict>
+      <key>name</key><string>Other constants</string>
+      <key>scope</key><string>constant.other, variable.other.constant, entity.name.constant</string>
+      <key>settings</key><dict><key>foreground</key><string>#4FC1FF</string></dict>
+    </dict>
+    <dict>
+      <key>name</key><string>Keywords</string>
+      <key>scope</key><string>keyword, storage.type, storage.modifier, keyword.operator.logical, keyword.operator.word, keyword.operator.new, keyword.operator.expression</string>
+      <key>settings</key><dict><key>foreground</key><string>#569CD6</string></dict>
+    </dict>
+    <dict>
+      <key>name</key><string>Control flow and imports</string>
+      <key>scope</key><string>keyword.control, keyword.import, keyword.other.import, keyword.control.import, keyword.control.flow, keyword.control.conditional, keyword.control.loop, keyword.control.exception, keyword.control.return</string>
+      <key>settings</key><dict><key>foreground</key><string>#C586C0</string></dict>
+    </dict>
+    <dict>
+      <key>name</key><string>Operators</string>
+      <key>scope</key><string>keyword.operator, keyword.operator.assignment, keyword.operator.arithmetic, keyword.operator.comparison</string>
+      <key>settings</key><dict><key>foreground</key><string>#D4D4D4</string></dict>
+    </dict>
+    <dict>
+      <key>name</key><string>Functions</string>
+      <key>scope</key><string>entity.name.function, support.function, variable.function, meta.function-call.generic, variable.annotation, entity.name.function.decorator, meta.annotation.identifier, punctuation.definition.annotation, entity.name.function meta.generic-name, variable.function meta.generic-name, meta.annotation meta.generic-name</string>
+      <key>settings</key><dict><key>foreground</key><string>#DCDCAA</string></dict>
+    </dict>
+    <dict>
+      <key>name</key><string>Types and classes</string>
+      <key>scope</key><string>entity.name.type, entity.name.class, entity.name.struct, entity.name.enum, entity.name.trait, entity.name.namespace, entity.other.inherited-class, support.type, support.class, entity.name.class meta.generic-name, entity.other.inherited-class meta.generic-name, entity.name.type meta.generic-name</string>
+      <key>settings</key><dict><key>foreground</key><string>#4EC9B0</string></dict>
+    </dict>
+    <dict>
+      <key>name</key><string>Variables, parameters and properties</string>
+      <key>scope</key><string>variable, variable.parameter, variable.other, meta.property-name, support.variable, entity.name.variable, entity.other.attribute-name, meta.generic-name</string>
+      <key>settings</key><dict><key>foreground</key><string>#9CDCFE</string></dict>
+    </dict>
+    <dict>
+      <key>name</key><string>self, this, super</string>
+      <key>scope</key><string>variable.language</string>
+      <key>settings</key><dict><key>foreground</key><string>#569CD6</string></dict>
+    </dict>
+    <dict>
+      <key>name</key><string>Macros, as Zed's theme has them</string>
+      <key>scope</key><string>support.macro, entity.name.macro, variable.function.macro</string>
+      <key>settings</key><dict><key>foreground</key><string>#569CD6</string></dict>
+    </dict>
+    <dict>
+      <key>name</key><string>Tags</string>
+      <key>scope</key><string>entity.name.tag</string>
+      <key>settings</key><dict><key>foreground</key><string>#569CD6</string></dict>
+    </dict>
+    <dict>
+      <key>name</key><string>Punctuation</string>
+      <key>scope</key><string>punctuation, meta.brace</string>
+      <key>settings</key><dict><key>foreground</key><string>#CCCCCC</string></dict>
+    </dict>
+    <dict>
+      <key>name</key><string>Markdown headings</string>
+      <key>scope</key><string>markup.heading, markup.heading entity.name</string>
+      <key>settings</key><dict><key>foreground</key><string>#569CD6</string><key>fontStyle</key><string>bold</string></dict>
+    </dict>
+    <dict>
+      <key>name</key><string>Markdown code</string>
+      <key>scope</key><string>markup.raw, markup.inline.raw</string>
+      <key>settings</key><dict><key>foreground</key><string>#CE9178</string></dict>
+    </dict>
+  </array>
+</dict>
+</plist>
