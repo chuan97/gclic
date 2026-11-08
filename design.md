@@ -24,177 +24,103 @@ gclic stands for git cli companion. It was first called mygc.
 
 **Approach:** the features are fairly separate, so they can advance modularly, one at a time, starting with 1 and 2. Before going in seriously, one-shot the entire tool as an MVP, then use it to refine what we want and implement it for real, feature by feature.
 
-## MVP plan (as approved)
+## Where it stands
 
-### Context
-A keyboard-driven TUI for the git tasks where a CLI is slow: visual staging and commit, a bead-style branch graph, a fuzzy branch picker, and a two-ref compare. It is also a way to learn Rust, so the code must stay simple enough for the author to follow and grow with.
+The MVP is feature complete, and on macOS it's a fully working app: every feature in the brief is in, along with what using it asked for. A rewrite from here would be a learning exercise and an architecture review, not a feature project. The notes below describe what was built, so they can serve as its starting point.
 
-This first pass builds all four features to find out what we really want. After that, each feature gets refined or rewritten one at a time, so each one lives in its own module.
+The approved MVP plan and the first round of feedback on it are in git history: see `design.md` as of commit `ecb4f54`.
 
-The repo is a fresh `cargo new` (`src/main.rs` is hello world, no commits). Rust 1.94, git 2.50, macOS.
+## What it looks like
 
-### Decisions
-- **Git backend:** shell out to the `git` CLI. Only `git.rs` knows it is a subprocess; everything else sees typed structs.
-- **Graph:** vertical, one bead per row, dim one-line subject, branch labels only at tips.
-- **Diff:** side-by-side, in a right-hand pane, with the lists staying on the left. The diff follows the list selection.
-- **Comments:** normal comments only, where the logic isn't obvious.
-- **Dependencies:** `ratatui` (re-exports crossterm) and `anyhow`. Nothing else: no async, threads, custom traits or unneeded generics. The fuzzy matcher is hand-written (about 25 lines).
+Two tabs, `Repo` and `Compare`, switched with `tab`. A hint bar at the bottom lists the keys that apply right now, with `? help · q quit` after them.
 
-### Layout
-```
-┌ Changes ───────┬ src/main.rs ───────────────────┐
-│ Staged (1)     │ 12  let a = 1;  │ 12  let a = 1;│
-│  M main.rs     │ 13- let b = 2;  │ 13+ let b = 3;│
-│ Changes (2)    │ 14  let c = 4;  │ 14  let c = 4;│
-│  M foo.rs      │                 │               │
-│  ? new.rs      │                 │               │
-├ Graph ─────────┤                 │               │
-│ ● feature  fix │                 │               │
-│ │ ● origin/fe… │                 │               │
-│ ├─╯            │                 │               │
-│ ● wire config  │                 │               │
-└────────────────┴─────────────────┴───────────────┘
- status line: key hints, or the last error/message
-```
-The left column takes the full width until a diff is open. `z` zooms the diff to full width.
+- **Repo:** a left column of three panes, Branches, Changes and Graph, moved between with `h`/`l`. Their heights follow focus: Branches shows only the checked-out branch until focused, Changes fits its files, and the graph takes the rest. The panes `h` and `l` lead to are marked `[h]` and `[l]` after their titles.
+- **Compare:** how two refs differ, started with `c` from Branches, the graph or the tab itself.
+- **The right side:** a preview that takes 80% of the width when open, either a diff or a commit's details, never both. Each stays in its mode: moving onto a commit leaves a diff alone, and moving onto a file leaves the details alone (a file shows its own commit's details). `enter` on a file shows its diff, a second `enter` moves into it, and `esc` comes back, then closes it. `z` zooms it to the full width.
+- **Popups:** a title saying what they are, and their keys in the bottom border. Keys are yellow, and the key for a destructive action (discard, delete, close a comparison, quit) is bold red. Borders are cyan, except git errors, which are red.
 
-### Modules (`src/`, about 1500-2000 lines total)
-| File | Responsibility |
-|---|---|
-| `main.rs` | Terminal init/restore (`ratatui::init` restores on panic), event loop |
-| `app.rs` | `App` state, focus, top-level layout and key dispatch, applies `Action`s |
-| `git.rs` | Every git call, each returning typed data. Includes the parsers |
-| `diff.rs` | Unified diff to side-by-side rows; `DiffPane` state and render |
-| `staging.rs` | Feature 1: the Changes panel |
-| `graph.rs` | Feature 2: lane layout (pure function), Graph panel, commit drill-down |
-| `picker.rs` | Fuzzy list popup, single or multi-select. Used by features 2, 3 and 4 |
-| `compare.rs` | Feature 4: the compare panel |
-| `file_list.rs` | Selectable changed-files list, shared by commit drill-down and compare |
+## How it's built
 
-#### The one pattern to learn
-Each panel is a plain struct with two methods:
-- `handle_key(&mut self, key) -> Action`
-- `render(&self, frame, area, focused)`
+### Modules
 
-Panels never touch each other. They return an `Action` enum (`OpenDiff(DiffSource)`, `OpenPicker(..)`, `Refresh`, `Message(..)`...) and `App` applies it. This also avoids most early borrow-checker fights.
+| File | Lines | What it does |
+|---|---|---|
+| `main.rs` | 35 | Finds the repo root, sets up the terminal, runs the app |
+| `app.rs` | 1357 | `App`: all state, layout, key routing, popups, hints, tabs, the worker's results |
+| `git.rs` | 661 | Every git call, returning typed data, plus the parsers |
+| `worker.rs` | 195 | The background thread for slow reads |
+| `diff.rs` | 1108 | Unified diff and conflict parsing into side-by-side rows, line pairing, word marks, the diff pane, the colour cache |
+| `highlight.rs` | 139 | Syntax highlighting with syntect |
+| `graph.rs` | 1176 | Lane layout (a pure function), colours, the Graph pane |
+| `branches.rs` | 436 | The Branches pane |
+| `staging.rs` | 286 | The Changes pane |
+| `compare.rs` | 166 | The Compare view |
+| `file_list.rs` | 117 | Compare's file list, and the file row shared with other panes |
+| `details.rs` | 150 | The commit details preview |
+| `picker.rs` | 520 | The fuzzy-searchable list behind the Branches pane and the pickers |
+| `help.rs` | 300 | The help popup, as data |
+| `ui.rs` | 150 | Shared drawing helpers, colours and key hints |
 
-`DiffSource` is the enum that makes one diff pane serve every feature:
-```rust
-enum DiffSource {
-    Unstaged(String), Staged(String), Untracked(String),
-    Commit { sha: String, path: String },
-    Refs { a: String, b: String, path: String },
-}
-```
+Dependencies: `ratatui` (with crossterm), `anyhow`, and `syntect`, with its pure-Rust regex engine. Dependencies are optimised even in debug builds, since highlighting is too slow otherwise. The theme, `assets/vscode-dark-modern.tmTheme`, holds VS Code's Dark Modern colours, as Zed's "VSCode Dark Modern" theme has them.
 
-The loop is single-threaded: poll for a key (250 ms timeout), handle it, redraw. Git calls block, which is fine at this scale.
+### Patterns worth keeping
 
-### Feature details
+- **Panels return actions.** Each pane has `handle_key(key) -> Action` and `render(frame, area, focused)`. Panes never touch each other: they return an `Action` (`OpenDiff`, `PreviewDiff`, `Refresh`, `Compare`…), and `App::apply` carries it out. This avoided most fights with the borrow checker.
+- **`git.rs` is the only place that knows git is a subprocess.** Everything else gets typed data. Git runs with no stdin, so nothing can wait for hidden input, and with `GIT_OPTIONAL_LOCKS=0`, so reads don't take the index lock.
+- **`DiffSource`** names where a diff comes from (unstaged, staged, untracked, conflict, a commit, two refs), so one diff pane serves every feature.
+- **Pure functions for the hard parts**, unit tested without a terminal: the graph's lane layout, diff parsing, line pairing, word marks, conflict parsing, the fuzzy matcher.
 
-#### 1. Staging and commit
-- `git status --porcelain=v1 -z --no-renames --untracked-files=all`. Two sections, like VS Code; a partly staged file appears in both.
-- Refreshes after every action, on `r`, and every ~2 s (status only, with `GIT_OPTIONAL_LOCKS=0`) so outside edits show up.
-- Selection is kept by path across refreshes.
-- Stage: `git add -- p`. Unstage: `git reset -q -- p` (unlike `restore --staged`, this also works before the first commit).
-- Restore always asks y/n first. Tracked: `git restore -- p`. Untracked: `git clean -f -- p`, with a prompt that says the file will be **deleted**. Not offered on staged entries.
-- Commit: `c` opens a multi-line message box (append-only editing), `Ctrl-s` commits, `Esc` cancels and keeps the draft. Runs `git commit -m`, so hooks and signing behave normally. Hook failures appear in an error popup.
+### Concurrency
 
-#### 2. Graph
-- **Default refs:** HEAD and its upstream, falling back to `origin/<branch>`, then HEAD alone.
-- **Data:** `git log --topo-order -n 500 --format=%H%x00%P%x00%s <refs>`. A `┊` marks truncation.
-- **Lanes:** `layout(commits) -> Vec<Row>` is a pure function, unit tested with no UI. It emits commit rows, plus connector rows (`├─╯`) where lanes fork or merge. Only commit rows are selectable.
-- **Color, one rule for any number of refs:** in one pass through the topo-ordered commits, work out which selected refs reach each commit.
-  - All refs: dim (shared).
-  - Exactly one ref: that ref's color.
-  - Some but not all: neutral.
-  - So the default view gets local = green, origin = blue, shared = dim, and the color changes at the transition. A single-ref view uses that ref's color.
-- **Keys:** `j/k` move, `Enter` opens the commit's files in place of the graph (`Esc` returns), `Enter` on a file opens its diff, `i` toggles a box with full message, sha, author and date, `y` copies the sha (`pbcopy`, macOS only for now), `B` opens the multi-select picker (`Space` toggles; `Enter` with nothing ticked returns to the default view).
-- Merge commits diff against their first parent.
+- **The worker thread** (`worker.rs`) does the slow reads: the 500 ms auto-refresh poll (the refs fingerprint, `git status`, the open diff) and syntax highlighting. The UI hands it jobs through a small queue and picks up results from a channel every 30 ms, so keys never wait for it.
+- **Only reads happen on it.** Anything that changes the repo, and the full refresh after it, stays on the UI thread, in order, so a change shows at once.
+- **Stale results are dropped:** each full refresh bumps a generation counter, and a poll asked for before the latest refresh is ignored. Colours only apply to the exact diff text they were made from.
+- **Short-lived parallelism** with `std::thread::scope`: the panes' refreshes, the graph's log and unpushed check, a poll's git calls, a comparison's refresh, and the two file versions read for highlighting all run at once.
 
-#### 3. Branch picker
-- `b` opens the picker over local and remote branches (`git for-each-ref`, skipping `*/HEAD`). Type to filter, arrows or `Ctrl-j/k` to move, `Enter` to check out.
-- Remote branches use `git switch <name-without-remote>`, which creates a tracking branch, or switches to the local one if it already exists.
-- Failures such as a dirty tree conflict appear in the error popup.
+### Speed
 
-#### 4. Compare
-- `C` opens the picker twice (A, then B) over branches and tags. If nothing matches, `Enter` uses the typed text as a ref, so shas work. Validated with `git rev-parse --verify`.
-- The left column shows `A is N ahead, M behind B`, the merge-base, and the file list. `Enter` opens a split diff, `Esc` exits.
-- `git rev-list --left-right --count A...B`, `git merge-base`, `git diff --name-status --no-renames -z A B`.
+Most of the time goes into starting git processes and into highlighting. Measured on the author's Mac, release builds:
 
-#### Diff pane
-- Parses hunks into rows. A run of `-` lines pairs row by row with the following `+` lines, with blank filler on the shorter side.
-- Keys: `Tab` focuses it, `j/k` scroll, `Ctrl-d/u` half page, `n/p` next/prev hunk, `Esc` back to the list (`Esc` in the list closes the diff).
-- Commands always pass `--no-ext-diff --no-color`. Binary files show a message. Long lines are clipped.
+- A full refresh takes about 15 ms, down from 45 ms: the branch list is fetched once, refs are resolved in one `rev-parse`, the checked-out branch is read from `.git/HEAD`, and the rest runs in parallel.
+- Moving between files with a diff open takes about 1 ms until the redraw starts, since the diffs one key away (`j`, `k`, `g`, `G`, and `r` in Compare) are prefetched and coloured into a cache of up to 20,000 rows, and shown from it without asking git.
+- Memory is about 24 MB, most of it syntect's grammars.
 
-#### Global keys
-`Tab` focus, `b` branches, `B` graph branches, `C` compare, `r` refresh, `?` help, `q` quit.
+The measuring scripts lived in the git-ignored `target/bench/`. `docs/screenshots.py` shows how to drive gclic in a pseudo-terminal and read its screen.
 
-### Robustness
-- On startup: `git rev-parse --show-toplevel`, then change directory there, since status paths are root-relative. Outside a repo, print a clear message and exit before entering the TUI.
-- Must handle an unborn HEAD (this repo right now), a detached HEAD, and an empty repo (graph shows "no commits yet").
-- Git commands run with stdin null so nothing waits on hidden input.
+### Git edge cases
 
-### Out of scope for the MVP (candidates for later)
-Hunk or line staging, fetch/push/pull, merge conflict tools, rename detection (renames show as delete + add), syntax highlighting, word-level diff, horizontal scroll, config or custom keybindings, Linux clipboard, a cursor in the commit box.
+- **Merge conflicts:** a conflicted file previews as its two sides, read from its conflict markers, with the file's own line numbers so `o` opens the editor on the conflict. A diff3 base section is skipped. `d` isn't offered on it, and the Changes title says when a merge, rebase, cherry-pick or revert is in progress.
+- **Worktrees:** a branch checked out in another worktree shows `in ../name` and can't be checked out here. gclic stays in the worktree it started in.
+- **Submodules:** shown as one changed entry with git's "Subproject commit" diff. `d` isn't offered, as a plain restore doesn't touch them.
 
-### Assumption to confirm when trying it
-Compare's file list is the **direct** difference between A and B (`git diff A B`), not the PR-style "changes on B since the merge-base" (`A...B`). Switching is a one-line change.
+### Platform assumptions
 
-### Build order
-1. `git.rs` with parser tests.
-2. `main.rs` + `app.rs` skeleton.
-3. `staging.rs` + `diff.rs`.
-4. `graph.rs`.
-5. `picker.rs` + checkout.
-6. `compare.rs`.
+- `pbcopy` and `pbpaste` for the clipboard, so macOS only.
+- The graph's beads are the branch-drawing characters (U+F5EE to U+F60D), which Ghostty and kitty draw themselves. Other terminals need a font with them.
+- `o` runs `zed path:line`.
 
-### Git handling
-Work happens in a worktree if one can be created. This repo has no commits, so that may fail, and I'd then build in place on the shared checkout. In that case I'll ask before committing. No pushing (no remote).
+## Decisions, and why
 
-### Verification
-- `cargo build`, `cargo clippy`, `cargo test`. Unit tests cover the status, name-status and diff parsers, side-by-side pairing, lane layout (linear, diverged, merge) and the fuzzy matcher.
-- A script builds a throwaway repo in the job's temp directory with diverged `feature` / `origin/feature`, a merge, staged, unstaged and untracked files, and a tag.
-- Drive the real binary in that repo through `tmux send-keys` and `capture-pane`: stage, unstage, restore, commit, open a diff, walk the graph, open the details box, copy a sha (check `pbpaste`), select branches, check out, compare. Destructive actions run only in the scratch repo.
-- Also run it in an empty repo and outside a repo.
+- **Graph: one row per commit.** Beads are branch-drawing characters with lines to their cell's edges, so consecutive beads join without spacer rows, and forks and joins sit on the bead's row (`●─╮`). A commit takes the colour of the first ref reaching it, trying refs with no commits of their own first, so whichever side is ahead shows in its own colour. Unpushed commits are hollow.
+- **The preview is entered, not tabbed to.** `h`/`l` stay free for scrolling inside a diff, and moving through a list with the preview open is the common case.
+- **The hint bar is contextual.** It only lists what applies, the key for a destructive action is red in popups, and global keys come last after a separator.
+- **Line pairing by similarity.** Removed and added lines pair to maximise their total similarity in order, so an added line doesn't shift every pair below it. Positional pairing breaks the word marks as soon as a change adds a line.
+- **Compare is a tab.** It's a different view of the repo, not a pane, and the tab keeps a comparison around without losing it. `c` starts one from wherever you are, and closing it asks first.
+- **Git's status letters, VS Code's colours.** `?` untracked and `U` conflicted, as git has them, coloured as VS Code's git panel colours files.
+- **Zed only, for now,** on `o`, run in the background while gclic carries on.
+- **Commit details as a preview,** following the selected commit, rather than a popup.
 
-## What changed while building the MVP
+## Considered and declined
 
-The plan above is kept as approved. These are the differences in the code:
+- **Push, pull and fetch:** one command each with nothing to see. They need the network, can ask for credentials, and lead towards a complete client.
+- **Switching worktrees inside gclic:** your shell and editor would stay in the old folder. The model is one terminal tab and editor window per worktree, which is how VS Code does it too, a window per folder.
+- **A three-way merge editor:** resolving is for an editor. gclic shows the conflict and opens it in one. VS Code's merge editor works as `git mergetool`.
+- **Refreshing on terminal focus:** at 500 ms polling on the worker it adds nothing noticeable.
+- **Manual pane resizing, a vim-style cursor in diffs, editors other than Zed, a fallback for terminals without the bead characters, a quick first highlighting pass, showing a diff3 base:** each deferred until it's actually missed.
 
-- **One extra module:** `ui.rs` holds small drawing helpers shared by the panels (panel border, scroll handling, full-width rows, popup centering).
-- **Graph selection follows new commits:** if the top commit is selected and nothing is open, a new commit moves the selection to the new tip. Otherwise the selection stays on the same commit. The plan only said to keep it by commit.
-- **Remote color:** bright blue instead of blue, which is too dark to read on dark terminals.
-- **Auto-refresh pauses while a popup is open,** so it can't replace a dialog you're using.
+## Notes for the rewrite
 
-## First round of feedback on the MVP
-
-Implemented after trying the MVP. Where this differs from the plan above, this wins.
-
-- **Picker modes:** `j`/`k` navigate by default. `i` starts typing, like vim's insert mode. The first `Esc` stops typing, and the next closes the picker.
-- **Lines between beads:** every pair of beads is joined by a row of lines, even though this fits about half as many commits on screen.
-- **Graph row order:** bead, title, author, branch names.
-- **Word-level highlighting in diffs:** paired lines mark the changed words with a slightly stronger red or green, using a longest common subsequence over words. Lines with little in common (under 30%, ignoring whitespace) get no word marks.
-- **Commit files as a drop-down:** `Enter` opens a commit's files inline under it, and `j`/`k` walk through them as rows. Several commits can be open at once. `Esc` collapses the selected commit, or all of them from a closed commit. The separate file view is gone, so `file_list.rs` now only serves compare, plus the shared file row.
-- **Branch colors, no dimming:** each ref has a color, and its label uses it. With several branches selected, a branch and its remotes share a color. With just one branch and its remote, as in the default view, each gets its own: local green, remote blue. A commit takes the color of the first ref reaching it, trying refs with no commits of their own first. So whichever side is ahead shows in its color against the rest: local ahead makes shared history blue, remote ahead makes it green. This replaces the plan's dim shared commits.
-- **Hollow beads:** a commit that isn't on any remote-tracking branch is drawn `○`, and pushed commits `●`.
-- **Commit details popup:** `i` opens the commit's message and metadata in a centered popup that scrolls with `j`/`k`, rather than a box at the bottom of the graph. It lives in `details.rs`. It shows the commit it was opened on, because `j`/`k` scroll instead of moving through commits. Counting wrapped lines uses `ratatui`'s `unstable-rendered-line-info` feature, so check that API when upgrading `ratatui`.
-- **Remotes in the Branches pane:** a remote branch is hidden if a local branch has its name or tracks it, since selecting it would only switch to that local branch. Remote-only branches stay, dimmed, and checking one out creates a local tracking branch (`git switch --track`). Each local branch shows how many remotes have it. `Space` opens a drop-down listing them, with ahead/behind counts and which one is tracked. A local branch tracks at most one upstream, so the count means remotes that have the branch, not remotes tracking it. The rows are read-only, so `j`/`k` skip them.
-- **Branches pane:** checkout moved from a popup to a permanent pane at the top of the left column (`branches.rs`). The checked-out branch shows as `* name` in bold green, and the cursor is a selection bar. `i` searches, as in the picker it shares its list with. Choosing which branches the graph shows stays a popup, opened with `b` in the Graph pane.
-- **`h`/`l` switch panes, not `Tab`:** a fixed line of Branches, Changes, Graph, then Diff when open. `Esc` from the diff still returns to the pane it came from.
-- **Tick all in the graph's branch picker:** `a` ticks and `A` unticks everything shown, so a search narrows what they affect.
-- **Quit confirmation:** `q` asks first, `Enter` quits and `Esc` cancels. `Ctrl-C` still quits at once.
-- **Swapping A and B:** `r` in compare swaps the two refs, from its list or its diff.
-- **No manual refresh:** the global `r` is gone, as auto-refresh covers everything the app reads from git.
-- **Recent yanks in compare:** the last two commits yanked top both compare pickers, in yank order, and the second picker leaves out what was picked as A. So `y`, `y`, `C`, `Enter`, `Enter` compares two commits, with the first yanked as A. They last until quitting.
-- **Comparing commits by sha:** `p` in the compare pickers pastes the first word on the clipboard, so `y` in the graph, then `C`, `p`, `Enter` compares a commit. Compare shortens shas with `git rev-parse --short`, to keep titles readable.
-- **Wrap-around:** `j`/`k` and `h`/`l` wrap past either end, in every list, popup and pane. `g`/`G` and the half-page keys are jumps, so they stop at the ends.
-- **Constant refresh:** every 500 ms the app checks `git status` and a fingerprint of refs and HEAD, reloading the graph and compare only when the fingerprint changes. This runs on the UI thread, so a repo with a slow `git status` could make keys lag; the fix would be a background thread.
-
-Still left for the full implementation: syntax highlighting in diffs, which probably means a dependency like `syntect`.
-
-## Questions to answer by trying it
-
-- Should compare's file list stay the direct difference (`git diff A B`), or be PR-style (`A...B`)?
-- Is a 40/60 split right for the lists and the diff, and is 40/60 right between Changes and Graph?
-- Is the commit box enough with append-only editing, or should it gain a cursor or open `$EDITOR`?
-- Should the graph keep the full 500 commits, or stop soon after the point where the selected branches meet?
+- **`app.rs` has become the place everything lands:** focus, tabs, the preview, popups, hints, the worker's results. It could split into tab state, the preview and popups.
+- **Some state is kept consistent by convention:** which preview is showing, which tab, focus and last focus. The tab switch moves the right fields over by hand. Enums could make the wrong combinations impossible.
+- **Keep:** the `Action` pattern, `git.rs` with typed results, the worker with tagged results, and the pure, tested layout and parsing functions.
+- **Open questions:** should Compare's file list stay the direct difference (`git diff A B`), or be PR-style (`A...B`)? Should the commit box gain a cursor, or open an editor? Should the graph keep 500 commits, or stop where the shown branches meet?
