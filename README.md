@@ -15,7 +15,7 @@
 ## Installation
 
 ```sh
-cargo install --git https://github.com/chuan97/gclic --branch mvp
+cargo install --git https://github.com/chuan97/gclic
 ```
 
 Then run `gclic` inside a git repository. Press `?` for help.
