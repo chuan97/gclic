@@ -48,6 +48,11 @@ impl ComparePanel {
         }
     }
 
+    /// What's compared, as `A → B`.
+    pub fn refs(&self) -> String {
+        format!("{} → {}", self.a, self.b)
+    }
+
     pub fn selected_source(&self) -> Option<DiffSource> {
         self.files.selected_source()
     }

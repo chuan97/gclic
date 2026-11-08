@@ -27,7 +27,7 @@ const LEFT: &[Section] = &[
             ("esc", "go back, then close the diff or details"),
             ("o", "open the file in Zed"),
             ("z", "zoom the diff or details"),
-            ("C", "compare two refs"),
+            ("tab", "switch between Repo and Compare"),
             ("?", "this help"),
             ("q", "quit, or ctrl-c at once"),
         ],
@@ -36,6 +36,7 @@ const LEFT: &[Section] = &[
         title: "Branches",
         keys: &[
             ("enter", "check out"),
+            ("c", "compare with the checked-out branch"),
             ("space", "show its remotes"),
             ("i", "search; esc stops typing"),
             ("esc", "clear the search"),
@@ -57,6 +58,7 @@ const LEFT: &[Section] = &[
             ("enter", "expand a commit, show a file's diff"),
             ("n N", "next/previous commit, past files"),
             ("i", "commit details, again to move in"),
+            ("c", "compare the commit with a ref"),
             ("y", "copy the commit's sha"),
             ("b", "choose which branches to show"),
             ("esc", "collapse"),
@@ -68,7 +70,12 @@ const LEFT: &[Section] = &[
 const RIGHT: &[Section] = &[
     Section {
         title: "Compare",
-        keys: &[("enter", "show the diff"), ("r", "swap A and B"), ("esc", "close the comparison")],
+        keys: &[
+            ("enter", "show the diff"),
+            ("c", "new comparison: choose two refs"),
+            ("r", "swap A and B"),
+            ("esc", "close it, back to Repo"),
+        ],
     },
     Section {
         title: "Diff",

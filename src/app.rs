@@ -15,7 +15,7 @@ use crate::worker::{Done, Worker};
 use anyhow::Result;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::{Color, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph, Wrap};
 use ratatui::{DefaultTerminal, Frame};
@@ -52,6 +52,10 @@ pub enum Action {
     OpenCommitBox,
     OpenGraphPicker,
     CloseCompare,
+    /// Compare these two refs, A then B, on the Compare tab.
+    Compare(String, String),
+    /// Compare this commit with a ref the user picks.
+    CompareWith(String),
     Copy(String),
     /// Show these commit details on the right. If they're already showing,
     /// move into them.
@@ -84,6 +88,23 @@ enum Focus {
     Preview,
 }
 
+/// The two views. Repo is the panes; Compare shows how two refs differ.
+#[derive(Clone, Copy, PartialEq)]
+enum Tab {
+    Repo,
+    Compare,
+}
+
+/// What a tab keeps while the other one shows: where the focus was and what
+/// was open on the right.
+struct TabState {
+    focus: Focus,
+    last_left_focus: Focus,
+    diff: Option<DiffPane>,
+    details: Option<DetailsPane>,
+    zoomed: bool,
+}
+
 /// What the picker's result will be used for.
 enum PickerUse {
     GraphBranches,
@@ -103,6 +124,9 @@ enum Modal {
 }
 
 pub struct App {
+    tab: Tab,
+    /// The tab not showing, put aside until `tab` switches back to it.
+    other_tab: TabState,
     branches: BranchesPanel,
     staging: StagingPanel,
     graph: GraphPanel,
@@ -139,6 +163,14 @@ pub struct App {
 impl App {
     pub fn new() -> App {
         let mut app = App {
+            tab: Tab::Repo,
+            other_tab: TabState {
+                focus: Focus::Compare,
+                last_left_focus: Focus::Compare,
+                diff: None,
+                details: None,
+                zoomed: false,
+            },
             branches: BranchesPanel::new(),
             staging: StagingPanel::new(),
             graph: GraphPanel::new(),
@@ -446,7 +478,10 @@ impl App {
             KeyCode::Char('?') => self.modal = Modal::Help(HelpPopup::new(self.help_section())),
             KeyCode::Char('o') => self.open_in_editor(),
             KeyCode::Char('r') if self.compare.is_some() => self.swap_compare(),
-            KeyCode::Char('C') => self.open_compare_picker(),
+            KeyCode::Tab | KeyCode::BackTab => self.switch_tab(),
+            // On the Compare tab, c starts a new comparison, as c compares from
+            // where the user is in the other panes.
+            KeyCode::Char('c') if self.focus == Focus::Compare => self.open_compare_picker(),
             KeyCode::Char('z') if self.has_preview() => {
                 self.zoomed = !self.zoomed;
                 if self.zoomed {
@@ -468,6 +503,7 @@ impl App {
                 }
             }
             _ if self.has_preview() => self.close_preview(),
+            Focus::Compare if self.compare.is_none() => self.switch_tab(),
             _ => self.send_to_focused_panel(KeyEvent::from(KeyCode::Esc)),
         }
     }
@@ -532,10 +568,14 @@ impl App {
                     self.diff = None;
                 }
             }
+            // Closing a comparison goes back to the Repo tab, as esc does.
             Action::CloseCompare => {
                 self.compare = None;
-                self.focus_left(Focus::Changes);
+                self.close_preview();
+                self.switch_tab();
             }
+            Action::Compare(a, b) => self.start_compare(a, b),
+            Action::CompareWith(sha) => self.open_compare_b_picker(git::display_ref(&sha)),
             Action::Copy(sha) => match copy_to_clipboard(&sha) {
                 Ok(()) => {
                     if let Some(label) = git::commit_label(&sha) {
@@ -673,33 +713,69 @@ impl App {
                     self.modal = Modal::Error(format!("Unknown ref: {first}"));
                     return;
                 }
-                let a = git::display_ref(&first);
-                match compare_items(&self.recent_yanks) {
-                    Ok(mut items) => {
-                        // Comparing a ref with itself shows nothing.
-                        items.retain(|item| item.split_whitespace().next() != Some(a.as_str()));
-                        let title = format!("Compare {a} with: i types, p pastes");
-                        let picker = Picker::with_free_text(&title, items);
-                        self.modal = Modal::Picker(picker, PickerUse::CompareB { a });
-                    }
-                    Err(error) => self.modal = Modal::Error(error.to_string()),
-                }
+                self.open_compare_b_picker(git::display_ref(&first));
             }
             PickerUse::CompareB { a } => {
                 if git::resolve(&first).is_none() {
                     self.modal = Modal::Error(format!("Unknown ref: {first}"));
                     return;
                 }
-                match ComparePanel::new(a, git::display_ref(&first)) {
-                    Ok(compare) => {
-                        self.compare = Some(compare);
-                        self.close_preview();
-                        self.focus_left(Focus::Compare);
-                    }
-                    Err(error) => self.modal = Modal::Error(error.to_string()),
-                }
+                self.start_compare(a, git::display_ref(&first));
             }
         }
+    }
+
+    /// Asks for the ref to compare `a` with.
+    fn open_compare_b_picker(&mut self, a: String) {
+        match compare_items(&self.recent_yanks) {
+            Ok(mut items) => {
+                // Comparing a ref with itself shows nothing.
+                items.retain(|item| item.split_whitespace().next() != Some(a.as_str()));
+                let title = format!("Compare {a} with: i types, p pastes");
+                let picker = Picker::with_free_text(&title, items);
+                self.modal = Modal::Picker(picker, PickerUse::CompareB { a });
+            }
+            Err(error) => self.modal = Modal::Error(error.to_string()),
+        }
+    }
+
+    /// Shows how `a` and `b` differ on the Compare tab, replacing any
+    /// comparison already there.
+    fn start_compare(&mut self, a: String, b: String) {
+        match ComparePanel::new(a, b) {
+            Ok(compare) => {
+                if self.tab == Tab::Repo {
+                    self.switch_tab();
+                }
+                // Whatever was open on the right belonged to the old comparison.
+                self.close_preview();
+                self.zoomed = false;
+                self.compare = Some(compare);
+                self.focus_left(Focus::Compare);
+            }
+            Err(error) => self.modal = Modal::Error(error.to_string()),
+        }
+    }
+
+    /// Swaps the showing tab's state with the other tab's.
+    fn switch_tab(&mut self) {
+        let showing = TabState {
+            focus: self.focus,
+            last_left_focus: self.last_left_focus,
+            diff: self.diff.take(),
+            details: self.details.take(),
+            zoomed: self.zoomed,
+        };
+        let other = std::mem::replace(&mut self.other_tab, showing);
+        self.focus = other.focus;
+        self.last_left_focus = other.last_left_focus;
+        self.diff = other.diff;
+        self.details = other.details;
+        self.zoomed = other.zoomed;
+        self.tab = match self.tab {
+            Tab::Repo => Tab::Compare,
+            Tab::Compare => Tab::Repo,
+        };
     }
 
     fn open_graph_picker(&mut self) {
@@ -728,8 +804,13 @@ impl App {
     // ------------------------------------------------------------- drawing
 
     pub fn render(&mut self, frame: &mut Frame) {
-        let [main, status] =
-            Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(frame.area());
+        let [tabs, main, status] = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Min(0),
+            Constraint::Length(1),
+        ])
+        .areas(frame.area());
+        self.render_tabs(frame, tabs);
 
         match (self.has_preview(), self.zoomed) {
             (false, _) => self.render_left(frame, main),
@@ -748,9 +829,36 @@ impl App {
         self.render_modal(frame);
     }
 
+    /// The tab bar: both tabs, the showing one highlighted, the comparison's
+    /// refs on its tab so it's visible from the Repo tab too. The other tab is
+    /// marked with the key that leads to it, like the panes' [h] and [l].
+    fn render_tabs(&self, frame: &mut Frame, area: Rect) {
+        let area = Rect { x: area.x + 1, width: area.width.saturating_sub(2), ..area };
+        let compare = match &self.compare {
+            Some(compare) => format!(" Compare {} ", compare.refs()),
+            None => " Compare ".to_string(),
+        };
+        let mut spans = Vec::new();
+        for (tab, label) in [(Tab::Repo, " Repo ".to_string()), (Tab::Compare, compare)] {
+            if tab == self.tab {
+                let style = Style::default().fg(Color::Cyan).bg(ui::SELECTED_BG).add_modifier(Modifier::BOLD);
+                spans.push(Span::styled(label, style));
+            } else {
+                spans.push(Span::styled(label, Style::default().fg(ui::DIM)));
+                spans.push(Span::styled("[tab]", Style::default().fg(Color::Gray)));
+            }
+            spans.push(Span::raw("  "));
+        }
+        frame.render_widget(Line::from(spans), area);
+    }
+
     fn render_left(&mut self, frame: &mut Frame, area: Rect) {
-        if let Some(compare) = &mut self.compare {
-            compare.render(frame, area, self.focus == Focus::Compare);
+        if self.tab == Tab::Compare {
+            let focused = self.focus == Focus::Compare;
+            match &mut self.compare {
+                Some(compare) => compare.render(frame, area, focused),
+                None => render_empty_compare(frame, area, focused),
+            }
             return;
         }
         // Branches and Changes take the rows they ask for, up to a share of the
@@ -838,7 +946,7 @@ impl App {
                 return "type to filter · enter check out · esc stop typing".to_string();
             }
             Focus::Branches => {
-                hints.extend(["enter check out", "space remotes", "i search"]);
+                hints.extend(["enter check out", "c compare", "space remotes", "i search"]);
                 if self.branches.is_searching() {
                     esc = Some("esc clear search");
                 }
@@ -870,7 +978,7 @@ impl App {
             Focus::Graph => {
                 let expanded = self.graph.is_selected_expanded();
                 hints.push(if expanded { "enter collapse" } else { "enter expand" });
-                hints.extend([self.details_hint(), "y copy sha", "b choose branches"]);
+                hints.extend([self.details_hint(), "c compare", "y copy sha", "b choose branches"]);
                 // Only worth it when open commits' files are in the way.
                 if self.graph.has_expanded() {
                     hints.push("n/N commit");
@@ -881,10 +989,14 @@ impl App {
                     esc = Some("esc collapse all");
                 }
             }
+            Focus::Compare if self.compare.is_none() => {
+                hints.push("c choose two refs");
+                esc = Some("esc back to Repo");
+            }
             Focus::Compare => {
                 let source = self.compare.as_ref().and_then(|compare| compare.selected_source());
                 hints.extend(self.enter_diff_hint(source));
-                hints.push("r swap A and B");
+                hints.extend(["r swap A and B", "c new comparison"]);
                 esc = Some("esc close compare");
             }
             Focus::Preview => {
@@ -1038,6 +1150,19 @@ fn mark_key(frame: &mut Frame, pane: Rect, title: &str, key: &str) {
     frame.render_widget(Line::styled(label, Style::default().fg(Color::Gray)), area);
 }
 
+/// The Compare tab before a comparison: how to start one.
+fn render_empty_compare(frame: &mut Frame, area: Rect, focused: bool) {
+    let block = ui::panel(" Compare ".to_string(), focused);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let line = Line::from(vec![
+        Span::raw("No comparison yet. "),
+        Span::styled("c", Style::default().fg(Color::Yellow)),
+        Span::raw(" starts one."),
+    ]);
+    frame.render_widget(line, inner);
+}
+
 fn render_popup(
     frame: &mut Frame,
     area: Rect,
@@ -1091,6 +1216,49 @@ fn copy_to_clipboard(text: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // These build a whole app on gclic's own repo.
+
+    fn press(app: &mut App, code: KeyCode) {
+        app.handle_key(KeyEvent::from(code));
+    }
+
+    #[test]
+    fn each_tab_keeps_its_own_focus() {
+        let mut app = App::new();
+        app.focus_left(Focus::Graph);
+        press(&mut app, KeyCode::Tab);
+        assert!(app.tab == Tab::Compare && app.focus == Focus::Compare);
+        press(&mut app, KeyCode::Tab);
+        assert!(app.tab == Tab::Repo && app.focus == Focus::Graph);
+    }
+
+    #[test]
+    fn esc_on_an_empty_compare_tab_goes_back_to_repo() {
+        let mut app = App::new();
+        press(&mut app, KeyCode::Tab);
+        press(&mut app, KeyCode::Esc);
+        assert!(app.tab == Tab::Repo);
+    }
+
+    #[test]
+    fn c_on_the_compare_tab_asks_for_refs() {
+        let mut app = App::new();
+        press(&mut app, KeyCode::Tab);
+        press(&mut app, KeyCode::Char('c'));
+        assert!(matches!(app.modal, Modal::Picker(_, PickerUse::CompareA)));
+    }
+
+    #[test]
+    fn starting_a_comparison_switches_to_its_tab() {
+        let mut app = App::new();
+        app.start_compare("HEAD~1".to_string(), "HEAD".to_string());
+        assert!(app.tab == Tab::Compare && app.focus == Focus::Compare);
+        assert!(app.compare.as_ref().is_some_and(|c| c.refs() == "HEAD~1 → HEAD"));
+        // Closing it goes back to where the user was.
+        press(&mut app, KeyCode::Esc);
+        assert!(app.tab == Tab::Repo && app.compare.is_none());
+    }
 
     fn yanks(labels: &[&str]) -> Vec<String> {
         let mut yanks = Vec::new();

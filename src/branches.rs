@@ -126,8 +126,12 @@ impl BranchesPanel {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Action {
-        if key.code == KeyCode::Char(' ') && !self.picker.is_typing() {
-            return self.toggle_drop_down();
+        if !self.picker.is_typing() {
+            match key.code {
+                KeyCode::Char(' ') => return self.toggle_drop_down(),
+                KeyCode::Char('c') => return self.compare_with_current(),
+                _ => {}
+            }
         }
         match self.picker.handle_key(key) {
             Outcome::Open => Action::None,
@@ -140,6 +144,19 @@ impl BranchesPanel {
                 self.check_out(&name)
             }
         }
+    }
+
+    /// Compares the checked-out branch, as A, with the highlighted one: the
+    /// usual question of how a branch differs from where you are.
+    fn compare_with_current(&self) -> Action {
+        let Some(name) = self.picker.highlighted() else {
+            return Action::None;
+        };
+        let current = self.current.clone().unwrap_or_else(|| "HEAD".to_string());
+        if *name == current {
+            return Action::Message("That's the checked-out branch".to_string());
+        }
+        Action::Compare(current, name.clone())
     }
 
     fn toggle_drop_down(&mut self) -> Action {
@@ -292,6 +309,29 @@ mod tests {
             is_remote: false,
             upstream: upstream.map(str::to_string),
         }
+    }
+
+    fn panel_on(names: &[&str], current: &str, highlighted: &str) -> BranchesPanel {
+        let mut panel = BranchesPanel::new();
+        panel.branches = names.iter().map(|name| local(name, None)).collect();
+        panel.picker.set_items(names.iter().map(|name| name.to_string()).collect());
+        panel.picker.select_item(highlighted);
+        panel.current = Some(current.to_string());
+        panel
+    }
+
+    #[test]
+    fn c_compares_the_checked_out_branch_with_the_highlighted_one() {
+        let mut panel = panel_on(&["main", "feature"], "main", "feature");
+        let action = panel.handle_key(KeyEvent::from(KeyCode::Char('c')));
+        assert!(matches!(action, Action::Compare(a, b) if a == "main" && b == "feature"));
+    }
+
+    #[test]
+    fn c_on_the_checked_out_branch_only_says_so() {
+        let mut panel = panel_on(&["main", "feature"], "main", "main");
+        let action = panel.handle_key(KeyEvent::from(KeyCode::Char('c')));
+        assert!(matches!(action, Action::Message(_)));
     }
 
     fn remote(name: &str) -> Branch {

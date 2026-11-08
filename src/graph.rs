@@ -464,6 +464,7 @@ impl GraphPanel {
         };
         match key.code {
             KeyCode::Char('y') => return Action::Copy(sha),
+            KeyCode::Char('c') => return Action::CompareWith(sha),
             KeyCode::Char('i') => {
                 return match git::commit_details(&sha) {
                     Ok(details) => Action::OpenDetails(details),
