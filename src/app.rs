@@ -19,7 +19,6 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph, Wrap};
 use ratatui::{DefaultTerminal, Frame};
-use std::io::Write;
 use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -1112,6 +1111,9 @@ impl App {
             .spawn();
         match command {
             Ok(child) => self.editor_commands.push(child),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                self.message = "Zed's zed command isn't installed, or isn't on the PATH".to_string();
+            }
             Err(error) => self.modal = Modal::Error(format!("Couldn't run zed: {error}")),
         }
     }
@@ -1263,19 +1265,20 @@ fn compare_items(recent_yanks: &[String]) -> Result<Vec<String>> {
     Ok(items)
 }
 
-/// The first word on the clipboard, which is all a ref could be. None if empty.
+/// The first word on the clipboard, which is all a ref could be. None if it
+/// holds no text.
 fn read_clipboard() -> Result<Option<String>> {
-    let output = Command::new("pbpaste").stdin(Stdio::null()).output()?;
-    let text = String::from_utf8_lossy(&output.stdout);
-    Ok(text.split_whitespace().next().map(str::to_string))
+    match arboard::Clipboard::new()?.get_text() {
+        Ok(text) => Ok(text.split_whitespace().next().map(str::to_string)),
+        Err(arboard::Error::ContentNotAvailable) => Ok(None),
+        Err(error) => Err(error.into()),
+    }
 }
 
+/// On Linux the copy may only last while gclic runs, as there the program
+/// that copied holds the clipboard. macOS and Windows keep it.
 fn copy_to_clipboard(text: &str) -> Result<()> {
-    let mut child = Command::new("pbcopy").stdin(Stdio::piped()).spawn()?;
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(text.as_bytes())?;
-    }
-    child.wait()?;
+    arboard::Clipboard::new()?.set_text(text)?;
     Ok(())
 }
 

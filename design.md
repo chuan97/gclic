@@ -95,9 +95,10 @@ The measuring scripts lived in the git-ignored `target/bench/`. `docs/screenshot
 
 ### Platform assumptions
 
-- `pbcopy` and `pbpaste` for the clipboard, so macOS only.
-- The graph's beads are the branch-drawing characters (U+F5EE to U+F60D), which Ghostty and kitty draw themselves. Other terminals need a font with them.
-- `o` runs `zed path:line`.
+- The clipboard goes through `arboard`, which works on macOS, Windows and Linux.
+- The graph's beads are the branch-drawing characters (U+F5EE to U+F60D) in Ghostty and kitty, which draw them themselves, told apart by `TERM_PROGRAM` and `TERM`. WezTerm draws them only in nightly builds (since its PR #6873, April 2025), so it isn't detected. Elsewhere they're plain `●`/`○`, whose lines don't reach them.
+- `o` runs `zed path:line`, and says so if `zed` isn't on the `PATH`.
+- CI (`.github/workflows/ci.yml`) runs clippy and the tests on macOS and Windows. Pushing a version tag such as `v0.2.0` runs the release workflow (`release.yml`): it checks the tag against `Cargo.toml` and publishes a Windows zip as a GitHub Release.
 
 ## Decisions, and why
 

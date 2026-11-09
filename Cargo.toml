@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1"
+arboard = { version = "3.7.0", default-features = false }
 ratatui = { version = "0.30", features = ["unstable-rendered-line-info"] }
 syntect = { version = "5.3.0", default-features = false, features = ["default-fancy"] }
 

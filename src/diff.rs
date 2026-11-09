@@ -752,6 +752,8 @@ fn side_line(
 }
 
 #[cfg(test)]
+// Marks are lists of ranges, so a list holding one range is meant.
+#[allow(clippy::single_range_in_vec_init)]
 mod tests {
     use super::*;
 

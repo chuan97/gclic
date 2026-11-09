@@ -17,6 +17,17 @@ gclic is heavily inspired by the features I like and have grown accustomed to in
 
 ## Installation
 
+**On Windows**, download `gclic-v<version>-windows-x86_64.zip` from the [releases](https://github.com/chuan97/gclic/releases) and extract `gclic.exe`. To run it from any folder, put it in a folder on your `PATH`, for example a `bin` folder in your user folder:
+
+1. Create the folder `C:\Users\<you>\bin` and move `gclic.exe` into it.
+2. Open the Start menu, search for *Edit environment variables for your account*, and open it.
+3. Under *User variables*, select `Path`, choose *Edit*, then *New*, and enter `%USERPROFILE%\bin`.
+4. Choose *OK* in both windows, and open a new terminal.
+
+gclic isn't signed yet, so the first time Windows may say it "protected your PC": choose *More info*, then *Run anyway*. It needs [Git for Windows](https://git-scm.com/download/win), and looks best in [Windows Terminal](https://aka.ms/terminal).
+
+**From source**, on any platform with [Rust](https://rustup.rs) installed:
+
 ```sh
 cargo install --git https://github.com/chuan97/gclic
 ```
@@ -26,9 +37,10 @@ Then run `gclic` inside a git repository. Press `?` for help.
 **Note:** As of now, gclic is fully *vibe-coded*. It is barely a working prototype, and has only been tested in macOS with [Ghostty](https://ghostty.org) as the terminal emulator. It is best run in a horizontally split pane, with gclic in one pane and git's CLI in the other.
 
 gclic currently expects:
-- **macOS**, for copying and pasting shas (`pbcopy` and `pbpaste`).
-- **A terminal that draws git graph symbols itself**, such as [Ghostty](https://ghostty.org) or [kitty](https://sw.kovidgoyal.net/kitty/), for the graph's beads. Other terminals show empty boxes there.
+- **git** on the `PATH`.
 - **[Zed](https://zed.dev)**, to open files in an editor with `o`.
+
+In [Ghostty](https://ghostty.org) and [kitty](https://sw.kovidgoyal.net/kitty/), which draw git graph symbols themselves, the graph's beads join up with their lines, as in the screenshots. Other terminals, including Windows Terminal, get plain beads, and look the same otherwise.
 
 ## Staging and commit
 
