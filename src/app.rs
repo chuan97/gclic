@@ -4,7 +4,7 @@
 use crate::branches::BranchesPanel;
 use crate::compare::ComparePanel;
 use crate::details::DetailsPane;
-use crate::diff::{ColorCache, DiffPane, Row};
+use crate::diff::{ColorCache, DiffPane, DiffView, Row};
 use crate::git::{self, CommitDetails, DiffSource};
 use crate::graph::GraphPanel;
 use crate::help::HelpPopup;
@@ -277,7 +277,7 @@ impl App {
                 Done::Poll { generation, fingerprint, status, diff } => {
                     self.apply_poll(generation, fingerprint, status, diff);
                 }
-                Done::Highlight { source, text, rows } => self.apply_highlight(source, text, rows),
+                Done::Highlight { view, text, rows } => self.apply_highlight(view, text, rows),
             }
         }
         if !alive {
@@ -325,32 +325,44 @@ impl App {
         self.request_colors();
     }
 
-    fn apply_highlight(&mut self, source: DiffSource, text: String, rows: Vec<Row>) {
+    fn apply_highlight(&mut self, view: DiffView, text: String, rows: Vec<Row>) {
         if let Some(diff) = &mut self.diff
-            && diff.source == source
+            && diff.source == view.source
             && diff.needs_colors()
         {
+            // Only taken if the text matches, so not for the other kind of diff.
             diff.apply_colors(&text, rows.clone());
         }
-        self.colors.insert(source, text, rows);
+        self.colors.insert(view, text, rows);
+    }
+
+    /// A diff as it would show now, whole or just the changes.
+    fn view_of(source: &DiffSource) -> DiffView {
+        DiffView { source: source.clone(), whole: git::whole_files() }
     }
 
     /// Colours the open diff from the cache if it can, and asks the worker for
-    /// the rest: the open diff if still uncoloured, then every diff one key
-    /// away in the focused list, so they're ready when the user gets there.
-    /// Without a diff open, only the file under the cursor, one enter away.
-    /// Asking again replaces what's still waiting.
+    /// the rest: the open diff if still uncoloured, the same file the other
+    /// way, whole or just the changes, which e leads to, then every diff one
+    /// key away in the focused list, so they're ready when the user gets
+    /// there. Without a diff open, only the file under the cursor, one enter
+    /// away. Asking again replaces what's still waiting.
     fn request_colors(&mut self) {
         let mut wanted = Vec::new();
-        if let Some(diff) = &mut self.diff
-            && diff.needs_colors()
-        {
-            match self.colors.get(&diff.source, diff.text()) {
-                Some(rows) => {
-                    let text = diff.text().to_string();
-                    diff.apply_colors(&text, rows);
+        if let Some(diff) = &mut self.diff {
+            let view = App::view_of(&diff.source);
+            if diff.needs_colors() {
+                match self.colors.get(&view, diff.text()) {
+                    Some(rows) => {
+                        let text = diff.text().to_string();
+                        diff.apply_colors(&text, rows);
+                    }
+                    None => wanted.push(view.clone()),
                 }
-                None => wanted.push(diff.source.clone()),
+            }
+            let other = DiffView { whole: !view.whole, ..view };
+            if !self.colors.contains(&other) {
+                wanted.push(other);
             }
         }
         let list = if self.focus == Focus::Preview { self.last_left_focus } else { self.focus };
@@ -364,8 +376,9 @@ impl App {
             around.truncate(1);
         }
         for source in around {
-            if !wanted.contains(&source) && !self.colors.contains(&source) {
-                wanted.push(source);
+            let view = App::view_of(&source);
+            if !wanted.contains(&view) && !self.colors.contains(&view) {
+                wanted.push(view);
             }
         }
         self.worker.highlight(wanted);
@@ -427,7 +440,7 @@ impl App {
                 self.report(result);
                 return;
             }
-        if let Some((text, rows)) = self.colors.latest(&source) {
+        if let Some((text, rows)) = self.colors.latest(&App::view_of(&source)) {
             self.diff = Some(DiffPane::colored(source, text, rows));
             self.details = None;
             return;
@@ -485,13 +498,15 @@ impl App {
                 self.send_to_focused_panel(key);
             }
             KeyCode::Char('q') => self.modal = Modal::ConfirmQuit,
-            // Inside the preview, h and l are its own: a diff scrolls sideways.
-            KeyCode::Char('h') if self.focus != Focus::Preview => self.move_focus(false),
-            KeyCode::Char('l') if self.focus != Focus::Preview => self.move_focus(true),
+            // h and l move between the Repo tab's panes. Elsewhere they're the
+            // pane's own: a diff scrolls sideways, Compare's tree folds.
+            KeyCode::Char('h') if self.tab == Tab::Repo && self.focus != Focus::Preview => self.move_focus(false),
+            KeyCode::Char('l') if self.tab == Tab::Repo && self.focus != Focus::Preview => self.move_focus(true),
             KeyCode::Char('?') => self.modal = Modal::Help(HelpPopup::new(self.help_section())),
             KeyCode::Char('o') => self.open_in_editor(),
-            KeyCode::Char('r') if self.compare.is_some() => self.swap_compare(),
+            KeyCode::Char('r') if self.tab == Tab::Compare && self.compare.is_some() => self.swap_compare(),
             KeyCode::Tab | KeyCode::BackTab => self.switch_tab(),
+            KeyCode::Char('e') if self.diff.is_some() => self.toggle_whole_files(),
             // On the Compare tab, c starts a new comparison, as c compares from
             // where the user is in the other panes.
             KeyCode::Char('c') if self.focus == Focus::Compare => self.open_compare_picker(),
@@ -607,10 +622,11 @@ impl App {
     /// Steps along the left-hand panes, wrapping around at the ends. The preview
     /// isn't one of them: Enter or i goes into it and Esc comes back.
     fn move_focus(&mut self, forward: bool) {
-        let order = if self.compare.is_some() {
-            vec![Focus::Compare]
-        } else {
-            vec![Focus::Branches, Focus::Changes, Focus::Graph]
+        // By the tab showing: a comparison kept on the Compare tab mustn't
+        // take over h and l on the Repo tab.
+        let order = match self.tab {
+            Tab::Compare => vec![Focus::Compare],
+            Tab::Repo => vec![Focus::Branches, Focus::Changes, Focus::Graph],
         };
         let current = order.iter().position(|f| *f == self.focus).unwrap_or(0);
         let next = if forward {
@@ -664,7 +680,8 @@ impl App {
         match key.code {
             // Esc keeps the draft for next time.
             KeyCode::Esc => return,
-            KeyCode::Char('s') if ctrl => {
+            // ctrl-s is kept for terminals that send ctrl-enter as plain enter.
+            KeyCode::Enter | KeyCode::Char('s') if ctrl => {
                 if self.commit_draft.trim().is_empty() {
                     self.message = "The commit message is empty".to_string();
                 } else {
@@ -718,7 +735,11 @@ impl App {
         let first = first.unwrap_or_default().to_string();
         match usage {
             PickerUse::GraphBranches => {
-                let result = self.graph.set_refs(picked, self.branches.list());
+                // Confirming the default view's branches as they were keeps the
+                // default view, which follows a checkout to another branch.
+                let unchanged = self.graph.is_default_view() && same_refs(&picked, &self.graph.shown_refs());
+                let refs = if unchanged { Vec::new() } else { picked };
+                let result = self.graph.set_refs(refs, self.branches.list());
                 self.report(result);
             }
             PickerUse::CompareA => {
@@ -744,7 +765,7 @@ impl App {
             Ok(mut items) => {
                 // Comparing a ref with itself shows nothing.
                 items.retain(|item| item.split_whitespace().next() != Some(a.as_str()));
-                let title = format!("Compare {a} with");
+                let title = format!("Compare {a} with: after");
                 let picker = Picker::with_free_text(&title, items).with_hints(&COMPARE_PICKER_KEYS);
                 self.modal = Modal::Picker(picker, PickerUse::CompareB { a });
             }
@@ -777,6 +798,18 @@ impl App {
         self.switch_tab();
     }
 
+    /// Switches every diff between the whole file and just the changes. It
+    /// stays that way while moving between files, for reading with context.
+    fn toggle_whole_files(&mut self) {
+        git::set_whole_files(!git::whole_files());
+        // The cache keeps both kinds, so the other one, prefetched, shows
+        // coloured at once.
+        if let Some(diff) = &mut self.diff {
+            let result = diff.reload();
+            self.report(result);
+        }
+    }
+
     /// Swaps the showing tab's state with the other tab's.
     fn switch_tab(&mut self) {
         let showing = TabState {
@@ -802,7 +835,8 @@ impl App {
         match git::branches() {
             Ok(branches) => {
                 let names = branches.into_iter().map(|b| b.name).collect();
-                let ticked = self.graph.custom_refs().to_vec();
+                // The branches on screen start ticked, the default view's too.
+                let ticked = self.graph.shown_refs();
                 let hints = [("space", "tick"), ("a/A", "all, none"), ("enter", "apply"), ("esc", "close")];
                 let picker = Picker::multi("Graph branches", names, ticked).with_hints(&hints);
                 self.modal = Modal::Picker(picker, PickerUse::GraphBranches);
@@ -814,7 +848,7 @@ impl App {
     fn open_compare_picker(&mut self) {
         match compare_items(&self.recent_yanks) {
             Ok(items) => {
-                let picker = Picker::with_free_text("Compare ref A", items).with_hints(&COMPARE_PICKER_KEYS);
+                let picker = Picker::with_free_text("Compare: before", items).with_hints(&COMPARE_PICKER_KEYS);
                 self.modal = Modal::Picker(picker, PickerUse::CompareA);
             }
             Err(error) => self.modal = Modal::Error(error.to_string()),
@@ -939,18 +973,19 @@ impl App {
         // the text inside the panes' borders.
         let area = Rect { x: area.x + 1, width: area.width.saturating_sub(2), ..area };
         let dim = Style::default().fg(ui::DIM);
-        let mut spans = if self.message.is_empty() {
-            vec![Span::styled(self.hints(), dim)]
+        let (mut spans, empty) = if self.message.is_empty() {
+            let hints = self.hints();
+            (hint_spans(&hints), hints.is_empty())
         } else {
-            vec![Span::styled(self.message.as_str(), Style::default().fg(Color::Yellow))]
+            (vec![Span::styled(self.message.clone(), Style::default().fg(Color::Yellow))], false)
         };
         // The keys that work everywhere follow, set apart from the pane's own.
         // While typing a branch search, ? and q are typed into it instead.
         if !(self.focus == Focus::Branches && self.branches.is_typing()) {
-            if !spans[0].content.is_empty() {
+            if !empty {
                 spans.push(Span::styled("   │   ", dim));
             }
-            spans.push(Span::styled(GLOBAL_HINTS, dim));
+            spans.extend(hint_spans(GLOBAL_HINTS));
         }
         frame.render_widget(Line::from(spans), area);
     }
@@ -1017,12 +1052,13 @@ impl App {
             Focus::Compare => {
                 let source = self.compare.as_ref().and_then(|compare| compare.selected_source());
                 hints.extend(self.enter_diff_hint(source));
-                hints.extend(["r swap A and B", "c new comparison"]);
+                hints.extend(["h/l fold", "r swap before and after", "c new comparison"]);
                 esc = Some("esc close compare");
             }
             Focus::Preview => {
                 if self.diff.is_some() {
-                    hints.extend(["j/k move", "h/l sideways", "ctrl-d/u page", "n/N hunk"]);
+                    hints.extend(["j/k move", "h/l sideways", "ctrl-d/u page", "n/N change"]);
+                    hints.push(if git::whole_files() { "e changes only" } else { "e whole file" });
                 } else {
                     hints.extend(["j/k scroll", "ctrl-d/u page", "y copy sha"]);
                 }
@@ -1181,7 +1217,7 @@ impl App {
             Modal::CommitBox => {
                 let draft = format!("{}▏", self.commit_draft);
                 let body = draft.split('\n').map(|line| Line::raw(line.to_string())).collect();
-                let hints = ui::key_hints(&[("ctrl-s", "commit"), ("esc", "close, keeping it")], None);
+                let hints = ui::key_hints(&[("ctrl-enter", "commit"), ("esc", "close, keeping it")], None);
                 render_popup(frame, area, " Commit message ", body, hints, (72, 12), Color::Cyan);
             }
             Modal::Error(error) => {
@@ -1193,6 +1229,34 @@ impl App {
             Modal::Help(help) => help.render(frame, area),
         }
     }
+}
+
+/// Whether two lists hold the same refs, in any order.
+fn same_refs(a: &[String], b: &[String]) -> bool {
+    let (mut a, mut b) = (a.to_vec(), b.to_vec());
+    a.sort();
+    b.sort();
+    a == b
+}
+
+/// Hints like `space stage · enter diff` styled as popups show keys: each
+/// hint's first word, its key, in the key colour, and the rest in the normal
+/// text colour. "type to filter" has no key, so it's all normal.
+fn hint_spans(hints: &str) -> Vec<Span<'static>> {
+    let mut spans = Vec::new();
+    for (i, hint) in hints.split(" · ").enumerate() {
+        if i > 0 {
+            spans.push(Span::styled(" · ", Style::default().fg(ui::DIM)));
+        }
+        match hint.split_once(' ') {
+            Some((key, action)) if key != "type" => {
+                spans.push(Span::styled(key.to_string(), Style::default().fg(ui::KEY)));
+                spans.push(Span::raw(format!(" {action}")));
+            }
+            _ => spans.push(Span::raw(hint.to_string())),
+        }
+    }
+    spans
 }
 
 /// Writes `[key]` on a pane's top border, right after its title.
@@ -1300,6 +1364,49 @@ mod tests {
         assert!(app.tab == Tab::Compare && app.focus == Focus::Compare);
         press(&mut app, KeyCode::Tab);
         assert!(app.tab == Tab::Repo && app.focus == Focus::Graph);
+    }
+
+    #[test]
+    fn h_and_l_still_move_on_the_repo_tab_with_a_comparison_kept() {
+        let mut app = App::new();
+        app.start_compare("HEAD~1".to_string(), "HEAD".to_string());
+        press(&mut app, KeyCode::Tab);
+        assert!(app.tab == Tab::Repo && app.compare.is_some());
+        app.focus_left(Focus::Changes);
+        press(&mut app, KeyCode::Char('l'));
+        assert!(app.focus == Focus::Graph);
+        press(&mut app, KeyCode::Char('h'));
+        assert!(app.focus == Focus::Changes);
+    }
+
+    #[test]
+    fn hints_show_keys_in_the_key_colour() {
+        let spans = hint_spans("space stage · a/A stage/unstage all · type to filter");
+        let text: Vec<(&str, Option<Color>)> = spans.iter().map(|s| (s.content.as_ref(), s.style.fg)).collect();
+        assert_eq!(
+            text,
+            [
+                ("space", Some(ui::KEY)),
+                (" stage", None),
+                (" · ", Some(ui::DIM)),
+                ("a/A", Some(ui::KEY)),
+                (" stage/unstage all", None),
+                (" · ", Some(ui::DIM)),
+                ("type to filter", None),
+            ]
+        );
+    }
+
+    #[test]
+    fn confirming_the_default_branches_keeps_the_default_view() {
+        let mut app = App::new();
+        let shown = app.graph.shown_refs();
+        assert!(app.graph.is_default_view() && !shown.is_empty());
+        app.use_picked(PickerUse::GraphBranches, shown.into_iter().rev().collect());
+        assert!(app.graph.is_default_view());
+        // Picking something else makes a custom view.
+        app.use_picked(PickerUse::GraphBranches, vec!["HEAD~1".to_string()]);
+        assert!(!app.graph.is_default_view());
     }
 
     #[test]

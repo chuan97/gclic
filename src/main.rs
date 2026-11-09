@@ -15,6 +15,11 @@ mod worker;
 
 use anyhow::Result;
 use app::App;
+use ratatui::crossterm::event::{
+    KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+};
+use ratatui::crossterm::execute;
+use ratatui::crossterm::terminal::supports_keyboard_enhancement;
 
 fn main() -> Result<()> {
     let root = match git::repo_root() {
@@ -29,7 +34,18 @@ fn main() -> Result<()> {
 
     let app = App::new();
     let mut terminal = ratatui::init();
+    // Most terminals send ctrl-enter as plain enter, so gclic asks those that
+    // can to report it apart, for committing. Windows' console always does.
+    // Elsewhere ctrl-s commits too, as the help says.
+    let enhanced = matches!(supports_keyboard_enhancement(), Ok(true));
+    if enhanced {
+        let flags = KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES;
+        execute!(std::io::stdout(), PushKeyboardEnhancementFlags(flags))?;
+    }
     let result = app.run(&mut terminal);
+    if enhanced {
+        let _ = execute!(std::io::stdout(), PopKeyboardEnhancementFlags);
+    }
     ratatui::restore();
     result
 }

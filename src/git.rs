@@ -6,6 +6,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -192,12 +193,32 @@ pub fn commit(message: &str) -> Result<()> {
 
 // ------------------------------------------------------------------ diffs
 
+/// Whether diffs show whole files rather than just the changes. One switch for
+/// the whole app, read by the UI and the worker thread alike, so the diffs
+/// they each fetch always agree.
+static WHOLE_FILES: AtomicBool = AtomicBool::new(false);
+
+pub fn whole_files() -> bool {
+    WHOLE_FILES.load(Ordering::Relaxed)
+}
+
+pub fn set_whole_files(on: bool) {
+    WHOLE_FILES.store(on, Ordering::Relaxed);
+}
+
 pub fn diff(source: &DiffSource) -> Result<String> {
+    diff_with(source, whole_files())
+}
+
+/// The diff of the whole file, or just the changes, whichever is showing.
+pub fn diff_with(source: &DiffSource, whole: bool) -> Result<String> {
     const EXT: &str = "--no-ext-diff";
     const COLOR: &str = "--no-color";
+    // So much context that a hunk takes in the whole file.
+    let context = if whole { "--unified=1000000" } else { "--unified=3" };
     match source {
-        DiffSource::Unstaged(path) => run(&["diff", EXT, COLOR, "--", path]),
-        DiffSource::Staged(path) => run(&["diff", EXT, COLOR, "--cached", "--", path]),
+        DiffSource::Unstaged(path) => run(&["diff", EXT, COLOR, context, "--", path]),
+        DiffSource::Staged(path) => run(&["diff", EXT, COLOR, context, "--cached", "--", path]),
         DiffSource::Untracked(path) => {
             // --no-index exits with 1 when the files differ, which here is
             // always, so the exit code can't be treated as failure.
@@ -215,11 +236,12 @@ pub fn diff(source: &DiffSource) -> Result<String> {
             COLOR,
             "--format=",
             "--diff-merges=first-parent",
+            context,
             sha,
             "--",
             path,
         ]),
-        DiffSource::Refs { a, b, path } => run(&["diff", EXT, COLOR, a, b, "--", path]),
+        DiffSource::Refs { a, b, path } => run(&["diff", EXT, COLOR, context, a, b, "--", path]),
     }
 }
 
@@ -649,6 +671,23 @@ mod tests {
         let shas = resolve_all(&refs);
         assert_eq!(shas[0], resolve("HEAD"));
         assert_eq!(shas[1..], [None, None]);
+    }
+
+    #[test]
+    fn a_whole_file_diff_holds_every_line_of_the_file() {
+        // The first commit's Cargo.toml was edited later, so a diff against it
+        // has changes, and unchanged lines that only a whole-file diff shows.
+        let first = log(&["HEAD".to_string()], 10_000).unwrap().pop().unwrap();
+        let source = DiffSource::Refs { a: first.sha, b: "HEAD".to_string(), path: "Cargo.toml".to_string() };
+        let changes = diff_with(&source, false).unwrap();
+        let whole = diff_with(&source, true).unwrap();
+        let lines_now = run(&["show", "HEAD:Cargo.toml"]).unwrap().lines().count();
+        let shown = |diff: &str| {
+            let new_side = |l: &&str| l.starts_with(' ') || (l.starts_with('+') && !l.starts_with("+++"));
+            diff.lines().filter(new_side).count()
+        };
+        assert_eq!(shown(&whole), lines_now);
+        assert!(shown(&changes) <= shown(&whole));
     }
 
     #[test]

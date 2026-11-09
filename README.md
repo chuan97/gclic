@@ -44,7 +44,7 @@ In [Ghostty](https://ghostty.org) and [kitty](https://sw.kovidgoyal.net/kitty/),
 
 ## Staging and commit
 
-The Changes pane lists staged and unstaged files. `space` stages or unstages one, `a`/`A` all of them, `d` restores a file (after asking), and `c` commits what's staged. `enter` shows a file's diff on the right, and the diff follows as you move through the list.
+The Changes pane lists staged and unstaged files, each name followed by its folder. `space` stages or unstages one, `a`/`A` all of them, `d` restores a file (after asking), and `c` commits what's staged, with `ctrl-enter` to confirm. `enter` shows a file's diff on the right, and the diff follows as you move through the list.
 
 ![The Changes pane with a file's diff on the right](docs/images/staging.svg)
 
@@ -62,13 +62,13 @@ The Branches pane shows the checked-out branch, and when focused, every branch. 
 
 ## Diffs
 
-Diffs are side by side, syntax highlighted with VS Code's Dark Modern colours, with the words that changed marked. A second `enter` moves into a diff: `j`/`k` move the active line, `h`/`l` scroll sideways, `n`/`N` jump between hunks, and `o` opens the file in Zed at the active line.
+Diffs are side by side, syntax highlighted with VS Code's Dark Modern colours, with the words that changed marked. A second `enter` moves into a diff: `j`/`k` move the active line, `h`/`l` scroll sideways, `n`/`N` jump between changes, `e` switches between the whole file and just the changes, and `o` opens the file in Zed at the active line.
 
 ![A commit's diff, with the active line a few rows down](docs/images/diff.svg)
 
 ## Compare
 
-The Compare tab, reached with `tab`, shows how two refs differ: how far each is ahead of the other, their common ancestor, and the files that differ, each with its diff. `c` starts a comparison, from the Branches pane, the graph, or the tab itself, and `r` swaps the two refs.
+The Compare tab, reached with `tab`, shows how two refs differ, a *before* and an *after*: how far the after is ahead of and behind the before, their common ancestor, and the files that differ, in a tree of their folders, each with its diff. `c` starts a comparison, from the Branches pane, the graph, or the tab itself, and `r` swaps before and after.
 
 ![Comparing main with hourly](docs/images/compare.svg)
 

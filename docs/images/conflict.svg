@@ -153,8 +153,11 @@
 <line x1="4.1" y1="127.5" x2="4.1" y2="119.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="127.5" x2="4.1" y2="136.0" stroke="#8abeb7" stroke-width="1.2"/>
 <rect x="8.2" y="119" width="24.6" height="17" fill="#3a3a3a"/>
 <text x="16.4" y="131.6" fill="#e4676b" font-weight="bold" textLength="8.2" lengthAdjust="spacingAndGlyphs">U</text>
-<rect x="32.8" y="119" width="155.8" height="17" fill="#3a3a3a"/>
-<text x="32.8" y="131.6" fill="#ffffff" font-weight="bold" textLength="139.4" lengthAdjust="spacingAndGlyphs">skycast/models.py</text>
+<rect x="32.8" y="119" width="73.8" height="17" fill="#3a3a3a"/>
+<text x="32.8" y="131.6" fill="#ffffff" font-weight="bold" textLength="73.8" lengthAdjust="spacingAndGlyphs">models.py</text>
+<rect x="106.6" y="119" width="73.8" height="17" fill="#3a3a3a"/>
+<text x="123.0" y="131.6" fill="#666666" font-weight="bold" textLength="57.4" lengthAdjust="spacingAndGlyphs">skycast</text>
+<rect x="180.4" y="119" width="8.2" height="17" fill="#3a3a3a"/>
 <line x1="192.7" y1="127.5" x2="192.7" y2="119.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="192.7" y1="127.5" x2="192.7" y2="136.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="200.9" y1="127.5" x2="200.9" y2="119.0" stroke="#666666" stroke-width="1.2"/><line x1="200.9" y1="127.5" x2="200.9" y2="136.0" stroke="#666666" stroke-width="1.2"/>
 <text x="229.6" y="131.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">6</text>
@@ -229,11 +232,11 @@
 <text x="738.0" y="165.6" fill="#4ec9b0" textLength="24.6" lengthAdjust="spacingAndGlyphs">str</text>
 <line x1="979.9" y1="161.5" x2="979.9" y2="153.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="161.5" x2="979.9" y2="170.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="178.5" x2="4.1" y2="170.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="178.5" x2="4.1" y2="187.0" stroke="#666666" stroke-width="1.2"/>
-<rect x="8.2" y="170" width="16.4" height="17" fill="#3a3a3a"/>
+<rect x="8.2" y="170" width="8.2" height="17" fill="#3a3a3a"/>
 <line x1="12.3" y1="178.5" x2="12.3" y2="187.0" stroke="#b5bd68" stroke-width="1.2"/><circle cx="12.3" cy="178.5" r="3.3" fill="#3a3a3a" stroke="#b5bd68" stroke-width="1.2"/>
-<rect x="24.6" y="170" width="24.6" height="17" fill="#3a3a3a"/>
-<rect x="49.2" y="170" width="139.4" height="17" fill="#3a3a3a"/>
-<text x="49.2" y="182.6" fill="#c5c8c6" textLength="131.2" lengthAdjust="spacingAndGlyphs">Space before the</text>
+<rect x="16.4" y="170" width="16.4" height="17" fill="#3a3a3a"/>
+<rect x="32.8" y="170" width="155.8" height="17" fill="#3a3a3a"/>
+<text x="32.8" y="182.6" fill="#c5c8c6" textLength="155.8" lengthAdjust="spacingAndGlyphs">Space before the de</text>
 <line x1="192.7" y1="178.5" x2="192.7" y2="170.0" stroke="#666666" stroke-width="1.2"/><line x1="192.7" y1="178.5" x2="192.7" y2="187.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="200.9" y1="178.5" x2="200.9" y2="170.0" stroke="#666666" stroke-width="1.2"/><line x1="200.9" y1="178.5" x2="200.9" y2="187.0" stroke="#666666" stroke-width="1.2"/>
 <text x="229.6" y="182.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">9</text>
@@ -252,7 +255,7 @@
 <line x1="979.9" y1="178.5" x2="979.9" y2="170.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="178.5" x2="979.9" y2="187.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="195.5" x2="4.1" y2="187.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="195.5" x2="4.1" y2="204.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="195.5" x2="12.3" y2="187.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="195.5" x2="12.3" y2="204.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="195.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
-<text x="49.2" y="199.6" fill="#c5c8c6" textLength="139.4" lengthAdjust="spacingAndGlyphs">Test forecast des</text>
+<text x="32.8" y="199.6" fill="#c5c8c6" textLength="155.8" lengthAdjust="spacingAndGlyphs">Test forecast descr</text>
 <line x1="192.7" y1="195.5" x2="192.7" y2="187.0" stroke="#666666" stroke-width="1.2"/><line x1="192.7" y1="195.5" x2="192.7" y2="204.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="200.9" y1="195.5" x2="200.9" y2="187.0" stroke="#666666" stroke-width="1.2"/><line x1="200.9" y1="195.5" x2="200.9" y2="204.0" stroke="#666666" stroke-width="1.2"/>
 <text x="221.4" y="199.6" fill="#666666" textLength="16.4" lengthAdjust="spacingAndGlyphs">10</text>
@@ -383,13 +386,13 @@
 <line x1="979.9" y1="280.5" x2="979.9" y2="272.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="280.5" x2="979.9" y2="289.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="297.5" x2="4.1" y2="289.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="297.5" x2="4.1" y2="306.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="297.5" x2="12.3" y2="289.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="297.5" x2="12.3" y2="306.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="297.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
-<text x="49.2" y="301.6" fill="#c5c8c6" textLength="139.4" lengthAdjust="spacingAndGlyphs">Add forecast mode</text>
+<text x="32.8" y="301.6" fill="#c5c8c6" textLength="155.8" lengthAdjust="spacingAndGlyphs">Add forecast models</text>
 <line x1="192.7" y1="297.5" x2="192.7" y2="289.0" stroke="#666666" stroke-width="1.2"/><line x1="192.7" y1="297.5" x2="192.7" y2="306.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="200.9" y1="297.5" x2="200.9" y2="289.0" stroke="#666666" stroke-width="1.2"/><line x1="200.9" y1="297.5" x2="200.9" y2="306.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="979.9" y1="297.5" x2="979.9" y2="289.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="297.5" x2="979.9" y2="306.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="314.5" x2="4.1" y2="306.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="314.5" x2="4.1" y2="323.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="314.5" x2="12.3" y2="306.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="314.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
-<text x="49.2" y="318.6" fill="#c5c8c6" textLength="139.4" lengthAdjust="spacingAndGlyphs">Initial project l</text>
+<text x="32.8" y="318.6" fill="#c5c8c6" textLength="155.8" lengthAdjust="spacingAndGlyphs">Initial project lay</text>
 <line x1="192.7" y1="314.5" x2="192.7" y2="306.0" stroke="#666666" stroke-width="1.2"/><line x1="192.7" y1="314.5" x2="192.7" y2="323.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="200.9" y1="314.5" x2="200.9" y2="306.0" stroke="#666666" stroke-width="1.2"/><line x1="200.9" y1="314.5" x2="200.9" y2="323.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="979.9" y1="314.5" x2="979.9" y2="306.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="314.5" x2="979.9" y2="323.0" stroke="#666666" stroke-width="1.2"/>
@@ -565,7 +568,24 @@
 <line x1="963.5" y1="552.5" x2="959.4" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="963.5" y1="552.5" x2="967.6" y2="552.5" stroke="#666666" stroke-width="1.2"/>
 <line x1="971.7" y1="552.5" x2="967.6" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="971.7" y1="552.5" x2="975.8" y2="552.5" stroke="#666666" stroke-width="1.2"/>
 <path d="M979.9,544.0 Q979.9,552.5 975.8,552.5" fill="none" stroke="#666666" stroke-width="1.2"/>
-<text x="8.2" y="573.6" fill="#666666" textLength="713.4" lengthAdjust="spacingAndGlyphs">space stage · a/A stage/unstage all · enter focus diff · o open in zed · esc close diff</text>
+<text x="8.2" y="573.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">space</text>
+<text x="57.4" y="573.6" fill="#ffffff" textLength="41.0" lengthAdjust="spacingAndGlyphs">stage</text>
+<text x="106.6" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="123.0" y="573.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">a/A</text>
+<text x="155.8" y="573.6" fill="#ffffff" textLength="139.4" lengthAdjust="spacingAndGlyphs">stage/unstage all</text>
+<text x="303.4" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="319.8" y="573.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">enter</text>
+<text x="369.0" y="573.6" fill="#ffffff" textLength="82.0" lengthAdjust="spacingAndGlyphs">focus diff</text>
+<text x="459.2" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="475.6" y="573.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">o</text>
+<text x="492.0" y="573.6" fill="#ffffff" textLength="90.2" lengthAdjust="spacingAndGlyphs">open in zed</text>
+<text x="590.4" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="606.8" y="573.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">esc</text>
+<text x="639.6" y="573.6" fill="#ffffff" textLength="82.0" lengthAdjust="spacingAndGlyphs">close diff</text>
 <line x1="750.3" y1="569.5" x2="750.3" y2="561.0" stroke="#666666" stroke-width="1.2"/><line x1="750.3" y1="569.5" x2="750.3" y2="578.0" stroke="#666666" stroke-width="1.2"/>
-<text x="779.0" y="573.6" fill="#666666" textLength="123.0" lengthAdjust="spacingAndGlyphs">? help · q quit</text>
+<text x="779.0" y="573.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">?</text>
+<text x="795.4" y="573.6" fill="#ffffff" textLength="32.8" lengthAdjust="spacingAndGlyphs">help</text>
+<text x="836.4" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="852.8" y="573.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">q</text>
+<text x="869.2" y="573.6" fill="#ffffff" textLength="32.8" lengthAdjust="spacingAndGlyphs">quit</text>
 </g></svg>
