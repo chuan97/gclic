@@ -17,7 +17,14 @@ gclic is heavily inspired by the features I like and have grown accustomed to in
 
 ## Installation
 
-**On Windows**, download `gclic-v<version>-windows-x86_64.zip` from the [releases](https://github.com/chuan97/gclic/releases), extract `gclic.exe`, and put it in a folder on your `PATH`. gclic isn't signed yet, so the first time Windows may say it "protected your PC": choose *More info*, then *Run anyway*. It needs [Git for Windows](https://git-scm.com/download/win), and looks best in [Windows Terminal](https://aka.ms/terminal).
+**On Windows**, download `gclic-v<version>-windows-x86_64.zip` from the [releases](https://github.com/chuan97/gclic/releases) and extract `gclic.exe`. To run it from any folder, put it in a folder on your `PATH`, for example a `bin` folder in your user folder:
+
+1. Create the folder `C:\Users\<you>\bin` and move `gclic.exe` into it.
+2. Open the Start menu, search for *Edit environment variables for your account*, and open it.
+3. Under *User variables*, select `Path`, choose *Edit*, then *New*, and enter `%USERPROFILE%\bin`.
+4. Choose *OK* in both windows, and open a new terminal.
+
+gclic isn't signed yet, so the first time Windows may say it "protected your PC": choose *More info*, then *Run anyway*. It needs [Git for Windows](https://git-scm.com/download/win), and looks best in [Windows Terminal](https://aka.ms/terminal).
 
 **From source**, on any platform with [Rust](https://rustup.rs) installed:
 
