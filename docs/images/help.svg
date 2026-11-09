@@ -6,9 +6,10 @@
 <text x="82.0" y="12.6" fill="#666666" textLength="57.4" lengthAdjust="spacingAndGlyphs">Compare</text>
 <text x="147.6" y="12.6" fill="#c5c8c6" textLength="41.0" lengthAdjust="spacingAndGlyphs">[tab]</text>
 <path d="M4.1,34.0 Q4.1,25.5 8.2,25.5" fill="none" stroke="#666666" stroke-width="1.2"/>
-<text x="16.4" y="29.6" fill="#666666" textLength="16.4" lengthAdjust="spacingAndGlyphs">Br</text>
-<path d="M36.9,34.0 Q36.9,25.5 41.0,25.5" fill="none" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="49.2" y="29.6" fill="#8abeb7" textLength="32.8" lengthAdjust="spacingAndGlyphs">Help</text>
+<path d="M20.5,34.0 Q20.5,25.5 24.6,25.5" fill="none" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="32.8" y="29.6" fill="#8abeb7" textLength="32.8" lengthAdjust="spacingAndGlyphs">Help</text>
+<line x1="77.9" y1="25.5" x2="73.8" y2="25.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="77.9" y1="25.5" x2="82.0" y2="25.5" stroke="#8abeb7" stroke-width="1.2"/>
+<line x1="86.1" y1="25.5" x2="82.0" y2="25.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="86.1" y1="25.5" x2="90.2" y2="25.5" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="94.3" y1="25.5" x2="90.2" y2="25.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="94.3" y1="25.5" x2="98.4" y2="25.5" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="102.5" y1="25.5" x2="98.4" y2="25.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="102.5" y1="25.5" x2="106.6" y2="25.5" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="110.7" y1="25.5" x2="106.6" y2="25.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="110.7" y1="25.5" x2="114.8" y2="25.5" stroke="#8abeb7" stroke-width="1.2"/>
@@ -113,280 +114,257 @@
 <line x1="922.5" y1="25.5" x2="918.4" y2="25.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="922.5" y1="25.5" x2="926.6" y2="25.5" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="930.7" y1="25.5" x2="926.6" y2="25.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="930.7" y1="25.5" x2="934.8" y2="25.5" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="938.9" y1="25.5" x2="934.8" y2="25.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="938.9" y1="25.5" x2="943.0" y2="25.5" stroke="#8abeb7" stroke-width="1.2"/>
-<path d="M947.1,34.0 Q947.1,25.5 943.0,25.5" fill="none" stroke="#8abeb7" stroke-width="1.2"/>
-<line x1="955.3" y1="25.5" x2="951.2" y2="25.5" stroke="#666666" stroke-width="1.2"/><line x1="955.3" y1="25.5" x2="959.4" y2="25.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="963.5" y1="25.5" x2="959.4" y2="25.5" stroke="#666666" stroke-width="1.2"/><line x1="963.5" y1="25.5" x2="967.6" y2="25.5" stroke="#666666" stroke-width="1.2"/>
+<line x1="947.1" y1="25.5" x2="943.0" y2="25.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="25.5" x2="951.2" y2="25.5" stroke="#8abeb7" stroke-width="1.2"/>
+<line x1="955.3" y1="25.5" x2="951.2" y2="25.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="955.3" y1="25.5" x2="959.4" y2="25.5" stroke="#8abeb7" stroke-width="1.2"/>
+<path d="M963.5,34.0 Q963.5,25.5 959.4,25.5" fill="none" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="971.7" y1="25.5" x2="967.6" y2="25.5" stroke="#666666" stroke-width="1.2"/><line x1="971.7" y1="25.5" x2="975.8" y2="25.5" stroke="#666666" stroke-width="1.2"/>
 <path d="M979.9,34.0 Q979.9,25.5 975.8,25.5" fill="none" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="42.5" x2="4.1" y2="34.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="42.5" x2="4.1" y2="51.0" stroke="#666666" stroke-width="1.2"/>
-<text x="8.2" y="46.6" fill="#b5bd68" font-weight="bold" textLength="24.6" lengthAdjust="spacingAndGlyphs">* h</text>
-<line x1="36.9" y1="42.5" x2="36.9" y2="34.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="42.5" x2="36.9" y2="51.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="57.4" y="46.6" fill="#8abeb7" font-weight="bold" textLength="82.0" lengthAdjust="spacingAndGlyphs">Everywhere</text>
+<text x="8.2" y="46.6" fill="#b5bd68" font-weight="bold" textLength="8.2" lengthAdjust="spacingAndGlyphs">*</text>
+<line x1="20.5" y1="42.5" x2="20.5" y2="34.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="42.5" x2="20.5" y2="51.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="41.0" y="46.6" fill="#8abeb7" font-weight="bold" textLength="82.0" lengthAdjust="spacingAndGlyphs">Everywhere</text>
 <text x="524.8" y="46.6" fill="#8abeb7" font-weight="bold" textLength="57.4" lengthAdjust="spacingAndGlyphs">Compare</text>
-<line x1="947.1" y1="42.5" x2="947.1" y2="34.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="42.5" x2="947.1" y2="51.0" stroke="#8abeb7" stroke-width="1.2"/>
+<line x1="963.5" y1="42.5" x2="963.5" y2="34.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="42.5" x2="963.5" y2="51.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="42.5" x2="979.9" y2="34.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="42.5" x2="979.9" y2="51.0" stroke="#666666" stroke-width="1.2"/>
 <path d="M4.1,51.0 Q4.1,59.5 8.2,59.5" fill="none" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="59.5" x2="8.2" y2="59.5" stroke="#666666" stroke-width="1.2"/><line x1="12.3" y1="59.5" x2="16.4" y2="59.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="20.5" y1="59.5" x2="16.4" y2="59.5" stroke="#666666" stroke-width="1.2"/><line x1="20.5" y1="59.5" x2="24.6" y2="59.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="28.7" y1="59.5" x2="24.6" y2="59.5" stroke="#666666" stroke-width="1.2"/><line x1="28.7" y1="59.5" x2="32.8" y2="59.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="36.9" y1="59.5" x2="36.9" y2="51.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="59.5" x2="36.9" y2="68.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="63.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">h l</text>
+<line x1="20.5" y1="59.5" x2="20.5" y2="51.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="59.5" x2="20.5" y2="68.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="63.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">h l</text>
 <text x="155.8" y="63.6" fill="#ffffff" textLength="147.6" lengthAdjust="spacingAndGlyphs">previous/next pane</text>
 <text x="541.2" y="63.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">enter</text>
-<text x="623.2" y="63.6" fill="#ffffff" textLength="106.6" lengthAdjust="spacingAndGlyphs">show the diff</text>
-<line x1="947.1" y1="59.5" x2="947.1" y2="51.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="59.5" x2="947.1" y2="68.0" stroke="#8abeb7" stroke-width="1.2"/>
-<line x1="955.3" y1="59.5" x2="951.2" y2="59.5" stroke="#666666" stroke-width="1.2"/><line x1="955.3" y1="59.5" x2="959.4" y2="59.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="963.5" y1="59.5" x2="959.4" y2="59.5" stroke="#666666" stroke-width="1.2"/><line x1="963.5" y1="59.5" x2="967.6" y2="59.5" stroke="#666666" stroke-width="1.2"/>
+<text x="639.6" y="63.6" fill="#ffffff" textLength="254.2" lengthAdjust="spacingAndGlyphs">show the diff, or fold a folder</text>
+<line x1="963.5" y1="59.5" x2="963.5" y2="51.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="59.5" x2="963.5" y2="68.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="971.7" y1="59.5" x2="967.6" y2="59.5" stroke="#666666" stroke-width="1.2"/><line x1="971.7" y1="59.5" x2="975.8" y2="59.5" stroke="#666666" stroke-width="1.2"/>
 <path d="M979.9,51.0 Q979.9,59.5 975.8,59.5" fill="none" stroke="#666666" stroke-width="1.2"/>
 <path d="M4.1,85.0 Q4.1,76.5 8.2,76.5" fill="none" stroke="#666666" stroke-width="1.2"/>
-<text x="16.4" y="80.6" fill="#666666" textLength="16.4" lengthAdjust="spacingAndGlyphs">Ch</text>
-<line x1="36.9" y1="76.5" x2="36.9" y2="68.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="76.5" x2="36.9" y2="85.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="80.6" fill="#f0c674" textLength="57.4" lengthAdjust="spacingAndGlyphs">j k g G</text>
+<line x1="20.5" y1="76.5" x2="20.5" y2="68.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="76.5" x2="20.5" y2="85.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="80.6" fill="#f0c674" textLength="57.4" lengthAdjust="spacingAndGlyphs">j k g G</text>
 <text x="155.8" y="80.6" fill="#ffffff" textLength="246.0" lengthAdjust="spacingAndGlyphs">move, wrapping around in lists</text>
-<text x="541.2" y="80.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">c</text>
-<text x="623.2" y="80.6" fill="#ffffff" textLength="254.2" lengthAdjust="spacingAndGlyphs">new comparison: choose two refs</text>
-<line x1="947.1" y1="76.5" x2="947.1" y2="68.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="76.5" x2="947.1" y2="85.0" stroke="#8abeb7" stroke-width="1.2"/>
-<line x1="955.3" y1="76.5" x2="951.2" y2="76.5" stroke="#666666" stroke-width="1.2"/><line x1="955.3" y1="76.5" x2="959.4" y2="76.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="963.5" y1="76.5" x2="959.4" y2="76.5" stroke="#666666" stroke-width="1.2"/><line x1="963.5" y1="76.5" x2="967.6" y2="76.5" stroke="#666666" stroke-width="1.2"/>
+<text x="541.2" y="80.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">h l</text>
+<text x="639.6" y="80.6" fill="#ffffff" textLength="319.8" lengthAdjust="spacingAndGlyphs">fold a folder or go up, unfold or go in</text>
+<line x1="963.5" y1="76.5" x2="963.5" y2="68.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="76.5" x2="963.5" y2="85.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="971.7" y1="76.5" x2="967.6" y2="76.5" stroke="#666666" stroke-width="1.2"/><line x1="971.7" y1="76.5" x2="975.8" y2="76.5" stroke="#666666" stroke-width="1.2"/>
 <path d="M979.9,85.0 Q979.9,76.5 975.8,76.5" fill="none" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="93.5" x2="4.1" y2="85.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="93.5" x2="4.1" y2="102.0" stroke="#666666" stroke-width="1.2"/>
-<text x="8.2" y="97.6" fill="#666666" font-weight="bold" textLength="24.6" lengthAdjust="spacingAndGlyphs">Sta</text>
-<line x1="36.9" y1="93.5" x2="36.9" y2="85.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="93.5" x2="36.9" y2="102.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="97.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">enter</text>
+<text x="8.2" y="97.6" fill="#666666" font-weight="bold" textLength="8.2" lengthAdjust="spacingAndGlyphs">S</text>
+<line x1="20.5" y1="93.5" x2="20.5" y2="85.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="93.5" x2="20.5" y2="102.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="97.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">enter</text>
 <text x="155.8" y="97.6" fill="#ffffff" textLength="311.6" lengthAdjust="spacingAndGlyphs">open; on a file, again to move into it</text>
-<text x="541.2" y="97.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">r</text>
-<text x="623.2" y="97.6" fill="#ffffff" textLength="98.4" lengthAdjust="spacingAndGlyphs">swap A and B</text>
-<line x1="947.1" y1="93.5" x2="947.1" y2="85.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="93.5" x2="947.1" y2="102.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="541.2" y="97.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">c</text>
+<text x="639.6" y="97.6" fill="#ffffff" textLength="254.2" lengthAdjust="spacingAndGlyphs">new comparison: choose two refs</text>
+<line x1="963.5" y1="93.5" x2="963.5" y2="85.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="93.5" x2="963.5" y2="102.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="93.5" x2="979.9" y2="85.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="93.5" x2="979.9" y2="102.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="110.5" x2="4.1" y2="102.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="110.5" x2="4.1" y2="119.0" stroke="#666666" stroke-width="1.2"/>
-<rect x="8.2" y="102" width="24.6" height="17" fill="#3a3a3a"/>
-<text x="16.4" y="114.6" fill="#e2c08d" textLength="8.2" lengthAdjust="spacingAndGlyphs">M</text>
-<line x1="36.9" y1="110.5" x2="36.9" y2="102.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="110.5" x2="36.9" y2="119.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="114.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">esc</text>
+<rect x="8.2" y="102" width="8.2" height="17" fill="#3a3a3a"/>
+<line x1="20.5" y1="110.5" x2="20.5" y2="102.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="110.5" x2="20.5" y2="119.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="114.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">esc</text>
 <text x="155.8" y="114.6" fill="#ffffff" textLength="319.8" lengthAdjust="spacingAndGlyphs">go back, then close the diff or details</text>
-<text x="541.2" y="114.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">esc</text>
-<text x="623.2" y="114.6" fill="#ffffff" textLength="319.8" lengthAdjust="spacingAndGlyphs">close it after confirming, back to Repo</text>
-<line x1="947.1" y1="110.5" x2="947.1" y2="102.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="110.5" x2="947.1" y2="119.0" stroke="#8abeb7" stroke-width="1.2"/>
-<rect x="951.2" y="102" width="24.6" height="17" fill="#3a3a3a"/>
+<text x="541.2" y="114.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">r</text>
+<text x="639.6" y="114.6" fill="#ffffff" textLength="172.2" lengthAdjust="spacingAndGlyphs">swap before and after</text>
+<line x1="963.5" y1="110.5" x2="963.5" y2="102.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="110.5" x2="963.5" y2="119.0" stroke="#8abeb7" stroke-width="1.2"/>
+<rect x="967.6" y="102" width="8.2" height="17" fill="#3a3a3a"/>
 <line x1="979.9" y1="110.5" x2="979.9" y2="102.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="110.5" x2="979.9" y2="119.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="127.5" x2="4.1" y2="119.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="127.5" x2="4.1" y2="136.0" stroke="#666666" stroke-width="1.2"/>
-<text x="8.2" y="131.6" fill="#666666" font-weight="bold" textLength="24.6" lengthAdjust="spacingAndGlyphs">Cha</text>
-<line x1="36.9" y1="127.5" x2="36.9" y2="119.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="127.5" x2="36.9" y2="136.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="131.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">o</text>
+<text x="8.2" y="131.6" fill="#666666" font-weight="bold" textLength="8.2" lengthAdjust="spacingAndGlyphs">C</text>
+<line x1="20.5" y1="127.5" x2="20.5" y2="119.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="127.5" x2="20.5" y2="136.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="131.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">o</text>
 <text x="155.8" y="131.6" fill="#ffffff" textLength="164.0" lengthAdjust="spacingAndGlyphs">open the file in Zed</text>
-<line x1="947.1" y1="127.5" x2="947.1" y2="119.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="127.5" x2="947.1" y2="136.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="541.2" y="131.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">esc</text>
+<text x="639.6" y="131.6" fill="#ffffff" textLength="319.8" lengthAdjust="spacingAndGlyphs">close it after confirming, back to Repo</text>
+<line x1="963.5" y1="127.5" x2="963.5" y2="119.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="127.5" x2="963.5" y2="136.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="127.5" x2="979.9" y2="119.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="127.5" x2="979.9" y2="136.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="144.5" x2="4.1" y2="136.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="144.5" x2="4.1" y2="153.0" stroke="#666666" stroke-width="1.2"/>
-<text x="16.4" y="148.6" fill="#e2c08d" textLength="8.2" lengthAdjust="spacingAndGlyphs">M</text>
-<line x1="36.9" y1="144.5" x2="36.9" y2="136.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="144.5" x2="36.9" y2="153.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="148.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">z</text>
+<line x1="20.5" y1="144.5" x2="20.5" y2="136.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="144.5" x2="20.5" y2="153.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="148.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">z</text>
 <text x="155.8" y="148.6" fill="#ffffff" textLength="196.8" lengthAdjust="spacingAndGlyphs">zoom the diff or details</text>
-<text x="524.8" y="148.6" fill="#8abeb7" font-weight="bold" textLength="32.8" lengthAdjust="spacingAndGlyphs">Diff</text>
-<line x1="947.1" y1="144.5" x2="947.1" y2="136.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="144.5" x2="947.1" y2="153.0" stroke="#8abeb7" stroke-width="1.2"/>
+<line x1="963.5" y1="144.5" x2="963.5" y2="136.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="144.5" x2="963.5" y2="153.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="144.5" x2="979.9" y2="136.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="144.5" x2="979.9" y2="153.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="161.5" x2="4.1" y2="153.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="161.5" x2="4.1" y2="170.0" stroke="#666666" stroke-width="1.2"/>
-<text x="16.4" y="165.6" fill="#73c991" textLength="8.2" lengthAdjust="spacingAndGlyphs">?</text>
-<line x1="36.9" y1="161.5" x2="36.9" y2="153.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="161.5" x2="36.9" y2="170.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="165.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">tab</text>
+<line x1="20.5" y1="161.5" x2="20.5" y2="153.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="161.5" x2="20.5" y2="170.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="165.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">tab</text>
 <text x="155.8" y="165.6" fill="#ffffff" textLength="254.2" lengthAdjust="spacingAndGlyphs">switch between Repo and Compare</text>
-<text x="541.2" y="165.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">j k</text>
-<text x="623.2" y="165.6" fill="#ffffff" textLength="164.0" lengthAdjust="spacingAndGlyphs">move the active line</text>
-<line x1="947.1" y1="161.5" x2="947.1" y2="153.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="161.5" x2="947.1" y2="170.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="524.8" y="165.6" fill="#8abeb7" font-weight="bold" textLength="32.8" lengthAdjust="spacingAndGlyphs">Diff</text>
+<line x1="963.5" y1="161.5" x2="963.5" y2="153.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="161.5" x2="963.5" y2="170.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="161.5" x2="979.9" y2="153.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="161.5" x2="979.9" y2="170.0" stroke="#666666" stroke-width="1.2"/>
 <path d="M4.1,170.0 Q4.1,178.5 8.2,178.5" fill="none" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="178.5" x2="8.2" y2="178.5" stroke="#666666" stroke-width="1.2"/><line x1="12.3" y1="178.5" x2="16.4" y2="178.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="20.5" y1="178.5" x2="16.4" y2="178.5" stroke="#666666" stroke-width="1.2"/><line x1="20.5" y1="178.5" x2="24.6" y2="178.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="28.7" y1="178.5" x2="24.6" y2="178.5" stroke="#666666" stroke-width="1.2"/><line x1="28.7" y1="178.5" x2="32.8" y2="178.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="36.9" y1="178.5" x2="36.9" y2="170.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="178.5" x2="36.9" y2="187.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="182.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">?</text>
+<line x1="20.5" y1="178.5" x2="20.5" y2="170.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="178.5" x2="20.5" y2="187.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="182.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">?</text>
 <text x="155.8" y="182.6" fill="#ffffff" textLength="73.8" lengthAdjust="spacingAndGlyphs">this help</text>
-<text x="541.2" y="182.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">g G</text>
-<text x="623.2" y="182.6" fill="#ffffff" textLength="123.0" lengthAdjust="spacingAndGlyphs">first/last line</text>
-<line x1="947.1" y1="178.5" x2="947.1" y2="170.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="178.5" x2="947.1" y2="187.0" stroke="#8abeb7" stroke-width="1.2"/>
-<line x1="955.3" y1="178.5" x2="951.2" y2="178.5" stroke="#666666" stroke-width="1.2"/><line x1="955.3" y1="178.5" x2="959.4" y2="178.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="963.5" y1="178.5" x2="959.4" y2="178.5" stroke="#666666" stroke-width="1.2"/><line x1="963.5" y1="178.5" x2="967.6" y2="178.5" stroke="#666666" stroke-width="1.2"/>
+<text x="541.2" y="182.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">j k</text>
+<text x="639.6" y="182.6" fill="#ffffff" textLength="164.0" lengthAdjust="spacingAndGlyphs">move the active line</text>
+<line x1="963.5" y1="178.5" x2="963.5" y2="170.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="178.5" x2="963.5" y2="187.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="971.7" y1="178.5" x2="967.6" y2="178.5" stroke="#666666" stroke-width="1.2"/><line x1="971.7" y1="178.5" x2="975.8" y2="178.5" stroke="#666666" stroke-width="1.2"/>
 <path d="M979.9,170.0 Q979.9,178.5 975.8,178.5" fill="none" stroke="#666666" stroke-width="1.2"/>
 <path d="M4.1,204.0 Q4.1,195.5 8.2,195.5" fill="none" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="16.4" y="199.6" fill="#8abeb7" textLength="16.4" lengthAdjust="spacingAndGlyphs">Gr</text>
-<line x1="36.9" y1="195.5" x2="36.9" y2="187.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="195.5" x2="36.9" y2="204.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="199.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">q</text>
+<line x1="20.5" y1="195.5" x2="20.5" y2="187.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="195.5" x2="20.5" y2="204.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="199.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">q</text>
 <text x="155.8" y="199.6" fill="#ffffff" textLength="188.6" lengthAdjust="spacingAndGlyphs">quit, or ctrl-c at once</text>
-<text x="541.2" y="199.6" fill="#f0c674" textLength="65.6" lengthAdjust="spacingAndGlyphs">ctrl-d u</text>
-<text x="623.2" y="199.6" fill="#ffffff" textLength="155.8" lengthAdjust="spacingAndGlyphs">half a page down/up</text>
-<line x1="947.1" y1="195.5" x2="947.1" y2="187.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="195.5" x2="947.1" y2="204.0" stroke="#8abeb7" stroke-width="1.2"/>
-<line x1="955.3" y1="195.5" x2="951.2" y2="195.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="955.3" y1="195.5" x2="959.4" y2="195.5" stroke="#8abeb7" stroke-width="1.2"/>
-<line x1="963.5" y1="195.5" x2="959.4" y2="195.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="195.5" x2="967.6" y2="195.5" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="541.2" y="199.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">g G</text>
+<text x="639.6" y="199.6" fill="#ffffff" textLength="123.0" lengthAdjust="spacingAndGlyphs">first/last line</text>
+<line x1="963.5" y1="195.5" x2="963.5" y2="187.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="195.5" x2="963.5" y2="204.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="971.7" y1="195.5" x2="967.6" y2="195.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="971.7" y1="195.5" x2="975.8" y2="195.5" stroke="#8abeb7" stroke-width="1.2"/>
 <path d="M979.9,204.0 Q979.9,195.5 975.8,195.5" fill="none" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="212.5" x2="4.1" y2="204.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="212.5" x2="4.1" y2="221.0" stroke="#8abeb7" stroke-width="1.2"/>
-<rect x="8.2" y="204" width="16.4" height="17" fill="#3a3a3a"/>
+<rect x="8.2" y="204" width="8.2" height="17" fill="#3a3a3a"/>
 <line x1="12.3" y1="212.5" x2="12.3" y2="221.0" stroke="#b5bd68" stroke-width="1.2"/><circle cx="12.3" cy="212.5" r="3.3" fill="#3a3a3a" stroke="#b5bd68" stroke-width="1.2"/>
-<rect x="24.6" y="204" width="8.2" height="17" fill="#3a3a3a"/>
-<line x1="36.9" y1="212.5" x2="36.9" y2="204.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="212.5" x2="36.9" y2="221.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="541.2" y="216.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">n N</text>
-<text x="623.2" y="216.6" fill="#ffffff" textLength="147.6" lengthAdjust="spacingAndGlyphs">next/previous hunk</text>
-<line x1="947.1" y1="212.5" x2="947.1" y2="204.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="212.5" x2="947.1" y2="221.0" stroke="#8abeb7" stroke-width="1.2"/>
-<rect x="951.2" y="204" width="24.6" height="17" fill="#3a3a3a"/>
+<line x1="20.5" y1="212.5" x2="20.5" y2="204.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="212.5" x2="20.5" y2="221.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="541.2" y="216.6" fill="#f0c674" textLength="65.6" lengthAdjust="spacingAndGlyphs">ctrl-d u</text>
+<text x="639.6" y="216.6" fill="#ffffff" textLength="155.8" lengthAdjust="spacingAndGlyphs">half a page down/up</text>
+<line x1="963.5" y1="212.5" x2="963.5" y2="204.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="212.5" x2="963.5" y2="221.0" stroke="#8abeb7" stroke-width="1.2"/>
+<rect x="967.6" y="204" width="8.2" height="17" fill="#3a3a3a"/>
 <line x1="979.9" y1="212.5" x2="979.9" y2="204.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="212.5" x2="979.9" y2="221.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="229.5" x2="4.1" y2="221.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="229.5" x2="4.1" y2="238.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="12.3" y1="229.5" x2="12.3" y2="221.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="229.5" x2="12.3" y2="238.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="229.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
-<line x1="36.9" y1="229.5" x2="36.9" y2="221.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="229.5" x2="36.9" y2="238.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="57.4" y="233.6" fill="#8abeb7" font-weight="bold" textLength="65.6" lengthAdjust="spacingAndGlyphs">Branches</text>
-<text x="541.2" y="233.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">h l</text>
-<text x="623.2" y="233.6" fill="#ffffff" textLength="123.0" lengthAdjust="spacingAndGlyphs">scroll sideways</text>
-<line x1="947.1" y1="229.5" x2="947.1" y2="221.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="229.5" x2="947.1" y2="238.0" stroke="#8abeb7" stroke-width="1.2"/>
+<line x1="20.5" y1="229.5" x2="20.5" y2="221.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="229.5" x2="20.5" y2="238.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="41.0" y="233.6" fill="#8abeb7" font-weight="bold" textLength="65.6" lengthAdjust="spacingAndGlyphs">Branches</text>
+<text x="541.2" y="233.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">n N</text>
+<text x="639.6" y="233.6" fill="#ffffff" textLength="147.6" lengthAdjust="spacingAndGlyphs">next/previous hunk</text>
+<line x1="963.5" y1="229.5" x2="963.5" y2="221.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="229.5" x2="963.5" y2="238.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="229.5" x2="979.9" y2="221.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="229.5" x2="979.9" y2="238.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="246.5" x2="4.1" y2="238.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="246.5" x2="4.1" y2="255.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="12.3" y1="246.5" x2="12.3" y2="238.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="246.5" x2="12.3" y2="255.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="246.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
-<line x1="36.9" y1="246.5" x2="36.9" y2="238.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="246.5" x2="36.9" y2="255.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="250.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">enter</text>
+<line x1="20.5" y1="246.5" x2="20.5" y2="238.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="246.5" x2="20.5" y2="255.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="250.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">enter</text>
 <text x="155.8" y="250.6" fill="#ffffff" textLength="73.8" lengthAdjust="spacingAndGlyphs">check out</text>
-<line x1="947.1" y1="246.5" x2="947.1" y2="238.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="246.5" x2="947.1" y2="255.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="541.2" y="250.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">h l</text>
+<text x="639.6" y="250.6" fill="#ffffff" textLength="123.0" lengthAdjust="spacingAndGlyphs">scroll sideways</text>
+<line x1="963.5" y1="246.5" x2="963.5" y2="238.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="246.5" x2="963.5" y2="255.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="246.5" x2="979.9" y2="238.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="246.5" x2="979.9" y2="255.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="263.5" x2="4.1" y2="255.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="263.5" x2="4.1" y2="272.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="12.3" y1="263.5" x2="12.3" y2="255.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="263.5" x2="12.3" y2="272.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="263.5" x2="16.4" y2="263.5" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="263.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
-<line x1="20.5" y1="263.5" x2="16.4" y2="263.5" stroke="#7aa6da" stroke-width="1.2"/><line x1="20.5" y1="263.5" x2="24.6" y2="263.5" stroke="#7aa6da" stroke-width="1.2"/>
-<path d="M28.7,272.0 Q28.7,263.5 24.6,263.5" fill="none" stroke="#7aa6da" stroke-width="1.2"/>
-<line x1="36.9" y1="263.5" x2="36.9" y2="255.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="263.5" x2="36.9" y2="272.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="267.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">c</text>
+<line x1="20.5" y1="263.5" x2="20.5" y2="255.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="263.5" x2="20.5" y2="272.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="267.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">c</text>
 <text x="155.8" y="267.6" fill="#ffffff" textLength="287.0" lengthAdjust="spacingAndGlyphs">compare with the checked-out branch</text>
-<text x="524.8" y="267.6" fill="#8abeb7" font-weight="bold" textLength="114.8" lengthAdjust="spacingAndGlyphs">Commit details</text>
-<line x1="947.1" y1="263.5" x2="947.1" y2="255.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="263.5" x2="947.1" y2="272.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="541.2" y="267.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">e</text>
+<text x="639.6" y="267.6" fill="#ffffff" textLength="254.2" lengthAdjust="spacingAndGlyphs">whole file, or just the changes</text>
+<line x1="963.5" y1="263.5" x2="963.5" y2="255.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="263.5" x2="963.5" y2="272.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="263.5" x2="979.9" y2="255.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="263.5" x2="979.9" y2="272.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="280.5" x2="4.1" y2="272.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="280.5" x2="4.1" y2="289.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="12.3" y1="280.5" x2="12.3" y2="272.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="280.5" x2="12.3" y2="289.0" stroke="#7aa6da" stroke-width="1.2"/>
-<line x1="28.7" y1="280.5" x2="28.7" y2="272.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="28.7" y1="280.5" x2="28.7" y2="289.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="28.7" cy="280.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
-<line x1="36.9" y1="280.5" x2="36.9" y2="272.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="280.5" x2="36.9" y2="289.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="284.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">space</text>
+<line x1="20.5" y1="280.5" x2="20.5" y2="272.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="280.5" x2="20.5" y2="289.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="284.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">space</text>
 <text x="155.8" y="284.6" fill="#ffffff" textLength="131.2" lengthAdjust="spacingAndGlyphs">show its remotes</text>
-<text x="541.2" y="284.6" fill="#f0c674" textLength="57.4" lengthAdjust="spacingAndGlyphs">j k g G</text>
-<text x="623.2" y="284.6" fill="#ffffff" textLength="49.2" lengthAdjust="spacingAndGlyphs">scroll</text>
-<line x1="947.1" y1="280.5" x2="947.1" y2="272.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="280.5" x2="947.1" y2="289.0" stroke="#8abeb7" stroke-width="1.2"/>
+<line x1="963.5" y1="280.5" x2="963.5" y2="272.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="280.5" x2="963.5" y2="289.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="280.5" x2="979.9" y2="272.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="280.5" x2="979.9" y2="289.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="297.5" x2="4.1" y2="289.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="297.5" x2="4.1" y2="306.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="12.3" y1="297.5" x2="12.3" y2="289.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="297.5" x2="12.3" y2="306.0" stroke="#7aa6da" stroke-width="1.2"/>
-<line x1="28.7" y1="297.5" x2="28.7" y2="289.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="28.7" y1="297.5" x2="28.7" y2="306.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="28.7" cy="297.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
-<line x1="36.9" y1="297.5" x2="36.9" y2="289.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="297.5" x2="36.9" y2="306.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="301.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">i</text>
+<line x1="20.5" y1="297.5" x2="20.5" y2="289.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="297.5" x2="20.5" y2="306.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="301.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">i</text>
 <text x="155.8" y="301.6" fill="#ffffff" textLength="196.8" lengthAdjust="spacingAndGlyphs">search; esc stops typing</text>
-<text x="541.2" y="301.6" fill="#f0c674" textLength="65.6" lengthAdjust="spacingAndGlyphs">ctrl-d u</text>
-<text x="623.2" y="301.6" fill="#ffffff" textLength="155.8" lengthAdjust="spacingAndGlyphs">half a page down/up</text>
-<line x1="947.1" y1="297.5" x2="947.1" y2="289.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="297.5" x2="947.1" y2="306.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="524.8" y="301.6" fill="#8abeb7" font-weight="bold" textLength="114.8" lengthAdjust="spacingAndGlyphs">Commit details</text>
+<line x1="963.5" y1="297.5" x2="963.5" y2="289.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="297.5" x2="963.5" y2="306.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="297.5" x2="979.9" y2="289.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="297.5" x2="979.9" y2="306.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="314.5" x2="4.1" y2="306.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="314.5" x2="4.1" y2="323.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="12.3" y1="314.5" x2="12.3" y2="306.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="314.5" x2="12.3" y2="323.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="314.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
-<line x1="28.7" y1="314.5" x2="28.7" y2="306.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="28.7" y1="314.5" x2="28.7" y2="323.0" stroke="#7aa6da" stroke-width="1.2"/>
-<line x1="36.9" y1="314.5" x2="36.9" y2="306.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="314.5" x2="36.9" y2="323.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="318.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">esc</text>
+<line x1="20.5" y1="314.5" x2="20.5" y2="306.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="314.5" x2="20.5" y2="323.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="318.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">esc</text>
 <text x="155.8" y="318.6" fill="#ffffff" textLength="131.2" lengthAdjust="spacingAndGlyphs">clear the search</text>
-<text x="541.2" y="318.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">y</text>
-<text x="623.2" y="318.6" fill="#ffffff" textLength="98.4" lengthAdjust="spacingAndGlyphs">copy the sha</text>
-<line x1="947.1" y1="314.5" x2="947.1" y2="306.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="314.5" x2="947.1" y2="323.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="541.2" y="318.6" fill="#f0c674" textLength="57.4" lengthAdjust="spacingAndGlyphs">j k g G</text>
+<text x="639.6" y="318.6" fill="#ffffff" textLength="49.2" lengthAdjust="spacingAndGlyphs">scroll</text>
+<line x1="963.5" y1="314.5" x2="963.5" y2="306.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="314.5" x2="963.5" y2="323.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="314.5" x2="979.9" y2="306.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="314.5" x2="979.9" y2="323.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="331.5" x2="4.1" y2="323.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="331.5" x2="4.1" y2="340.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="12.3" y1="331.5" x2="12.3" y2="323.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="331.5" x2="12.3" y2="340.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="331.5" x2="16.4" y2="331.5" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="331.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
-<line x1="20.5" y1="331.5" x2="16.4" y2="331.5" stroke="#7aa6da" stroke-width="1.2"/><line x1="20.5" y1="331.5" x2="24.6" y2="331.5" stroke="#7aa6da" stroke-width="1.2"/>
-<path d="M28.7,323.0 Q28.7,331.5 24.6,331.5" fill="none" stroke="#7aa6da" stroke-width="1.2"/>
-<line x1="36.9" y1="331.5" x2="36.9" y2="323.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="331.5" x2="36.9" y2="340.0" stroke="#8abeb7" stroke-width="1.2"/>
-<line x1="947.1" y1="331.5" x2="947.1" y2="323.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="331.5" x2="947.1" y2="340.0" stroke="#8abeb7" stroke-width="1.2"/>
+<line x1="20.5" y1="331.5" x2="20.5" y2="323.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="331.5" x2="20.5" y2="340.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="541.2" y="335.6" fill="#f0c674" textLength="65.6" lengthAdjust="spacingAndGlyphs">ctrl-d u</text>
+<text x="639.6" y="335.6" fill="#ffffff" textLength="155.8" lengthAdjust="spacingAndGlyphs">half a page down/up</text>
+<line x1="963.5" y1="331.5" x2="963.5" y2="323.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="331.5" x2="963.5" y2="340.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="331.5" x2="979.9" y2="323.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="331.5" x2="979.9" y2="340.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="348.5" x2="4.1" y2="340.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="348.5" x2="4.1" y2="357.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="12.3" y1="348.5" x2="12.3" y2="340.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="348.5" x2="12.3" y2="357.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="348.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
-<line x1="36.9" y1="348.5" x2="36.9" y2="340.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="348.5" x2="36.9" y2="357.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="57.4" y="352.6" fill="#8abeb7" font-weight="bold" textLength="57.4" lengthAdjust="spacingAndGlyphs">Changes</text>
-<text x="524.8" y="352.6" fill="#8abeb7" font-weight="bold" textLength="57.4" lengthAdjust="spacingAndGlyphs">Pickers</text>
-<line x1="947.1" y1="348.5" x2="947.1" y2="340.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="348.5" x2="947.1" y2="357.0" stroke="#8abeb7" stroke-width="1.2"/>
+<line x1="20.5" y1="348.5" x2="20.5" y2="340.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="348.5" x2="20.5" y2="357.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="41.0" y="352.6" fill="#8abeb7" font-weight="bold" textLength="57.4" lengthAdjust="spacingAndGlyphs">Changes</text>
+<text x="541.2" y="352.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">y</text>
+<text x="639.6" y="352.6" fill="#ffffff" textLength="98.4" lengthAdjust="spacingAndGlyphs">copy the sha</text>
+<line x1="963.5" y1="348.5" x2="963.5" y2="340.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="348.5" x2="963.5" y2="357.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="348.5" x2="979.9" y2="340.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="348.5" x2="979.9" y2="357.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="365.5" x2="4.1" y2="357.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="365.5" x2="4.1" y2="374.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="12.3" y1="365.5" x2="12.3" y2="357.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="365.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
-<line x1="36.9" y1="365.5" x2="36.9" y2="357.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="365.5" x2="36.9" y2="374.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="369.6" fill="#f0c674" textLength="57.4" lengthAdjust="spacingAndGlyphs">space s</text>
+<line x1="20.5" y1="365.5" x2="20.5" y2="357.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="365.5" x2="20.5" y2="374.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="369.6" fill="#f0c674" textLength="57.4" lengthAdjust="spacingAndGlyphs">space s</text>
 <text x="155.8" y="369.6" fill="#ffffff" textLength="131.2" lengthAdjust="spacingAndGlyphs">stage or unstage</text>
-<text x="541.2" y="369.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">i</text>
-<text x="623.2" y="369.6" fill="#ffffff" textLength="237.8" lengthAdjust="spacingAndGlyphs">type to filter; ctrl-j k move</text>
-<line x1="947.1" y1="365.5" x2="947.1" y2="357.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="365.5" x2="947.1" y2="374.0" stroke="#8abeb7" stroke-width="1.2"/>
+<line x1="963.5" y1="365.5" x2="963.5" y2="357.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="365.5" x2="963.5" y2="374.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="365.5" x2="979.9" y2="357.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="365.5" x2="979.9" y2="374.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="382.5" x2="4.1" y2="374.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="382.5" x2="4.1" y2="391.0" stroke="#8abeb7" stroke-width="1.2"/>
-<line x1="36.9" y1="382.5" x2="36.9" y2="374.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="382.5" x2="36.9" y2="391.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="386.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">a A</text>
+<line x1="20.5" y1="382.5" x2="20.5" y2="374.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="382.5" x2="20.5" y2="391.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="386.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">a A</text>
 <text x="155.8" y="386.6" fill="#ffffff" textLength="180.4" lengthAdjust="spacingAndGlyphs">stage all, unstage all</text>
-<text x="541.2" y="386.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">space</text>
-<text x="623.2" y="386.6" fill="#ffffff" textLength="106.6" lengthAdjust="spacingAndGlyphs">tick a branch</text>
-<line x1="947.1" y1="382.5" x2="947.1" y2="374.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="382.5" x2="947.1" y2="391.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="524.8" y="386.6" fill="#8abeb7" font-weight="bold" textLength="57.4" lengthAdjust="spacingAndGlyphs">Pickers</text>
+<line x1="963.5" y1="382.5" x2="963.5" y2="374.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="382.5" x2="963.5" y2="391.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="382.5" x2="979.9" y2="374.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="382.5" x2="979.9" y2="391.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="399.5" x2="4.1" y2="391.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="399.5" x2="4.1" y2="408.0" stroke="#8abeb7" stroke-width="1.2"/>
-<line x1="36.9" y1="399.5" x2="36.9" y2="391.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="399.5" x2="36.9" y2="408.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="403.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">d</text>
+<line x1="20.5" y1="399.5" x2="20.5" y2="391.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="399.5" x2="20.5" y2="408.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="403.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">d</text>
 <text x="155.8" y="403.6" fill="#ffffff" textLength="303.4" lengthAdjust="spacingAndGlyphs">restore the file, or delete it if new</text>
-<text x="541.2" y="403.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">a A</text>
-<text x="623.2" y="403.6" fill="#ffffff" textLength="213.2" lengthAdjust="spacingAndGlyphs">tick all shown, untick all</text>
-<line x1="947.1" y1="399.5" x2="947.1" y2="391.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="399.5" x2="947.1" y2="408.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="541.2" y="403.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">i</text>
+<text x="639.6" y="403.6" fill="#ffffff" textLength="237.8" lengthAdjust="spacingAndGlyphs">type to filter; ctrl-j k move</text>
+<line x1="963.5" y1="399.5" x2="963.5" y2="391.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="399.5" x2="963.5" y2="408.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="399.5" x2="979.9" y2="391.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="399.5" x2="979.9" y2="408.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="416.5" x2="4.1" y2="408.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="416.5" x2="4.1" y2="425.0" stroke="#8abeb7" stroke-width="1.2"/>
-<line x1="36.9" y1="416.5" x2="36.9" y2="408.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="416.5" x2="36.9" y2="425.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="420.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">c</text>
+<line x1="20.5" y1="416.5" x2="20.5" y2="408.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="416.5" x2="20.5" y2="425.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="420.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">c</text>
 <text x="155.8" y="420.6" fill="#ffffff" textLength="164.0" lengthAdjust="spacingAndGlyphs">commit what's staged</text>
-<text x="541.2" y="420.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">p</text>
-<text x="623.2" y="420.6" fill="#ffffff" textLength="221.4" lengthAdjust="spacingAndGlyphs">paste a ref, when comparing</text>
-<line x1="947.1" y1="416.5" x2="947.1" y2="408.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="416.5" x2="947.1" y2="425.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="541.2" y="420.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">space</text>
+<text x="639.6" y="420.6" fill="#ffffff" textLength="106.6" lengthAdjust="spacingAndGlyphs">tick a branch</text>
+<line x1="963.5" y1="416.5" x2="963.5" y2="408.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="416.5" x2="963.5" y2="425.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="416.5" x2="979.9" y2="408.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="416.5" x2="979.9" y2="425.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="433.5" x2="4.1" y2="425.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="433.5" x2="4.1" y2="442.0" stroke="#8abeb7" stroke-width="1.2"/>
-<line x1="36.9" y1="433.5" x2="36.9" y2="425.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="433.5" x2="36.9" y2="442.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="437.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">enter</text>
+<line x1="20.5" y1="433.5" x2="20.5" y2="425.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="433.5" x2="20.5" y2="442.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="437.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">enter</text>
 <text x="155.8" y="437.6" fill="#ffffff" textLength="106.6" lengthAdjust="spacingAndGlyphs">show the diff</text>
-<text x="541.2" y="437.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">enter</text>
-<text x="623.2" y="437.6" fill="#ffffff" textLength="57.4" lengthAdjust="spacingAndGlyphs">confirm</text>
-<line x1="947.1" y1="433.5" x2="947.1" y2="425.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="433.5" x2="947.1" y2="442.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="541.2" y="437.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">a A</text>
+<text x="639.6" y="437.6" fill="#ffffff" textLength="213.2" lengthAdjust="spacingAndGlyphs">tick all shown, untick all</text>
+<line x1="963.5" y1="433.5" x2="963.5" y2="425.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="433.5" x2="963.5" y2="442.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="433.5" x2="979.9" y2="425.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="433.5" x2="979.9" y2="442.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="450.5" x2="4.1" y2="442.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="450.5" x2="4.1" y2="459.0" stroke="#8abeb7" stroke-width="1.2"/>
-<line x1="36.9" y1="450.5" x2="36.9" y2="442.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="450.5" x2="36.9" y2="459.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="541.2" y="454.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">esc</text>
-<text x="623.2" y="454.6" fill="#ffffff" textLength="188.6" lengthAdjust="spacingAndGlyphs">stop typing, then close</text>
-<line x1="947.1" y1="450.5" x2="947.1" y2="442.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="450.5" x2="947.1" y2="459.0" stroke="#8abeb7" stroke-width="1.2"/>
+<line x1="20.5" y1="450.5" x2="20.5" y2="442.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="450.5" x2="20.5" y2="459.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="541.2" y="454.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">p</text>
+<text x="639.6" y="454.6" fill="#ffffff" textLength="221.4" lengthAdjust="spacingAndGlyphs">paste a ref, when comparing</text>
+<line x1="963.5" y1="450.5" x2="963.5" y2="442.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="450.5" x2="963.5" y2="459.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="450.5" x2="979.9" y2="442.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="450.5" x2="979.9" y2="459.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="467.5" x2="4.1" y2="459.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="467.5" x2="4.1" y2="476.0" stroke="#8abeb7" stroke-width="1.2"/>
-<line x1="36.9" y1="467.5" x2="36.9" y2="459.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="467.5" x2="36.9" y2="476.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="41.0" y="471.6" fill="#8abeb7" font-weight="bold" textLength="57.4" lengthAdjust="spacingAndGlyphs">▸ Graph</text>
-<text x="114.8" y="471.6" fill="#666666" textLength="98.4" lengthAdjust="spacingAndGlyphs">you are here</text>
-<line x1="947.1" y1="467.5" x2="947.1" y2="459.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="467.5" x2="947.1" y2="476.0" stroke="#8abeb7" stroke-width="1.2"/>
+<line x1="20.5" y1="467.5" x2="20.5" y2="459.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="467.5" x2="20.5" y2="476.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="24.6" y="471.6" fill="#8abeb7" font-weight="bold" textLength="57.4" lengthAdjust="spacingAndGlyphs">▸ Graph</text>
+<text x="98.4" y="471.6" fill="#666666" textLength="98.4" lengthAdjust="spacingAndGlyphs">you are here</text>
+<text x="541.2" y="471.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">enter</text>
+<text x="639.6" y="471.6" fill="#ffffff" textLength="57.4" lengthAdjust="spacingAndGlyphs">confirm</text>
+<line x1="963.5" y1="467.5" x2="963.5" y2="459.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="467.5" x2="963.5" y2="476.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="467.5" x2="979.9" y2="459.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="467.5" x2="979.9" y2="476.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="484.5" x2="4.1" y2="476.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="484.5" x2="4.1" y2="493.0" stroke="#8abeb7" stroke-width="1.2"/>
-<line x1="36.9" y1="484.5" x2="36.9" y2="476.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="484.5" x2="36.9" y2="493.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="488.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">enter</text>
+<line x1="20.5" y1="484.5" x2="20.5" y2="476.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="484.5" x2="20.5" y2="493.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="488.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">enter</text>
 <text x="155.8" y="488.6" fill="#ffffff" textLength="287.0" lengthAdjust="spacingAndGlyphs">expand a commit, show a file's diff</text>
-<text x="524.8" y="488.6" fill="#8abeb7" font-weight="bold" textLength="114.8" lengthAdjust="spacingAndGlyphs">Commit message</text>
-<line x1="947.1" y1="484.5" x2="947.1" y2="476.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="484.5" x2="947.1" y2="493.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="541.2" y="488.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">esc</text>
+<text x="639.6" y="488.6" fill="#ffffff" textLength="188.6" lengthAdjust="spacingAndGlyphs">stop typing, then close</text>
+<line x1="963.5" y1="484.5" x2="963.5" y2="476.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="484.5" x2="963.5" y2="493.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="484.5" x2="979.9" y2="476.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="484.5" x2="979.9" y2="493.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="501.5" x2="4.1" y2="493.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="501.5" x2="4.1" y2="510.0" stroke="#8abeb7" stroke-width="1.2"/>
-<line x1="36.9" y1="501.5" x2="36.9" y2="493.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="501.5" x2="36.9" y2="510.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="505.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">n N</text>
+<line x1="20.5" y1="501.5" x2="20.5" y2="493.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="501.5" x2="20.5" y2="510.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="505.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">n N</text>
 <text x="155.8" y="505.6" fill="#ffffff" textLength="262.4" lengthAdjust="spacingAndGlyphs">next/previous commit, past files</text>
-<text x="541.2" y="505.6" fill="#f0c674" textLength="49.2" lengthAdjust="spacingAndGlyphs">ctrl-s</text>
-<text x="623.2" y="505.6" fill="#ffffff" textLength="49.2" lengthAdjust="spacingAndGlyphs">commit</text>
-<line x1="947.1" y1="501.5" x2="947.1" y2="493.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="501.5" x2="947.1" y2="510.0" stroke="#8abeb7" stroke-width="1.2"/>
+<line x1="963.5" y1="501.5" x2="963.5" y2="493.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="501.5" x2="963.5" y2="510.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="501.5" x2="979.9" y2="493.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="501.5" x2="979.9" y2="510.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="518.5" x2="4.1" y2="510.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="518.5" x2="4.1" y2="527.0" stroke="#8abeb7" stroke-width="1.2"/>
-<line x1="36.9" y1="518.5" x2="36.9" y2="510.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="518.5" x2="36.9" y2="527.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="522.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">i</text>
+<line x1="20.5" y1="518.5" x2="20.5" y2="510.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="518.5" x2="20.5" y2="527.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="522.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">i</text>
 <text x="155.8" y="522.6" fill="#ffffff" textLength="262.4" lengthAdjust="spacingAndGlyphs">commit details, again to move in</text>
-<text x="541.2" y="522.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">esc</text>
-<text x="623.2" y="522.6" fill="#ffffff" textLength="196.8" lengthAdjust="spacingAndGlyphs">close, keeping the draft</text>
-<line x1="947.1" y1="518.5" x2="947.1" y2="510.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="518.5" x2="947.1" y2="527.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="524.8" y="522.6" fill="#8abeb7" font-weight="bold" textLength="114.8" lengthAdjust="spacingAndGlyphs">Commit message</text>
+<line x1="963.5" y1="518.5" x2="963.5" y2="510.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="518.5" x2="963.5" y2="527.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="518.5" x2="979.9" y2="510.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="518.5" x2="979.9" y2="527.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="535.5" x2="4.1" y2="527.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="535.5" x2="4.1" y2="544.0" stroke="#8abeb7" stroke-width="1.2"/>
-<line x1="36.9" y1="535.5" x2="36.9" y2="527.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="535.5" x2="36.9" y2="544.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="73.8" y="539.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">c</text>
+<line x1="20.5" y1="535.5" x2="20.5" y2="527.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="535.5" x2="20.5" y2="544.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="57.4" y="539.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">c</text>
 <text x="155.8" y="539.6" fill="#ffffff" textLength="237.8" lengthAdjust="spacingAndGlyphs">compare the commit with a ref</text>
-<line x1="947.1" y1="535.5" x2="947.1" y2="527.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="947.1" y1="535.5" x2="947.1" y2="544.0" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="541.2" y="539.6" fill="#f0c674" textLength="82.0" lengthAdjust="spacingAndGlyphs">ctrl-enter</text>
+<text x="639.6" y="539.6" fill="#ffffff" textLength="270.6" lengthAdjust="spacingAndGlyphs">commit (ctrl-s in some terminals)</text>
+<line x1="963.5" y1="535.5" x2="963.5" y2="527.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="535.5" x2="963.5" y2="544.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="535.5" x2="979.9" y2="527.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="535.5" x2="979.9" y2="544.0" stroke="#8abeb7" stroke-width="1.2"/>
 <path d="M4.1,544.0 Q4.1,552.5 8.2,552.5" fill="none" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="12.3" y1="552.5" x2="8.2" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="12.3" y1="552.5" x2="16.4" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/>
-<line x1="20.5" y1="552.5" x2="16.4" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="20.5" y1="552.5" x2="24.6" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/>
+<path d="M20.5,544.0 Q20.5,552.5 24.6,552.5" fill="none" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="28.7" y1="552.5" x2="24.6" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="28.7" y1="552.5" x2="32.8" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/>
-<path d="M36.9,544.0 Q36.9,552.5 41.0,552.5" fill="none" stroke="#8abeb7" stroke-width="1.2"/>
+<line x1="36.9" y1="552.5" x2="32.8" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="36.9" y1="552.5" x2="41.0" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="45.1" y1="552.5" x2="41.0" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="45.1" y1="552.5" x2="49.2" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="53.3" y1="552.5" x2="49.2" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="53.3" y1="552.5" x2="57.4" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="61.5" y1="552.5" x2="57.4" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="61.5" y1="552.5" x2="65.6" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/>
@@ -462,14 +440,14 @@
 <line x1="635.5" y1="552.5" x2="631.4" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="635.5" y1="552.5" x2="639.6" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="643.7" y1="552.5" x2="639.6" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="643.7" y1="552.5" x2="647.8" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="651.9" y1="552.5" x2="647.8" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="651.9" y1="552.5" x2="656.0" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="664.2" y="556.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">j/k</text>
-<text x="697.0" y="556.6" fill="#ffffff" textLength="49.2" lengthAdjust="spacingAndGlyphs">scroll</text>
-<text x="754.4" y="556.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
-<text x="770.8" y="556.6" fill="#f0c674" textLength="106.6" lengthAdjust="spacingAndGlyphs">any other key</text>
-<text x="885.6" y="556.6" fill="#ffffff" textLength="49.2" lengthAdjust="spacingAndGlyphs">closes</text>
-<path d="M947.1,544.0 Q947.1,552.5 943.0,552.5" fill="none" stroke="#8abeb7" stroke-width="1.2"/>
-<line x1="955.3" y1="552.5" x2="951.2" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="955.3" y1="552.5" x2="959.4" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/>
-<line x1="963.5" y1="552.5" x2="959.4" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="963.5" y1="552.5" x2="967.6" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/>
+<line x1="660.1" y1="552.5" x2="656.0" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="660.1" y1="552.5" x2="664.2" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/>
+<line x1="668.3" y1="552.5" x2="664.2" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="668.3" y1="552.5" x2="672.4" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/>
+<text x="680.6" y="556.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">j/k</text>
+<text x="713.4" y="556.6" fill="#ffffff" textLength="49.2" lengthAdjust="spacingAndGlyphs">scroll</text>
+<text x="770.8" y="556.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="787.2" y="556.6" fill="#f0c674" textLength="106.6" lengthAdjust="spacingAndGlyphs">any other key</text>
+<text x="902.0" y="556.6" fill="#ffffff" textLength="49.2" lengthAdjust="spacingAndGlyphs">closes</text>
+<path d="M963.5,544.0 Q963.5,552.5 959.4,552.5" fill="none" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="971.7" y1="552.5" x2="967.6" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="971.7" y1="552.5" x2="975.8" y2="552.5" stroke="#8abeb7" stroke-width="1.2"/>
 <path d="M979.9,544.0 Q979.9,552.5 975.8,552.5" fill="none" stroke="#8abeb7" stroke-width="1.2"/>
 </g></svg>

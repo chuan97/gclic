@@ -55,6 +55,9 @@ GIT_ENV = {
     "GIT_CONFIG_GLOBAL": "/dev/null",
     "GIT_CONFIG_NOSYSTEM": "1",
     "TERM": "xterm-256color",
+    # As Ghostty, so gclic draws the graph's beads joined up, which the
+    # screenshots then draw as shapes.
+    "TERM_PROGRAM": "ghostty",
 }
 
 

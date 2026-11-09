@@ -372,15 +372,19 @@
 <line x1="4.1" y1="178.5" x2="4.1" y2="170.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="178.5" x2="4.1" y2="187.0" stroke="#666666" stroke-width="1.2"/>
 <rect x="8.2" y="170" width="24.6" height="17" fill="#3a3a3a"/>
 <text x="16.4" y="182.6" fill="#e2c08d" textLength="8.2" lengthAdjust="spacingAndGlyphs">M</text>
-<rect x="32.8" y="170" width="943.0" height="17" fill="#3a3a3a"/>
-<text x="32.8" y="182.6" fill="#ffffff" textLength="114.8" lengthAdjust="spacingAndGlyphs">skycast/cli.py</text>
+<rect x="32.8" y="170" width="49.2" height="17" fill="#3a3a3a"/>
+<text x="32.8" y="182.6" fill="#ffffff" textLength="49.2" lengthAdjust="spacingAndGlyphs">cli.py</text>
+<rect x="82.0" y="170" width="73.8" height="17" fill="#3a3a3a"/>
+<text x="98.4" y="182.6" fill="#666666" textLength="57.4" lengthAdjust="spacingAndGlyphs">skycast</text>
+<rect x="155.8" y="170" width="820.0" height="17" fill="#3a3a3a"/>
 <line x1="979.9" y1="178.5" x2="979.9" y2="170.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="178.5" x2="979.9" y2="187.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="195.5" x2="4.1" y2="187.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="195.5" x2="4.1" y2="204.0" stroke="#666666" stroke-width="1.2"/>
 <text x="8.2" y="199.6" fill="#666666" font-weight="bold" textLength="90.2" lengthAdjust="spacingAndGlyphs">Changes (2)</text>
 <line x1="979.9" y1="195.5" x2="979.9" y2="187.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="195.5" x2="979.9" y2="204.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="212.5" x2="4.1" y2="204.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="212.5" x2="4.1" y2="221.0" stroke="#666666" stroke-width="1.2"/>
 <text x="16.4" y="216.6" fill="#e2c08d" textLength="8.2" lengthAdjust="spacingAndGlyphs">M</text>
-<text x="32.8" y="216.6" fill="#ffffff" textLength="114.8" lengthAdjust="spacingAndGlyphs">skycast/api.py</text>
+<text x="32.8" y="216.6" fill="#ffffff" textLength="49.2" lengthAdjust="spacingAndGlyphs">api.py</text>
+<text x="98.4" y="216.6" fill="#666666" textLength="57.4" lengthAdjust="spacingAndGlyphs">skycast</text>
 <line x1="979.9" y1="212.5" x2="979.9" y2="204.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="212.5" x2="979.9" y2="221.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="229.5" x2="4.1" y2="221.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="229.5" x2="4.1" y2="238.0" stroke="#666666" stroke-width="1.2"/>
 <text x="16.4" y="233.6" fill="#73c991" textLength="8.2" lengthAdjust="spacingAndGlyphs">?</text>
@@ -618,28 +622,28 @@
 <line x1="971.7" y1="263.5" x2="967.6" y2="263.5" stroke="#666666" stroke-width="1.2"/><line x1="971.7" y1="263.5" x2="975.8" y2="263.5" stroke="#666666" stroke-width="1.2"/>
 <path d="M979.9,272.0 Q979.9,263.5 975.8,263.5" fill="none" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="280.5" x2="4.1" y2="272.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="280.5" x2="4.1" y2="289.0" stroke="#666666" stroke-width="1.2"/>
-<rect x="8.2" y="272" width="16.4" height="17" fill="#3a3a3a"/>
+<rect x="8.2" y="272" width="8.2" height="17" fill="#3a3a3a"/>
 <line x1="12.3" y1="280.5" x2="12.3" y2="289.0" stroke="#b5bd68" stroke-width="1.2"/><circle cx="12.3" cy="280.5" r="3.3" fill="#3a3a3a" stroke="#b5bd68" stroke-width="1.2"/>
-<rect x="24.6" y="272" width="24.6" height="17" fill="#3a3a3a"/>
-<rect x="49.2" y="272" width="246.0" height="17" fill="#3a3a3a"/>
-<text x="49.2" y="284.6" fill="#c5c8c6" textLength="246.0" lengthAdjust="spacingAndGlyphs">Handle forecasts without hours</text>
-<rect x="295.2" y="272" width="98.4" height="17" fill="#3a3a3a"/>
-<text x="311.6" y="284.6" fill="#666666" textLength="82.0" lengthAdjust="spacingAndGlyphs">Kai Tanaka</text>
-<rect x="393.6" y="272" width="16.4" height="17" fill="#3a3a3a"/>
-<rect x="410.0" y="272" width="49.2" height="17" fill="#3a3a3a"/>
-<text x="410.0" y="284.6" fill="#b5bd68" font-weight="bold" textLength="49.2" lengthAdjust="spacingAndGlyphs">hourly</text>
-<rect x="459.2" y="272" width="516.6" height="17" fill="#3a3a3a"/>
+<rect x="16.4" y="272" width="16.4" height="17" fill="#3a3a3a"/>
+<rect x="32.8" y="272" width="246.0" height="17" fill="#3a3a3a"/>
+<text x="32.8" y="284.6" fill="#c5c8c6" textLength="246.0" lengthAdjust="spacingAndGlyphs">Handle forecasts without hours</text>
+<rect x="278.8" y="272" width="98.4" height="17" fill="#3a3a3a"/>
+<text x="295.2" y="284.6" fill="#666666" textLength="82.0" lengthAdjust="spacingAndGlyphs">Kai Tanaka</text>
+<rect x="377.2" y="272" width="16.4" height="17" fill="#3a3a3a"/>
+<rect x="393.6" y="272" width="49.2" height="17" fill="#3a3a3a"/>
+<text x="393.6" y="284.6" fill="#b5bd68" font-weight="bold" textLength="49.2" lengthAdjust="spacingAndGlyphs">hourly</text>
+<rect x="442.8" y="272" width="533.0" height="17" fill="#3a3a3a"/>
 <line x1="979.9" y1="280.5" x2="979.9" y2="272.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="280.5" x2="979.9" y2="289.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="297.5" x2="4.1" y2="289.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="297.5" x2="4.1" y2="306.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="297.5" x2="12.3" y2="289.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="297.5" x2="12.3" y2="306.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="297.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
-<text x="49.2" y="301.6" fill="#c5c8c6" textLength="164.0" lengthAdjust="spacingAndGlyphs">Add hourly forecasts</text>
-<text x="229.6" y="301.6" fill="#666666" textLength="82.0" lengthAdjust="spacingAndGlyphs">Kai Tanaka</text>
-<text x="328.0" y="301.6" fill="#7aa6da" font-weight="bold" textLength="106.6" lengthAdjust="spacingAndGlyphs">origin/hourly</text>
+<text x="32.8" y="301.6" fill="#c5c8c6" textLength="164.0" lengthAdjust="spacingAndGlyphs">Add hourly forecasts</text>
+<text x="213.2" y="301.6" fill="#666666" textLength="82.0" lengthAdjust="spacingAndGlyphs">Kai Tanaka</text>
+<text x="311.6" y="301.6" fill="#7aa6da" font-weight="bold" textLength="106.6" lengthAdjust="spacingAndGlyphs">origin/hourly</text>
 <line x1="979.9" y1="297.5" x2="979.9" y2="289.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="297.5" x2="979.9" y2="306.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="314.5" x2="4.1" y2="306.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="314.5" x2="4.1" y2="323.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="314.5" x2="12.3" y2="306.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="314.5" x2="12.3" y2="323.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="314.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
-<text x="49.2" y="318.6" fill="#c5c8c6" textLength="213.2" lengthAdjust="spacingAndGlyphs">Test forecast descriptions</text>
-<text x="278.8" y="318.6" fill="#666666" textLength="82.0" lengthAdjust="spacingAndGlyphs">Ben Okafor</text>
+<text x="32.8" y="318.6" fill="#c5c8c6" textLength="213.2" lengthAdjust="spacingAndGlyphs">Test forecast descriptions</text>
+<text x="262.4" y="318.6" fill="#666666" textLength="82.0" lengthAdjust="spacingAndGlyphs">Ben Okafor</text>
 <line x1="979.9" y1="314.5" x2="979.9" y2="306.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="314.5" x2="979.9" y2="323.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="331.5" x2="4.1" y2="323.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="331.5" x2="4.1" y2="340.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="331.5" x2="12.3" y2="323.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="331.5" x2="12.3" y2="340.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="331.5" x2="16.4" y2="331.5" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="331.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
@@ -675,13 +679,13 @@
 <line x1="979.9" y1="399.5" x2="979.9" y2="391.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="399.5" x2="979.9" y2="408.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="416.5" x2="4.1" y2="408.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="416.5" x2="4.1" y2="425.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="416.5" x2="12.3" y2="408.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="416.5" x2="12.3" y2="425.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="416.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
-<text x="49.2" y="420.6" fill="#c5c8c6" textLength="155.8" lengthAdjust="spacingAndGlyphs">Add forecast models</text>
-<text x="221.4" y="420.6" fill="#666666" textLength="82.0" lengthAdjust="spacingAndGlyphs">Ben Okafor</text>
+<text x="32.8" y="420.6" fill="#c5c8c6" textLength="155.8" lengthAdjust="spacingAndGlyphs">Add forecast models</text>
+<text x="205.0" y="420.6" fill="#666666" textLength="82.0" lengthAdjust="spacingAndGlyphs">Ben Okafor</text>
 <line x1="979.9" y1="416.5" x2="979.9" y2="408.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="416.5" x2="979.9" y2="425.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="433.5" x2="4.1" y2="425.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="433.5" x2="4.1" y2="442.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="433.5" x2="12.3" y2="425.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="433.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
-<text x="49.2" y="437.6" fill="#c5c8c6" textLength="180.4" lengthAdjust="spacingAndGlyphs">Initial project layout</text>
-<text x="246.0" y="437.6" fill="#666666" textLength="65.6" lengthAdjust="spacingAndGlyphs">Ana Ruiz</text>
+<text x="32.8" y="437.6" fill="#c5c8c6" textLength="180.4" lengthAdjust="spacingAndGlyphs">Initial project layout</text>
+<text x="229.6" y="437.6" fill="#666666" textLength="65.6" lengthAdjust="spacingAndGlyphs">Ana Ruiz</text>
 <line x1="979.9" y1="433.5" x2="979.9" y2="425.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="433.5" x2="979.9" y2="442.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="450.5" x2="4.1" y2="442.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="450.5" x2="4.1" y2="459.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="979.9" y1="450.5" x2="979.9" y2="442.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="450.5" x2="979.9" y2="459.0" stroke="#666666" stroke-width="1.2"/>
@@ -815,7 +819,21 @@
 <line x1="963.5" y1="552.5" x2="959.4" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="963.5" y1="552.5" x2="967.6" y2="552.5" stroke="#666666" stroke-width="1.2"/>
 <line x1="971.7" y1="552.5" x2="967.6" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="971.7" y1="552.5" x2="975.8" y2="552.5" stroke="#666666" stroke-width="1.2"/>
 <path d="M979.9,544.0 Q979.9,552.5 975.8,552.5" fill="none" stroke="#666666" stroke-width="1.2"/>
-<text x="8.2" y="573.6" fill="#666666" textLength="442.8" lengthAdjust="spacingAndGlyphs">enter check out · c compare · space remotes · i search</text>
+<text x="8.2" y="573.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">enter</text>
+<text x="57.4" y="573.6" fill="#ffffff" textLength="73.8" lengthAdjust="spacingAndGlyphs">check out</text>
+<text x="139.4" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="155.8" y="573.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">c</text>
+<text x="172.2" y="573.6" fill="#ffffff" textLength="57.4" lengthAdjust="spacingAndGlyphs">compare</text>
+<text x="237.8" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="254.2" y="573.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">space</text>
+<text x="303.4" y="573.6" fill="#ffffff" textLength="57.4" lengthAdjust="spacingAndGlyphs">remotes</text>
+<text x="369.0" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="385.4" y="573.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">i</text>
+<text x="401.8" y="573.6" fill="#ffffff" textLength="49.2" lengthAdjust="spacingAndGlyphs">search</text>
 <line x1="479.7" y1="569.5" x2="479.7" y2="561.0" stroke="#666666" stroke-width="1.2"/><line x1="479.7" y1="569.5" x2="479.7" y2="578.0" stroke="#666666" stroke-width="1.2"/>
-<text x="508.4" y="573.6" fill="#666666" textLength="123.0" lengthAdjust="spacingAndGlyphs">? help · q quit</text>
+<text x="508.4" y="573.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">?</text>
+<text x="524.8" y="573.6" fill="#ffffff" textLength="32.8" lengthAdjust="spacingAndGlyphs">help</text>
+<text x="565.8" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="582.2" y="573.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">q</text>
+<text x="598.6" y="573.6" fill="#ffffff" textLength="32.8" lengthAdjust="spacingAndGlyphs">quit</text>
 </g></svg>

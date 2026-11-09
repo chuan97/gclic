@@ -363,8 +363,13 @@ impl GraphPanel {
         }
     }
 
-    pub fn custom_refs(&self) -> &[String] {
-        &self.custom_refs
+    /// The refs on screen, whether picked or the default view's.
+    pub fn shown_refs(&self) -> Vec<String> {
+        self.tips.iter().map(|tip| tip.name.clone()).collect()
+    }
+
+    pub fn is_default_view(&self) -> bool {
+        self.custom_refs.is_empty()
     }
 
     pub fn set_refs(&mut self, refs: Vec<String>, branches: &[Branch]) -> Result<()> {
@@ -667,18 +672,13 @@ impl GraphPanel {
         }
         self.scroll = ui::keep_visible(self.scroll, selected_line, height);
 
-        // Text starts at the same column on every row, so the chain stays clean.
-        let graph_width = self.rows.iter().map(|row| row.glyphs.len()).max().unwrap_or(0);
-
         let mut lines: Vec<Line> = display
             .iter()
             .skip(self.scroll)
             .take(height)
             .map(|row| match row {
-                Display::Commit(index) => self.commit_line(*index, graph_width, focused),
-                Display::File { commit, file } => {
-                    self.file_row_line(*commit, *file, graph_width, focused)
-                }
+                Display::Commit(index) => self.commit_line(*index, focused),
+                Display::File { commit, file } => self.file_row_line(*commit, *file, focused),
             })
             .collect();
         let at_end = self.scroll + lines.len() == display.len();
@@ -715,11 +715,14 @@ impl GraphPanel {
         Span::styled(ch.to_string(), Style::default().fg(color))
     }
 
-    fn commit_line(&self, index: usize, graph_width: usize, focused: bool) -> Line<'_> {
+    /// A commit's row. Its message starts right after the lines on its own
+    /// row, so only rows where the graph is wide get pushed right.
+    fn commit_line(&self, index: usize, focused: bool) -> Line<'_> {
         let glyphs = &self.rows[index].glyphs;
         let selected = index == self.selected && !self.is_on_file();
-        let mut spans: Vec<Span> = glyphs.iter().map(|g| self.glyph_span(g)).collect();
-        spans.push(Span::raw(" ".repeat(graph_width - glyphs.len() + 1)));
+        let drawn = &glyphs[..drawn_width(glyphs)];
+        let mut spans: Vec<Span> = drawn.iter().map(|g| self.glyph_span(g)).collect();
+        spans.push(Span::raw(GAP));
 
         let commit = &self.commits[index];
         let subject = if selected && focused { Color::White } else { Color::Gray };
@@ -742,26 +745,31 @@ impl GraphPanel {
     }
 
     /// A file in the drop-down, with the graph's lines carrying on beside it.
-    fn file_row_line(
-        &self,
-        commit: usize,
-        file: usize,
-        graph_width: usize,
-        focused: bool,
-    ) -> Line<'_> {
+    /// The files line up with their commit's message, or further right if
+    /// lines pass beside them.
+    fn file_row_line(&self, commit: usize, file: usize, focused: bool) -> Line<'_> {
         let Some(expanded) = self.expanded_at(commit) else {
             return Line::default();
         };
-        let below = &self.rows[commit].below;
-
-        let mut spans: Vec<Span> = below.iter().map(|g| self.glyph_span(g)).collect();
-        spans.push(Span::raw(" ".repeat(graph_width.saturating_sub(below.len()) + 1)));
         let selected = commit == self.selected && self.selected_file == Some(file);
         let mut line = file_line(&expanded.files[file], selected, focused);
+        let row = &self.rows[commit];
+        let (below, message_at) = (&row.below[..drawn_width(&row.below)], drawn_width(&row.glyphs));
+        let mut spans: Vec<Span> = below.iter().map(|g| self.glyph_span(g)).collect();
+        spans.push(Span::raw(" ".repeat(message_at.saturating_sub(below.len()))));
+        spans.push(Span::raw(GAP));
         spans.append(&mut line.spans);
         line.spans = spans;
         line
     }
+}
+
+/// Between a row's lines and its text.
+const GAP: &str = "  ";
+
+/// How much of a row the graph draws on: up to its rightmost line or bead.
+fn drawn_width(glyphs: &[Glyph]) -> usize {
+    glyphs.iter().rposition(|glyph| glyph.ch != ' ').map_or(0, |last| last + 1)
 }
 
 #[cfg(test)]
@@ -875,6 +883,19 @@ mod tests {
                 bead_char(true, false, false, true),  // the join comes from the right
             ]
         );
+    }
+
+    #[test]
+    fn each_rows_text_starts_after_its_own_lines() {
+        // l2 and l1 sit alone in the first lane, r1 beside a line in the second.
+        let commits = [
+            commit("l2", &["l1"]),
+            commit("l1", &["base"]),
+            commit("r1", &["base"]),
+            commit("base", &[]),
+        ];
+        let widths: Vec<usize> = layout(&commits).iter().map(|row| drawn_width(&row.glyphs)).collect();
+        assert_eq!(widths, [1, 1, 3, 3]);
     }
 
     #[test]

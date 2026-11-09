@@ -463,17 +463,24 @@ pub struct DiffPane {
 /// diffs around the cursor and a good few recent ones, in a few MB.
 const CACHE_ROWS: usize = 20_000;
 
+/// A file's diff as shown: of the whole file, or just the changes.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DiffView {
+    pub source: DiffSource,
+    pub whole: bool,
+}
+
 /// Diffs already coloured, so that going back to one, or to one prefetched,
 /// shows its colours straight away. The most recently used come last.
 #[derive(Default)]
 pub struct ColorCache {
-    entries: Vec<(DiffSource, String, Vec<Row>)>,
+    entries: Vec<(DiffView, String, Vec<Row>)>,
 }
 
 impl ColorCache {
     /// The coloured rows of this diff, if they were made from this same text.
-    pub fn get(&mut self, source: &DiffSource, text: &str) -> Option<Vec<Row>> {
-        let position = self.entries.iter().position(|(s, t, _)| s == source && t == text)?;
+    pub fn get(&mut self, view: &DiffView, text: &str) -> Option<Vec<Row>> {
+        let position = self.entries.iter().position(|(v, t, _)| v == view && t == text)?;
         let entry = self.entries.remove(position);
         let rows = entry.2.clone();
         self.entries.push(entry);
@@ -481,8 +488,8 @@ impl ColorCache {
     }
 
     /// The most recent version of this diff, whatever its text.
-    pub fn latest(&mut self, source: &DiffSource) -> Option<(String, Vec<Row>)> {
-        let position = self.entries.iter().position(|(s, ..)| s == source)?;
+    pub fn latest(&mut self, view: &DiffView) -> Option<(String, Vec<Row>)> {
+        let position = self.entries.iter().position(|(v, ..)| v == view)?;
         let entry = self.entries.remove(position);
         let found = (entry.1.clone(), entry.2.clone());
         self.entries.push(entry);
@@ -491,16 +498,16 @@ impl ColorCache {
 
     /// Whether some version of this diff is cached. A working-tree file may
     /// have changed since, which showing it will find out.
-    pub fn contains(&self, source: &DiffSource) -> bool {
-        self.entries.iter().any(|(s, ..)| s == source)
+    pub fn contains(&self, view: &DiffView) -> bool {
+        self.entries.iter().any(|(v, ..)| v == view)
     }
 
     /// Adds a diff, replacing an older version of it and dropping the least
     /// recently used ones past the limit.
-    pub fn insert(&mut self, source: DiffSource, text: String, rows: Vec<Row>) {
-        self.entries.retain(|(s, ..)| *s != source);
-        self.entries.push((source, text, rows));
-        let total = |entries: &[(DiffSource, String, Vec<Row>)]| -> usize {
+    pub fn insert(&mut self, view: DiffView, text: String, rows: Vec<Row>) {
+        self.entries.retain(|(v, ..)| *v != view);
+        self.entries.push((view, text, rows));
+        let total = |entries: &[(DiffView, String, Vec<Row>)]| -> usize {
             entries.iter().map(|(.., rows)| rows.len()).sum()
         };
         while self.entries.len() > 1 && total(&self.entries) > CACHE_ROWS {
@@ -602,14 +609,18 @@ impl DiffPane {
     }
 
     fn title(&self) -> String {
-        match &self.source {
+        let title = match &self.source {
             DiffSource::Unstaged(path) => format!(" {path} "),
             DiffSource::Untracked(path) => format!(" {path} (untracked) "),
             DiffSource::Conflict(path) => format!(" {path} (conflict: yours ↔ theirs) "),
             DiffSource::Staged(path) => format!(" {path} (staged) "),
             DiffSource::Commit { sha, path } => format!(" {path} @ {} ", &sha[..sha.len().min(7)]),
             DiffSource::Refs { a, b, path } => format!(" {path}: {a} → {b} "),
-        }
+        };
+        // A new file or a conflict shows whole anyway.
+        let whole = git::whole_files()
+            && !matches!(self.source, DiffSource::Untracked(_) | DiffSource::Conflict(_));
+        if whole { format!("{title}· whole file ") } else { title }
     }
 
     /// Moves the active row, stopping at the ends.
@@ -628,20 +639,30 @@ impl DiffPane {
             KeyCode::Char('l') | KeyCode::Right => {
                 self.shift = (self.shift + SIDE_STEP).min(self.max_shift());
             }
+            // Between changes rather than hunks, so it still works when a whole
+            // file is one hunk. From inside a change, N goes to its start.
             KeyCode::Char('n') => {
-                let next = (self.active + 1..self.rows.len()).find(|&i| self.is_heading(i));
+                let next = (self.active + 1..self.rows.len()).find(|&i| self.starts_change(i));
                 self.active = next.unwrap_or(self.active);
             }
             KeyCode::Char('N') => {
-                let previous = (0..self.active).rev().find(|&i| self.is_heading(i));
+                let previous = (0..self.active).rev().find(|&i| self.starts_change(i));
                 self.active = previous.unwrap_or(self.active);
             }
             _ => {}
         }
     }
 
-    fn is_heading(&self, index: usize) -> bool {
-        matches!(self.rows[index], Row::Heading(_))
+    /// Whether a row has a changed line on either side.
+    fn is_changed(&self, index: usize) -> bool {
+        let changed = |cell: &Option<Cell>| cell.as_ref().is_some_and(|cell| cell.changed);
+        matches!(&self.rows[index], Row::Lines { left, right } if changed(left) || changed(right))
+    }
+
+    /// Whether a change starts at this row: a changed row at the top, or after
+    /// a row that isn't changed, such as context or a hunk's heading.
+    fn starts_change(&self, index: usize) -> bool {
+        self.is_changed(index) && (index == 0 || !self.is_changed(index - 1))
     }
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
@@ -883,20 +904,33 @@ mod tests {
         assert!(matches!(&parse_conflict("")[0], Row::Heading(h) if h.starts_with("Deleted on one side")));
     }
 
+    fn view(name: &str, whole: bool) -> DiffView {
+        DiffView { source: DiffSource::Unstaged(name.to_string()), whole }
+    }
+
     #[test]
     fn the_cache_only_matches_the_same_text() {
         let mut cache = ColorCache::default();
-        let source = DiffSource::Unstaged("f".to_string());
-        cache.insert(source.clone(), "v1".to_string(), parse_diff("@@ -1 +1 @@\n-a\n+b"));
-        assert!(cache.get(&source, "v1").is_some());
-        assert!(cache.get(&source, "v2").is_none());
-        assert!(cache.contains(&source));
+        let view = view("f", false);
+        cache.insert(view.clone(), "v1".to_string(), parse_diff("@@ -1 +1 @@\n-a\n+b"));
+        assert!(cache.get(&view, "v1").is_some());
+        assert!(cache.get(&view, "v2").is_none());
+        assert!(cache.contains(&view));
+    }
+
+    #[test]
+    fn the_cache_keeps_a_files_whole_and_changes_only_diffs_apart() {
+        let mut cache = ColorCache::default();
+        cache.insert(view("f", false), "changes".to_string(), Vec::new());
+        cache.insert(view("f", true), "whole".to_string(), Vec::new());
+        assert_eq!(cache.latest(&view("f", false)).map(|(text, _)| text).as_deref(), Some("changes"));
+        assert_eq!(cache.latest(&view("f", true)).map(|(text, _)| text).as_deref(), Some("whole"));
     }
 
     #[test]
     fn the_cache_drops_the_least_recently_used_past_its_limit() {
         let mut cache = ColorCache::default();
-        let file = |name: &str| DiffSource::Unstaged(name.to_string());
+        let file = |name: &str| view(name, false);
         let rows = vec![Row::Heading("x".to_string()); CACHE_ROWS / 2];
         cache.insert(file("a"), String::new(), rows.clone());
         cache.insert(file("b"), String::new(), rows.clone());
@@ -915,6 +949,25 @@ mod tests {
         assert!(pane.needs_colors());
         pane.apply_colors("new", Vec::new());
         assert!(!pane.needs_colors());
+    }
+
+    #[test]
+    fn n_and_shift_n_jump_between_changes_even_in_one_hunk() {
+        // One hunk holding two separate changes, as a whole-file diff does.
+        let mut pane = pane_with_rows(0, 10);
+        pane.rows = parse_diff("@@ -1,7 +1,7 @@\n a\n-b\n+B\n c\n d\n-e\n-f\n+E\n g");
+        let press = |pane: &mut DiffPane, ch| pane.handle_key(KeyEvent::from(KeyCode::Char(ch)));
+        press(&mut pane, 'n');
+        assert_eq!(pane.active, 2); // b → B
+        press(&mut pane, 'n');
+        assert_eq!(pane.active, 5); // e → E
+        press(&mut pane, 'n');
+        assert_eq!(pane.active, 5); // no more changes
+        press(&mut pane, 'j'); // inside the change, onto f
+        press(&mut pane, 'N');
+        assert_eq!(pane.active, 5); // back to its start
+        press(&mut pane, 'N');
+        assert_eq!(pane.active, 2);
     }
 
     #[test]

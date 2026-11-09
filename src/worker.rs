@@ -6,7 +6,7 @@
 //! thread, in order. Results say what they answer, so the UI can drop any
 //! that are out of date by the time they arrive.
 
-use crate::diff::{self, Row};
+use crate::diff::{self, DiffView, Row};
 use crate::git::{self, DiffSource, Status};
 use anyhow::Result;
 use std::collections::VecDeque;
@@ -18,7 +18,7 @@ enum Job {
     /// What auto-refresh checks: the refs, the files' status, and the open diff.
     Poll { generation: u64, diff: Option<DiffSource> },
     /// A diff with its syntax colours.
-    Highlight(DiffSource),
+    Highlight(DiffView),
 }
 
 pub enum Done {
@@ -31,7 +31,7 @@ pub enum Done {
         diff: Option<(DiffSource, Result<String>)>,
     },
     /// `text` is the diff the colours belong to.
-    Highlight { source: DiffSource, text: String, rows: Vec<Row> },
+    Highlight { view: DiffView, text: String, rows: Vec<Row> },
 }
 
 /// The jobs waiting. A poll goes before any highlighting, and there's at most
@@ -39,7 +39,7 @@ pub enum Done {
 #[derive(Default)]
 struct Queue {
     poll: Option<Job>,
-    highlights: VecDeque<DiffSource>,
+    highlights: VecDeque<DiffView>,
 }
 
 impl Queue {
@@ -82,8 +82,8 @@ impl Worker {
     /// Replaces the diffs waiting to be coloured, most wanted first. Whatever
     /// was waiting is for where the cursor used to be, so it's dropped. A diff
     /// already being coloured is finished, and still useful to the cache.
-    pub fn highlight(&self, sources: Vec<DiffSource>) {
-        self.with_queue(|queue| queue.highlights = sources.into());
+    pub fn highlight(&self, views: Vec<DiffView>) {
+        self.with_queue(|queue| queue.highlights = views.into());
     }
 
     /// The results that have arrived, without waiting. False once the thread
@@ -141,13 +141,13 @@ fn run(job: Job) -> Option<Done> {
                 diff: diff.join().unwrap_or(None),
             }
         })),
-        Job::Highlight(source) => {
+        Job::Highlight(view) => {
             // Without its diff there's nothing to colour, and the UI shows the
             // error when it loads the diff itself.
-            let text = git::diff(&source).ok()?;
-            let mut rows = diff::rows_for(&source, &text);
-            diff::highlight_rows(&mut rows, &source);
-            Some(Done::Highlight { source, text, rows })
+            let text = git::diff_with(&view.source, view.whole).ok()?;
+            let mut rows = diff::rows_for(&view.source, &text);
+            diff::highlight_rows(&mut rows, &view.source);
+            Some(Done::Highlight { view, text, rows })
         }
     }
 }
@@ -156,8 +156,8 @@ fn run(job: Job) -> Option<Done> {
 mod tests {
     use super::*;
 
-    fn file(path: &str) -> DiffSource {
-        DiffSource::Unstaged(path.to_string())
+    fn file(path: &str) -> DiffView {
+        DiffView { source: DiffSource::Unstaged(path.to_string()), whole: false }
     }
 
     #[test]
@@ -165,7 +165,7 @@ mod tests {
         let mut queue = Queue { poll: None, highlights: VecDeque::from([file("a")]) };
         queue.poll = Some(Job::Poll { generation: 1, diff: None });
         assert!(matches!(queue.next(), Some(Job::Poll { .. })));
-        assert!(matches!(queue.next(), Some(Job::Highlight(source)) if source == file("a")));
+        assert!(matches!(queue.next(), Some(Job::Highlight(view)) if view == file("a")));
         assert!(queue.next().is_none());
     }
 
@@ -185,10 +185,10 @@ mod tests {
         let first = git::log(&["HEAD".to_string()], 10_000).unwrap().pop().unwrap();
         let source = DiffSource::Commit { sha: first.sha, path: "src/main.rs".to_string() };
         let worker = Worker::start();
-        worker.highlight(vec![source.clone()]);
+        worker.highlight(vec![DiffView { source: source.clone(), whole: false }]);
         let done = worker.results.recv_timeout(std::time::Duration::from_secs(10)).unwrap();
-        let Done::Highlight { source: done_source, rows, .. } = done else { panic!("expected colours") };
-        assert_eq!(done_source, source);
+        let Done::Highlight { view, rows, .. } = done else { panic!("expected colours") };
+        assert_eq!(view.source, source);
         let colored = rows.iter().any(|row| matches!(row, Row::Lines { right: Some(cell), .. } if !cell.colors.is_empty()));
         assert!(colored);
     }

@@ -71,9 +71,10 @@ const RIGHT: &[Section] = &[
     Section {
         title: "Compare",
         keys: &[
-            ("enter", "show the diff"),
+            ("enter", "show the diff, or fold a folder"),
+            ("h l", "fold a folder or go up, unfold or go in"),
             ("c", "new comparison: choose two refs"),
-            ("r", "swap A and B"),
+            ("r", "swap before and after"),
             ("esc", "close it after confirming, back to Repo"),
         ],
     },
@@ -83,8 +84,9 @@ const RIGHT: &[Section] = &[
             ("j k", "move the active line"),
             ("g G", "first/last line"),
             ("ctrl-d u", "half a page down/up"),
-            ("n N", "next/previous hunk"),
+            ("n N", "next/previous change"),
             ("h l", "scroll sideways"),
+            ("e", "whole file, or just the changes"),
         ],
     },
     Section {
@@ -104,12 +106,15 @@ const RIGHT: &[Section] = &[
     },
     Section {
         title: "Commit message",
-        keys: &[("ctrl-s", "commit"), ("esc", "close, keeping the draft")],
+        keys: &[
+            ("ctrl-enter", "commit (ctrl-s in some terminals)"),
+            ("esc", "close, keeping the draft"),
+        ],
     },
 ];
 
 /// Room for the longest key, so the descriptions line up.
-const KEY_WIDTH: usize = 10;
+const KEY_WIDTH: usize = 12;
 const GAP: usize = 4;
 
 pub struct HelpPopup {
