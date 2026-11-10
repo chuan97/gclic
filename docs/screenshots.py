@@ -17,6 +17,7 @@ It installs pyte into target/screenshots the first time, and builds gclic.
 import fcntl
 import os
 import pty
+import re
 import select
 import shutil
 import struct
@@ -121,6 +122,27 @@ def fetch_forecast(city: str) -> Forecast:
     with urlopen(f"{BASE_URL}/forecast?city={city}") as response:
         data = json.load(response)
     return Forecast(city, data["temp"], data["summary"])
+
+
+def fetch_alerts(city: str) -> list[str]:
+    """Fetches the weather alerts in force for a city."""
+    with urlopen(f"{BASE_URL}/alerts?city={city}") as response:
+        data = json.load(response)
+    return [alert["title"] for alert in data["alerts"]]
+
+
+def fetch_air_quality(city: str) -> int:
+    """Fetches a city's air quality index."""
+    with urlopen(f"{BASE_URL}/air?city={city}") as response:
+        data = json.load(response)
+    return data["aqi"]
+
+
+def fetch_uv_index(city: str) -> float:
+    """Fetches today's highest UV index for a city."""
+    with urlopen(f"{BASE_URL}/uv?city={city}") as response:
+        data = json.load(response)
+    return data["uv"]
 '''
 
 CLI = '''
@@ -345,7 +367,7 @@ def to_svg(screen):
                 end += 1
             x = col * CELL_W
             if background != BG:
-                parts.append(f'<rect x="{x:.1f}" y="{y}" width="{(end - col) * CELL_W:.1f}" height="{CELL_H}" fill="{background}"/>')
+                parts.append(f'<rect x="{x:.1f}" y="{y}" width="{(end - col) * CELL_W:.1f}" height="{CELL_H}" fill="{background}" shape-rendering="crispEdges"/>')
             stroke = color(cell.fg, FG)
             text = ""
             text_start = col
@@ -371,15 +393,14 @@ def to_svg(screen):
 
 
 def text_element(text, col, y, fill, bold):
-    # Spaces at the ends are left out, as renderers may drop them and then
-    # stretch the rest to fill the length.
-    col += len(text) - len(text.lstrip(" "))
-    text = text.strip(" ")
+    # One element per word, each at its own cell. Renderers may collapse runs
+    # of spaces, or drop them at the ends, and then stretch the rest to fill
+    # the length, which would distort the glyphs.
     weight = ' font-weight="bold"' if bold else ""
-    length = len(text) * CELL_W
-    return (
-        f'<text x="{col * CELL_W:.1f}" y="{y + CELL_H * 0.74:.1f}" fill="{fill}"{weight} '
-        f'textLength="{length:.1f}" lengthAdjust="spacingAndGlyphs">{escape(text)}</text>'
+    return "\n".join(
+        f'<text x="{(col + word.start()) * CELL_W:.1f}" y="{y + CELL_H * 0.74:.1f}" fill="{fill}"{weight} '
+        f'textLength="{len(word.group()) * CELL_W:.1f}" lengthAdjust="spacingAndGlyphs">{escape(word.group())}</text>'
+        for word in re.finditer(r"\S+", text)
     )
 
 

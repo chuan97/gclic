@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="984" height="578" viewBox="0 0 984 578">
 <rect width="100%" height="100%" rx="6" fill="#282c34"/>
 <g font-family="SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13.6" xml:space="preserve">
-<rect x="8.2" y="0" width="49.2" height="17" fill="#3a3a3a"/>
+<rect x="8.2" y="0" width="49.2" height="17" fill="#3a3a3a" shape-rendering="crispEdges"/>
 <text x="16.4" y="12.6" fill="#8abeb7" font-weight="bold" textLength="32.8" lengthAdjust="spacingAndGlyphs">Repo</text>
 <text x="82.0" y="12.6" fill="#666666" textLength="57.4" lengthAdjust="spacingAndGlyphs">Compare</text>
 <text x="147.6" y="12.6" fill="#c5c8c6" textLength="41.0" lengthAdjust="spacingAndGlyphs">[tab]</text>
@@ -117,19 +117,25 @@
 <line x1="971.7" y1="25.5" x2="967.6" y2="25.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="971.7" y1="25.5" x2="975.8" y2="25.5" stroke="#8abeb7" stroke-width="1.2"/>
 <path d="M979.9,34.0 Q979.9,25.5 975.8,25.5" fill="none" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="42.5" x2="4.1" y2="34.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="42.5" x2="4.1" y2="51.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="8.2" y="46.6" fill="#b5bd68" font-weight="bold" textLength="65.6" lengthAdjust="spacingAndGlyphs">* hourly</text>
+<text x="8.2" y="46.6" fill="#b5bd68" font-weight="bold" textLength="8.2" lengthAdjust="spacingAndGlyphs">*</text>
+<text x="24.6" y="46.6" fill="#b5bd68" font-weight="bold" textLength="49.2" lengthAdjust="spacingAndGlyphs">hourly</text>
 <text x="90.2" y="46.6" fill="#b5bd68" textLength="16.4" lengthAdjust="spacingAndGlyphs">↑1</text>
-<text x="123.0" y="46.6" fill="#666666" textLength="65.6" lengthAdjust="spacingAndGlyphs">1 remote</text>
+<text x="123.0" y="46.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">1</text>
+<text x="139.4" y="46.6" fill="#666666" textLength="49.2" lengthAdjust="spacingAndGlyphs">remote</text>
 <line x1="979.9" y1="42.5" x2="979.9" y2="34.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="42.5" x2="979.9" y2="51.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="59.5" x2="4.1" y2="51.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="59.5" x2="4.1" y2="68.0" stroke="#8abeb7" stroke-width="1.2"/>
-<rect x="8.2" y="51" width="49.2" height="17" fill="#3a3a3a"/>
+<rect x="8.2" y="51" width="49.2" height="17" fill="#3a3a3a" shape-rendering="crispEdges"/>
 <text x="24.6" y="63.6" fill="#ffffff" textLength="32.8" lengthAdjust="spacingAndGlyphs">main</text>
-<rect x="57.4" y="51" width="82.0" height="17" fill="#3a3a3a"/>
-<text x="73.8" y="63.6" fill="#666666" textLength="65.6" lengthAdjust="spacingAndGlyphs">1 remote</text>
-<rect x="139.4" y="51" width="836.4" height="17" fill="#3a3a3a"/>
+<rect x="57.4" y="51" width="82.0" height="17" fill="#3a3a3a" shape-rendering="crispEdges"/>
+<text x="73.8" y="63.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">1</text>
+<text x="90.2" y="63.6" fill="#666666" textLength="49.2" lengthAdjust="spacingAndGlyphs">remote</text>
+<rect x="139.4" y="51" width="836.4" height="17" fill="#3a3a3a" shape-rendering="crispEdges"/>
 <line x1="979.9" y1="59.5" x2="979.9" y2="51.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="59.5" x2="979.9" y2="68.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="76.5" x2="4.1" y2="68.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="76.5" x2="4.1" y2="85.0" stroke="#8abeb7" stroke-width="1.2"/>
-<text x="41.0" y="80.6" fill="#666666" textLength="237.8" lengthAdjust="spacingAndGlyphs">origin/main  in sync  tracked</text>
+<text x="41.0" y="80.6" fill="#666666" textLength="90.2" lengthAdjust="spacingAndGlyphs">origin/main</text>
+<text x="147.6" y="80.6" fill="#666666" textLength="16.4" lengthAdjust="spacingAndGlyphs">in</text>
+<text x="172.2" y="80.6" fill="#666666" textLength="32.8" lengthAdjust="spacingAndGlyphs">sync</text>
+<text x="221.4" y="80.6" fill="#666666" textLength="57.4" lengthAdjust="spacingAndGlyphs">tracked</text>
 <line x1="979.9" y1="76.5" x2="979.9" y2="68.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="979.9" y1="76.5" x2="979.9" y2="85.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="4.1" y1="93.5" x2="4.1" y2="85.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="93.5" x2="4.1" y2="102.0" stroke="#8abeb7" stroke-width="1.2"/>
 <text x="24.6" y="97.6" fill="#ffffff" textLength="41.0" lengthAdjust="spacingAndGlyphs">units</text>
@@ -367,19 +373,21 @@
 <line x1="971.7" y1="144.5" x2="967.6" y2="144.5" stroke="#666666" stroke-width="1.2"/><line x1="971.7" y1="144.5" x2="975.8" y2="144.5" stroke="#666666" stroke-width="1.2"/>
 <path d="M979.9,153.0 Q979.9,144.5 975.8,144.5" fill="none" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="161.5" x2="4.1" y2="153.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="161.5" x2="4.1" y2="170.0" stroke="#666666" stroke-width="1.2"/>
-<text x="8.2" y="165.6" fill="#666666" font-weight="bold" textLength="82.0" lengthAdjust="spacingAndGlyphs">Staged (1)</text>
+<text x="8.2" y="165.6" fill="#666666" font-weight="bold" textLength="49.2" lengthAdjust="spacingAndGlyphs">Staged</text>
+<text x="65.6" y="165.6" fill="#666666" font-weight="bold" textLength="24.6" lengthAdjust="spacingAndGlyphs">(1)</text>
 <line x1="979.9" y1="161.5" x2="979.9" y2="153.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="161.5" x2="979.9" y2="170.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="178.5" x2="4.1" y2="170.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="178.5" x2="4.1" y2="187.0" stroke="#666666" stroke-width="1.2"/>
-<rect x="8.2" y="170" width="24.6" height="17" fill="#3a3a3a"/>
+<rect x="8.2" y="170" width="24.6" height="17" fill="#3a3a3a" shape-rendering="crispEdges"/>
 <text x="16.4" y="182.6" fill="#e2c08d" textLength="8.2" lengthAdjust="spacingAndGlyphs">M</text>
-<rect x="32.8" y="170" width="49.2" height="17" fill="#3a3a3a"/>
+<rect x="32.8" y="170" width="49.2" height="17" fill="#3a3a3a" shape-rendering="crispEdges"/>
 <text x="32.8" y="182.6" fill="#ffffff" textLength="49.2" lengthAdjust="spacingAndGlyphs">cli.py</text>
-<rect x="82.0" y="170" width="73.8" height="17" fill="#3a3a3a"/>
+<rect x="82.0" y="170" width="73.8" height="17" fill="#3a3a3a" shape-rendering="crispEdges"/>
 <text x="98.4" y="182.6" fill="#666666" textLength="57.4" lengthAdjust="spacingAndGlyphs">skycast</text>
-<rect x="155.8" y="170" width="820.0" height="17" fill="#3a3a3a"/>
+<rect x="155.8" y="170" width="820.0" height="17" fill="#3a3a3a" shape-rendering="crispEdges"/>
 <line x1="979.9" y1="178.5" x2="979.9" y2="170.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="178.5" x2="979.9" y2="187.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="195.5" x2="4.1" y2="187.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="195.5" x2="4.1" y2="204.0" stroke="#666666" stroke-width="1.2"/>
-<text x="8.2" y="199.6" fill="#666666" font-weight="bold" textLength="90.2" lengthAdjust="spacingAndGlyphs">Changes (2)</text>
+<text x="8.2" y="199.6" fill="#666666" font-weight="bold" textLength="57.4" lengthAdjust="spacingAndGlyphs">Changes</text>
+<text x="73.8" y="199.6" fill="#666666" font-weight="bold" textLength="24.6" lengthAdjust="spacingAndGlyphs">(2)</text>
 <line x1="979.9" y1="195.5" x2="979.9" y2="187.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="195.5" x2="979.9" y2="204.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="212.5" x2="4.1" y2="204.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="212.5" x2="4.1" y2="221.0" stroke="#666666" stroke-width="1.2"/>
 <text x="16.4" y="216.6" fill="#e2c08d" textLength="8.2" lengthAdjust="spacingAndGlyphs">M</text>
@@ -622,70 +630,103 @@
 <line x1="971.7" y1="263.5" x2="967.6" y2="263.5" stroke="#666666" stroke-width="1.2"/><line x1="971.7" y1="263.5" x2="975.8" y2="263.5" stroke="#666666" stroke-width="1.2"/>
 <path d="M979.9,272.0 Q979.9,263.5 975.8,263.5" fill="none" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="280.5" x2="4.1" y2="272.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="280.5" x2="4.1" y2="289.0" stroke="#666666" stroke-width="1.2"/>
-<rect x="8.2" y="272" width="8.2" height="17" fill="#3a3a3a"/>
+<rect x="8.2" y="272" width="8.2" height="17" fill="#3a3a3a" shape-rendering="crispEdges"/>
 <line x1="12.3" y1="280.5" x2="12.3" y2="289.0" stroke="#b5bd68" stroke-width="1.2"/><circle cx="12.3" cy="280.5" r="3.3" fill="#3a3a3a" stroke="#b5bd68" stroke-width="1.2"/>
-<rect x="16.4" y="272" width="16.4" height="17" fill="#3a3a3a"/>
-<rect x="32.8" y="272" width="246.0" height="17" fill="#3a3a3a"/>
-<text x="32.8" y="284.6" fill="#c5c8c6" textLength="246.0" lengthAdjust="spacingAndGlyphs">Handle forecasts without hours</text>
-<rect x="278.8" y="272" width="98.4" height="17" fill="#3a3a3a"/>
-<text x="295.2" y="284.6" fill="#666666" textLength="82.0" lengthAdjust="spacingAndGlyphs">Kai Tanaka</text>
-<rect x="377.2" y="272" width="16.4" height="17" fill="#3a3a3a"/>
-<rect x="393.6" y="272" width="49.2" height="17" fill="#3a3a3a"/>
+<rect x="16.4" y="272" width="16.4" height="17" fill="#3a3a3a" shape-rendering="crispEdges"/>
+<rect x="32.8" y="272" width="246.0" height="17" fill="#3a3a3a" shape-rendering="crispEdges"/>
+<text x="32.8" y="284.6" fill="#c5c8c6" textLength="49.2" lengthAdjust="spacingAndGlyphs">Handle</text>
+<text x="90.2" y="284.6" fill="#c5c8c6" textLength="73.8" lengthAdjust="spacingAndGlyphs">forecasts</text>
+<text x="172.2" y="284.6" fill="#c5c8c6" textLength="57.4" lengthAdjust="spacingAndGlyphs">without</text>
+<text x="237.8" y="284.6" fill="#c5c8c6" textLength="41.0" lengthAdjust="spacingAndGlyphs">hours</text>
+<rect x="278.8" y="272" width="98.4" height="17" fill="#3a3a3a" shape-rendering="crispEdges"/>
+<text x="295.2" y="284.6" fill="#666666" textLength="24.6" lengthAdjust="spacingAndGlyphs">Kai</text>
+<text x="328.0" y="284.6" fill="#666666" textLength="49.2" lengthAdjust="spacingAndGlyphs">Tanaka</text>
+<rect x="377.2" y="272" width="16.4" height="17" fill="#3a3a3a" shape-rendering="crispEdges"/>
+<rect x="393.6" y="272" width="49.2" height="17" fill="#3a3a3a" shape-rendering="crispEdges"/>
 <text x="393.6" y="284.6" fill="#b5bd68" font-weight="bold" textLength="49.2" lengthAdjust="spacingAndGlyphs">hourly</text>
-<rect x="442.8" y="272" width="533.0" height="17" fill="#3a3a3a"/>
+<rect x="442.8" y="272" width="533.0" height="17" fill="#3a3a3a" shape-rendering="crispEdges"/>
 <line x1="979.9" y1="280.5" x2="979.9" y2="272.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="280.5" x2="979.9" y2="289.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="297.5" x2="4.1" y2="289.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="297.5" x2="4.1" y2="306.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="297.5" x2="12.3" y2="289.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="297.5" x2="12.3" y2="306.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="297.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
-<text x="32.8" y="301.6" fill="#c5c8c6" textLength="164.0" lengthAdjust="spacingAndGlyphs">Add hourly forecasts</text>
-<text x="213.2" y="301.6" fill="#666666" textLength="82.0" lengthAdjust="spacingAndGlyphs">Kai Tanaka</text>
+<text x="32.8" y="301.6" fill="#c5c8c6" textLength="24.6" lengthAdjust="spacingAndGlyphs">Add</text>
+<text x="65.6" y="301.6" fill="#c5c8c6" textLength="49.2" lengthAdjust="spacingAndGlyphs">hourly</text>
+<text x="123.0" y="301.6" fill="#c5c8c6" textLength="73.8" lengthAdjust="spacingAndGlyphs">forecasts</text>
+<text x="213.2" y="301.6" fill="#666666" textLength="24.6" lengthAdjust="spacingAndGlyphs">Kai</text>
+<text x="246.0" y="301.6" fill="#666666" textLength="49.2" lengthAdjust="spacingAndGlyphs">Tanaka</text>
 <text x="311.6" y="301.6" fill="#7aa6da" font-weight="bold" textLength="106.6" lengthAdjust="spacingAndGlyphs">origin/hourly</text>
 <line x1="979.9" y1="297.5" x2="979.9" y2="289.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="297.5" x2="979.9" y2="306.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="314.5" x2="4.1" y2="306.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="314.5" x2="4.1" y2="323.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="314.5" x2="12.3" y2="306.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="314.5" x2="12.3" y2="323.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="314.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
-<text x="32.8" y="318.6" fill="#c5c8c6" textLength="213.2" lengthAdjust="spacingAndGlyphs">Test forecast descriptions</text>
-<text x="262.4" y="318.6" fill="#666666" textLength="82.0" lengthAdjust="spacingAndGlyphs">Ben Okafor</text>
+<text x="32.8" y="318.6" fill="#c5c8c6" textLength="32.8" lengthAdjust="spacingAndGlyphs">Test</text>
+<text x="73.8" y="318.6" fill="#c5c8c6" textLength="65.6" lengthAdjust="spacingAndGlyphs">forecast</text>
+<text x="147.6" y="318.6" fill="#c5c8c6" textLength="98.4" lengthAdjust="spacingAndGlyphs">descriptions</text>
+<text x="262.4" y="318.6" fill="#666666" textLength="24.6" lengthAdjust="spacingAndGlyphs">Ben</text>
+<text x="295.2" y="318.6" fill="#666666" textLength="49.2" lengthAdjust="spacingAndGlyphs">Okafor</text>
 <line x1="979.9" y1="314.5" x2="979.9" y2="306.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="314.5" x2="979.9" y2="323.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="331.5" x2="4.1" y2="323.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="331.5" x2="4.1" y2="340.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="331.5" x2="12.3" y2="323.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="331.5" x2="12.3" y2="340.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="331.5" x2="16.4" y2="331.5" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="331.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
 <line x1="20.5" y1="331.5" x2="16.4" y2="331.5" stroke="#7aa6da" stroke-width="1.2"/><line x1="20.5" y1="331.5" x2="24.6" y2="331.5" stroke="#7aa6da" stroke-width="1.2"/>
 <path d="M28.7,340.0 Q28.7,331.5 24.6,331.5" fill="none" stroke="#7aa6da" stroke-width="1.2"/>
-<text x="49.2" y="335.6" fill="#c5c8c6" textLength="164.0" lengthAdjust="spacingAndGlyphs">Merge branch 'units'</text>
-<text x="229.6" y="335.6" fill="#666666" textLength="65.6" lengthAdjust="spacingAndGlyphs">Ana Ruiz</text>
+<text x="49.2" y="335.6" fill="#c5c8c6" textLength="41.0" lengthAdjust="spacingAndGlyphs">Merge</text>
+<text x="98.4" y="335.6" fill="#c5c8c6" textLength="49.2" lengthAdjust="spacingAndGlyphs">branch</text>
+<text x="155.8" y="335.6" fill="#c5c8c6" textLength="57.4" lengthAdjust="spacingAndGlyphs">'units'</text>
+<text x="229.6" y="335.6" fill="#666666" textLength="24.6" lengthAdjust="spacingAndGlyphs">Ana</text>
+<text x="262.4" y="335.6" fill="#666666" textLength="32.8" lengthAdjust="spacingAndGlyphs">Ruiz</text>
 <line x1="979.9" y1="331.5" x2="979.9" y2="323.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="331.5" x2="979.9" y2="340.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="348.5" x2="4.1" y2="340.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="348.5" x2="4.1" y2="357.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="348.5" x2="12.3" y2="340.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="348.5" x2="12.3" y2="357.0" stroke="#7aa6da" stroke-width="1.2"/>
 <line x1="28.7" y1="348.5" x2="28.7" y2="340.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="28.7" y1="348.5" x2="28.7" y2="357.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="28.7" cy="348.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
-<text x="49.2" y="352.6" fill="#c5c8c6" textLength="213.2" lengthAdjust="spacingAndGlyphs">Show units in descriptions</text>
-<text x="278.8" y="352.6" fill="#666666" textLength="82.0" lengthAdjust="spacingAndGlyphs">Kai Tanaka</text>
+<text x="49.2" y="352.6" fill="#c5c8c6" textLength="32.8" lengthAdjust="spacingAndGlyphs">Show</text>
+<text x="90.2" y="352.6" fill="#c5c8c6" textLength="41.0" lengthAdjust="spacingAndGlyphs">units</text>
+<text x="139.4" y="352.6" fill="#c5c8c6" textLength="16.4" lengthAdjust="spacingAndGlyphs">in</text>
+<text x="164.0" y="352.6" fill="#c5c8c6" textLength="98.4" lengthAdjust="spacingAndGlyphs">descriptions</text>
+<text x="278.8" y="352.6" fill="#666666" textLength="24.6" lengthAdjust="spacingAndGlyphs">Kai</text>
+<text x="311.6" y="352.6" fill="#666666" textLength="49.2" lengthAdjust="spacingAndGlyphs">Tanaka</text>
 <line x1="979.9" y1="348.5" x2="979.9" y2="340.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="348.5" x2="979.9" y2="357.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="365.5" x2="4.1" y2="357.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="365.5" x2="4.1" y2="374.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="365.5" x2="12.3" y2="357.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="365.5" x2="12.3" y2="374.0" stroke="#7aa6da" stroke-width="1.2"/>
 <line x1="28.7" y1="365.5" x2="28.7" y2="357.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="28.7" y1="365.5" x2="28.7" y2="374.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="28.7" cy="365.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
-<text x="49.2" y="369.6" fill="#c5c8c6" textLength="147.6" lengthAdjust="spacingAndGlyphs">Support Fahrenheit</text>
-<text x="213.2" y="369.6" fill="#666666" textLength="82.0" lengthAdjust="spacingAndGlyphs">Kai Tanaka</text>
+<text x="49.2" y="369.6" fill="#c5c8c6" textLength="57.4" lengthAdjust="spacingAndGlyphs">Support</text>
+<text x="114.8" y="369.6" fill="#c5c8c6" textLength="82.0" lengthAdjust="spacingAndGlyphs">Fahrenheit</text>
+<text x="213.2" y="369.6" fill="#666666" textLength="24.6" lengthAdjust="spacingAndGlyphs">Kai</text>
+<text x="246.0" y="369.6" fill="#666666" textLength="49.2" lengthAdjust="spacingAndGlyphs">Tanaka</text>
 <line x1="979.9" y1="365.5" x2="979.9" y2="357.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="365.5" x2="979.9" y2="374.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="382.5" x2="4.1" y2="374.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="382.5" x2="4.1" y2="391.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="382.5" x2="12.3" y2="374.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="382.5" x2="12.3" y2="391.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="382.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
 <line x1="28.7" y1="382.5" x2="28.7" y2="374.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="28.7" y1="382.5" x2="28.7" y2="391.0" stroke="#7aa6da" stroke-width="1.2"/>
-<text x="49.2" y="386.6" fill="#c5c8c6" textLength="155.8" lengthAdjust="spacingAndGlyphs">Cache API responses</text>
-<text x="221.4" y="386.6" fill="#666666" textLength="65.6" lengthAdjust="spacingAndGlyphs">Ana Ruiz</text>
+<text x="49.2" y="386.6" fill="#c5c8c6" textLength="41.0" lengthAdjust="spacingAndGlyphs">Cache</text>
+<text x="98.4" y="386.6" fill="#c5c8c6" textLength="24.6" lengthAdjust="spacingAndGlyphs">API</text>
+<text x="131.2" y="386.6" fill="#c5c8c6" textLength="73.8" lengthAdjust="spacingAndGlyphs">responses</text>
+<text x="221.4" y="386.6" fill="#666666" textLength="24.6" lengthAdjust="spacingAndGlyphs">Ana</text>
+<text x="254.2" y="386.6" fill="#666666" textLength="32.8" lengthAdjust="spacingAndGlyphs">Ruiz</text>
 <line x1="979.9" y1="382.5" x2="979.9" y2="374.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="382.5" x2="979.9" y2="391.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="399.5" x2="4.1" y2="391.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="399.5" x2="4.1" y2="408.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="399.5" x2="12.3" y2="391.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="399.5" x2="12.3" y2="408.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="399.5" x2="16.4" y2="399.5" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="399.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
 <line x1="20.5" y1="399.5" x2="16.4" y2="399.5" stroke="#7aa6da" stroke-width="1.2"/><line x1="20.5" y1="399.5" x2="24.6" y2="399.5" stroke="#7aa6da" stroke-width="1.2"/>
 <path d="M28.7,391.0 Q28.7,399.5 24.6,399.5" fill="none" stroke="#7aa6da" stroke-width="1.2"/>
-<text x="49.2" y="403.6" fill="#c5c8c6" textLength="229.6" lengthAdjust="spacingAndGlyphs">Fetch forecasts from the API</text>
-<text x="295.2" y="403.6" fill="#666666" textLength="65.6" lengthAdjust="spacingAndGlyphs">Ana Ruiz</text>
+<text x="49.2" y="403.6" fill="#c5c8c6" textLength="41.0" lengthAdjust="spacingAndGlyphs">Fetch</text>
+<text x="98.4" y="403.6" fill="#c5c8c6" textLength="73.8" lengthAdjust="spacingAndGlyphs">forecasts</text>
+<text x="180.4" y="403.6" fill="#c5c8c6" textLength="32.8" lengthAdjust="spacingAndGlyphs">from</text>
+<text x="221.4" y="403.6" fill="#c5c8c6" textLength="24.6" lengthAdjust="spacingAndGlyphs">the</text>
+<text x="254.2" y="403.6" fill="#c5c8c6" textLength="24.6" lengthAdjust="spacingAndGlyphs">API</text>
+<text x="295.2" y="403.6" fill="#666666" textLength="24.6" lengthAdjust="spacingAndGlyphs">Ana</text>
+<text x="328.0" y="403.6" fill="#666666" textLength="32.8" lengthAdjust="spacingAndGlyphs">Ruiz</text>
 <line x1="979.9" y1="399.5" x2="979.9" y2="391.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="399.5" x2="979.9" y2="408.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="416.5" x2="4.1" y2="408.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="416.5" x2="4.1" y2="425.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="416.5" x2="12.3" y2="408.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="416.5" x2="12.3" y2="425.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="416.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
-<text x="32.8" y="420.6" fill="#c5c8c6" textLength="155.8" lengthAdjust="spacingAndGlyphs">Add forecast models</text>
-<text x="205.0" y="420.6" fill="#666666" textLength="82.0" lengthAdjust="spacingAndGlyphs">Ben Okafor</text>
+<text x="32.8" y="420.6" fill="#c5c8c6" textLength="24.6" lengthAdjust="spacingAndGlyphs">Add</text>
+<text x="65.6" y="420.6" fill="#c5c8c6" textLength="65.6" lengthAdjust="spacingAndGlyphs">forecast</text>
+<text x="139.4" y="420.6" fill="#c5c8c6" textLength="49.2" lengthAdjust="spacingAndGlyphs">models</text>
+<text x="205.0" y="420.6" fill="#666666" textLength="24.6" lengthAdjust="spacingAndGlyphs">Ben</text>
+<text x="237.8" y="420.6" fill="#666666" textLength="49.2" lengthAdjust="spacingAndGlyphs">Okafor</text>
 <line x1="979.9" y1="416.5" x2="979.9" y2="408.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="416.5" x2="979.9" y2="425.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="433.5" x2="4.1" y2="425.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="433.5" x2="4.1" y2="442.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="433.5" x2="12.3" y2="425.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="433.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
-<text x="32.8" y="437.6" fill="#c5c8c6" textLength="180.4" lengthAdjust="spacingAndGlyphs">Initial project layout</text>
-<text x="229.6" y="437.6" fill="#666666" textLength="65.6" lengthAdjust="spacingAndGlyphs">Ana Ruiz</text>
+<text x="32.8" y="437.6" fill="#c5c8c6" textLength="57.4" lengthAdjust="spacingAndGlyphs">Initial</text>
+<text x="98.4" y="437.6" fill="#c5c8c6" textLength="57.4" lengthAdjust="spacingAndGlyphs">project</text>
+<text x="164.0" y="437.6" fill="#c5c8c6" textLength="49.2" lengthAdjust="spacingAndGlyphs">layout</text>
+<text x="229.6" y="437.6" fill="#666666" textLength="24.6" lengthAdjust="spacingAndGlyphs">Ana</text>
+<text x="262.4" y="437.6" fill="#666666" textLength="32.8" lengthAdjust="spacingAndGlyphs">Ruiz</text>
 <line x1="979.9" y1="433.5" x2="979.9" y2="425.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="433.5" x2="979.9" y2="442.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="450.5" x2="4.1" y2="442.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="450.5" x2="4.1" y2="459.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="979.9" y1="450.5" x2="979.9" y2="442.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="450.5" x2="979.9" y2="459.0" stroke="#666666" stroke-width="1.2"/>
@@ -820,7 +861,8 @@
 <line x1="971.7" y1="552.5" x2="967.6" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="971.7" y1="552.5" x2="975.8" y2="552.5" stroke="#666666" stroke-width="1.2"/>
 <path d="M979.9,544.0 Q979.9,552.5 975.8,552.5" fill="none" stroke="#666666" stroke-width="1.2"/>
 <text x="8.2" y="573.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">enter</text>
-<text x="57.4" y="573.6" fill="#ffffff" textLength="73.8" lengthAdjust="spacingAndGlyphs">check out</text>
+<text x="57.4" y="573.6" fill="#ffffff" textLength="41.0" lengthAdjust="spacingAndGlyphs">check</text>
+<text x="106.6" y="573.6" fill="#ffffff" textLength="24.6" lengthAdjust="spacingAndGlyphs">out</text>
 <text x="139.4" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
 <text x="155.8" y="573.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">c</text>
 <text x="172.2" y="573.6" fill="#ffffff" textLength="57.4" lengthAdjust="spacingAndGlyphs">compare</text>
