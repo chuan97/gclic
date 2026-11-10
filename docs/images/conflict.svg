@@ -74,17 +74,11 @@
 <text x="106.6" y="46.6" fill="#666666" textLength="65.6" lengthAdjust="spacingAndGlyphs">1 remote</text>
 <line x1="192.7" y1="42.5" x2="192.7" y2="34.0" stroke="#666666" stroke-width="1.2"/><line x1="192.7" y1="42.5" x2="192.7" y2="51.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="200.9" y1="42.5" x2="200.9" y2="34.0" stroke="#666666" stroke-width="1.2"/><line x1="200.9" y1="42.5" x2="200.9" y2="51.0" stroke="#666666" stroke-width="1.2"/>
-<text x="229.6" y="46.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">1</text>
-<text x="246.0" y="46.6" fill="#c586c0" textLength="32.8" lengthAdjust="spacingAndGlyphs">from</text>
-<text x="287.0" y="46.6" fill="#cccccc" textLength="90.2" lengthAdjust="spacingAndGlyphs">dataclasses</text>
-<text x="385.4" y="46.6" fill="#c586c0" textLength="49.2" lengthAdjust="spacingAndGlyphs">import</text>
-<text x="442.8" y="46.6" fill="#9cdcfe" textLength="73.8" lengthAdjust="spacingAndGlyphs">dataclass</text>
-<line x1="586.3" y1="42.5" x2="586.3" y2="34.0" stroke="#666666" stroke-width="1.2"/><line x1="586.3" y1="42.5" x2="586.3" y2="51.0" stroke="#666666" stroke-width="1.2"/>
-<text x="615.0" y="46.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">1</text>
-<text x="631.4" y="46.6" fill="#c586c0" textLength="32.8" lengthAdjust="spacingAndGlyphs">from</text>
-<text x="672.4" y="46.6" fill="#cccccc" textLength="90.2" lengthAdjust="spacingAndGlyphs">dataclasses</text>
-<text x="770.8" y="46.6" fill="#c586c0" textLength="49.2" lengthAdjust="spacingAndGlyphs">import</text>
-<text x="828.2" y="46.6" fill="#9cdcfe" textLength="73.8" lengthAdjust="spacingAndGlyphs">dataclass</text>
+<text x="229.6" y="46.6" fill="#666666" textLength="49.2" lengthAdjust="spacingAndGlyphs">1    1</text>
+<text x="287.0" y="46.6" fill="#c586c0" textLength="32.8" lengthAdjust="spacingAndGlyphs">from</text>
+<text x="328.0" y="46.6" fill="#cccccc" textLength="90.2" lengthAdjust="spacingAndGlyphs">dataclasses</text>
+<text x="426.4" y="46.6" fill="#c586c0" textLength="49.2" lengthAdjust="spacingAndGlyphs">import</text>
+<text x="483.8" y="46.6" fill="#9cdcfe" textLength="73.8" lengthAdjust="spacingAndGlyphs">dataclass</text>
 <line x1="979.9" y1="42.5" x2="979.9" y2="34.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="42.5" x2="979.9" y2="51.0" stroke="#666666" stroke-width="1.2"/>
 <path d="M4.1,51.0 Q4.1,59.5 8.2,59.5" fill="none" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="59.5" x2="8.2" y2="59.5" stroke="#666666" stroke-width="1.2"/><line x1="12.3" y1="59.5" x2="16.4" y2="59.5" stroke="#666666" stroke-width="1.2"/>
@@ -111,9 +105,7 @@
 <line x1="184.5" y1="59.5" x2="180.4" y2="59.5" stroke="#666666" stroke-width="1.2"/><line x1="184.5" y1="59.5" x2="188.6" y2="59.5" stroke="#666666" stroke-width="1.2"/>
 <path d="M192.7,51.0 Q192.7,59.5 188.6,59.5" fill="none" stroke="#666666" stroke-width="1.2"/>
 <line x1="200.9" y1="59.5" x2="200.9" y2="51.0" stroke="#666666" stroke-width="1.2"/><line x1="200.9" y1="59.5" x2="200.9" y2="68.0" stroke="#666666" stroke-width="1.2"/>
-<text x="229.6" y="63.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">2</text>
-<line x1="586.3" y1="59.5" x2="586.3" y2="51.0" stroke="#666666" stroke-width="1.2"/><line x1="586.3" y1="59.5" x2="586.3" y2="68.0" stroke="#666666" stroke-width="1.2"/>
-<text x="615.0" y="63.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">2</text>
+<text x="229.6" y="63.6" fill="#666666" textLength="49.2" lengthAdjust="spacingAndGlyphs">2    2</text>
 <line x1="979.9" y1="59.5" x2="979.9" y2="51.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="59.5" x2="979.9" y2="68.0" stroke="#666666" stroke-width="1.2"/>
 <path d="M4.1,85.0 Q4.1,76.5 8.2,76.5" fill="none" stroke="#8abeb7" stroke-width="1.2"/>
 <text x="16.4" y="80.6" fill="#8abeb7" textLength="139.4" lengthAdjust="spacingAndGlyphs">Changes · merging</text>
@@ -122,33 +114,23 @@
 <line x1="184.5" y1="76.5" x2="180.4" y2="76.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="184.5" y1="76.5" x2="188.6" y2="76.5" stroke="#8abeb7" stroke-width="1.2"/>
 <path d="M192.7,85.0 Q192.7,76.5 188.6,76.5" fill="none" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="200.9" y1="76.5" x2="200.9" y2="68.0" stroke="#666666" stroke-width="1.2"/><line x1="200.9" y1="76.5" x2="200.9" y2="85.0" stroke="#666666" stroke-width="1.2"/>
-<text x="229.6" y="80.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">3</text>
-<line x1="586.3" y1="76.5" x2="586.3" y2="68.0" stroke="#666666" stroke-width="1.2"/><line x1="586.3" y1="76.5" x2="586.3" y2="85.0" stroke="#666666" stroke-width="1.2"/>
-<text x="615.0" y="80.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">3</text>
+<text x="229.6" y="80.6" fill="#666666" textLength="49.2" lengthAdjust="spacingAndGlyphs">3    3</text>
 <line x1="979.9" y1="76.5" x2="979.9" y2="68.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="76.5" x2="979.9" y2="85.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="93.5" x2="4.1" y2="85.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="93.5" x2="4.1" y2="102.0" stroke="#8abeb7" stroke-width="1.2"/>
 <text x="8.2" y="97.6" fill="#666666" font-weight="bold" textLength="82.0" lengthAdjust="spacingAndGlyphs">Staged (0)</text>
 <line x1="192.7" y1="93.5" x2="192.7" y2="85.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="192.7" y1="93.5" x2="192.7" y2="102.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="200.9" y1="93.5" x2="200.9" y2="85.0" stroke="#666666" stroke-width="1.2"/><line x1="200.9" y1="93.5" x2="200.9" y2="102.0" stroke="#666666" stroke-width="1.2"/>
-<text x="229.6" y="97.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">4</text>
-<text x="246.0" y="97.6" fill="#dcdcaa" textLength="82.0" lengthAdjust="spacingAndGlyphs">@dataclass</text>
-<line x1="586.3" y1="93.5" x2="586.3" y2="85.0" stroke="#666666" stroke-width="1.2"/><line x1="586.3" y1="93.5" x2="586.3" y2="102.0" stroke="#666666" stroke-width="1.2"/>
-<text x="615.0" y="97.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">4</text>
-<text x="631.4" y="97.6" fill="#dcdcaa" textLength="82.0" lengthAdjust="spacingAndGlyphs">@dataclass</text>
+<text x="229.6" y="97.6" fill="#666666" textLength="49.2" lengthAdjust="spacingAndGlyphs">4    4</text>
+<text x="287.0" y="97.6" fill="#dcdcaa" textLength="82.0" lengthAdjust="spacingAndGlyphs">@dataclass</text>
 <line x1="979.9" y1="93.5" x2="979.9" y2="85.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="93.5" x2="979.9" y2="102.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="110.5" x2="4.1" y2="102.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="110.5" x2="4.1" y2="119.0" stroke="#8abeb7" stroke-width="1.2"/>
 <text x="8.2" y="114.6" fill="#666666" font-weight="bold" textLength="90.2" lengthAdjust="spacingAndGlyphs">Changes (1)</text>
 <line x1="192.7" y1="110.5" x2="192.7" y2="102.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="192.7" y1="110.5" x2="192.7" y2="119.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="200.9" y1="110.5" x2="200.9" y2="102.0" stroke="#666666" stroke-width="1.2"/><line x1="200.9" y1="110.5" x2="200.9" y2="119.0" stroke="#666666" stroke-width="1.2"/>
-<text x="229.6" y="114.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">5</text>
-<text x="246.0" y="114.6" fill="#569cd6" textLength="41.0" lengthAdjust="spacingAndGlyphs">class</text>
-<text x="295.2" y="114.6" fill="#4ec9b0" textLength="65.6" lengthAdjust="spacingAndGlyphs">Forecast</text>
-<text x="360.8" y="114.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
-<line x1="586.3" y1="110.5" x2="586.3" y2="102.0" stroke="#666666" stroke-width="1.2"/><line x1="586.3" y1="110.5" x2="586.3" y2="119.0" stroke="#666666" stroke-width="1.2"/>
-<text x="615.0" y="114.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">5</text>
-<text x="631.4" y="114.6" fill="#569cd6" textLength="41.0" lengthAdjust="spacingAndGlyphs">class</text>
-<text x="680.6" y="114.6" fill="#4ec9b0" textLength="65.6" lengthAdjust="spacingAndGlyphs">Forecast</text>
-<text x="746.2" y="114.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="229.6" y="114.6" fill="#666666" textLength="49.2" lengthAdjust="spacingAndGlyphs">5    5</text>
+<text x="287.0" y="114.6" fill="#569cd6" textLength="41.0" lengthAdjust="spacingAndGlyphs">class</text>
+<text x="336.2" y="114.6" fill="#4ec9b0" textLength="65.6" lengthAdjust="spacingAndGlyphs">Forecast</text>
+<text x="401.8" y="114.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
 <line x1="979.9" y1="110.5" x2="979.9" y2="102.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="110.5" x2="979.9" y2="119.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="127.5" x2="4.1" y2="119.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="127.5" x2="4.1" y2="136.0" stroke="#8abeb7" stroke-width="1.2"/>
 <rect x="8.2" y="119" width="24.6" height="17" fill="#3a3a3a"/>
@@ -160,15 +142,10 @@
 <rect x="180.4" y="119" width="8.2" height="17" fill="#3a3a3a"/>
 <line x1="192.7" y1="127.5" x2="192.7" y2="119.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="192.7" y1="127.5" x2="192.7" y2="136.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="200.9" y1="127.5" x2="200.9" y2="119.0" stroke="#666666" stroke-width="1.2"/><line x1="200.9" y1="127.5" x2="200.9" y2="136.0" stroke="#666666" stroke-width="1.2"/>
-<text x="229.6" y="131.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">6</text>
-<text x="278.8" y="131.6" fill="#9cdcfe" textLength="32.8" lengthAdjust="spacingAndGlyphs">city</text>
-<text x="311.6" y="131.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
-<text x="328.0" y="131.6" fill="#4ec9b0" textLength="24.6" lengthAdjust="spacingAndGlyphs">str</text>
-<line x1="586.3" y1="127.5" x2="586.3" y2="119.0" stroke="#666666" stroke-width="1.2"/><line x1="586.3" y1="127.5" x2="586.3" y2="136.0" stroke="#666666" stroke-width="1.2"/>
-<text x="615.0" y="131.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">6</text>
-<text x="664.2" y="131.6" fill="#9cdcfe" textLength="32.8" lengthAdjust="spacingAndGlyphs">city</text>
-<text x="697.0" y="131.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
-<text x="713.4" y="131.6" fill="#4ec9b0" textLength="24.6" lengthAdjust="spacingAndGlyphs">str</text>
+<text x="229.6" y="131.6" fill="#666666" textLength="49.2" lengthAdjust="spacingAndGlyphs">6    6</text>
+<text x="319.8" y="131.6" fill="#9cdcfe" textLength="32.8" lengthAdjust="spacingAndGlyphs">city</text>
+<text x="352.6" y="131.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="369.0" y="131.6" fill="#4ec9b0" textLength="24.6" lengthAdjust="spacingAndGlyphs">str</text>
 <line x1="979.9" y1="127.5" x2="979.9" y2="119.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="127.5" x2="979.9" y2="136.0" stroke="#666666" stroke-width="1.2"/>
 <path d="M4.1,136.0 Q4.1,144.5 8.2,144.5" fill="none" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="12.3" y1="144.5" x2="8.2" y2="144.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="12.3" y1="144.5" x2="16.4" y2="144.5" stroke="#8abeb7" stroke-width="1.2"/>
@@ -195,15 +172,10 @@
 <line x1="184.5" y1="144.5" x2="180.4" y2="144.5" stroke="#8abeb7" stroke-width="1.2"/><line x1="184.5" y1="144.5" x2="188.6" y2="144.5" stroke="#8abeb7" stroke-width="1.2"/>
 <path d="M192.7,136.0 Q192.7,144.5 188.6,144.5" fill="none" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="200.9" y1="144.5" x2="200.9" y2="136.0" stroke="#666666" stroke-width="1.2"/><line x1="200.9" y1="144.5" x2="200.9" y2="153.0" stroke="#666666" stroke-width="1.2"/>
-<text x="229.6" y="148.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">7</text>
-<text x="278.8" y="148.6" fill="#9cdcfe" textLength="90.2" lengthAdjust="spacingAndGlyphs">temperature</text>
-<text x="369.0" y="148.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
-<text x="385.4" y="148.6" fill="#4ec9b0" textLength="41.0" lengthAdjust="spacingAndGlyphs">float</text>
-<line x1="586.3" y1="144.5" x2="586.3" y2="136.0" stroke="#666666" stroke-width="1.2"/><line x1="586.3" y1="144.5" x2="586.3" y2="153.0" stroke="#666666" stroke-width="1.2"/>
-<text x="615.0" y="148.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">7</text>
-<text x="664.2" y="148.6" fill="#9cdcfe" textLength="90.2" lengthAdjust="spacingAndGlyphs">temperature</text>
-<text x="754.4" y="148.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
-<text x="770.8" y="148.6" fill="#4ec9b0" textLength="41.0" lengthAdjust="spacingAndGlyphs">float</text>
+<text x="229.6" y="148.6" fill="#666666" textLength="49.2" lengthAdjust="spacingAndGlyphs">7    7</text>
+<text x="319.8" y="148.6" fill="#9cdcfe" textLength="90.2" lengthAdjust="spacingAndGlyphs">temperature</text>
+<text x="410.0" y="148.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="426.4" y="148.6" fill="#4ec9b0" textLength="41.0" lengthAdjust="spacingAndGlyphs">float</text>
 <line x1="979.9" y1="144.5" x2="979.9" y2="136.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="144.5" x2="979.9" y2="153.0" stroke="#666666" stroke-width="1.2"/>
 <path d="M4.1,170.0 Q4.1,161.5 8.2,161.5" fill="none" stroke="#666666" stroke-width="1.2"/>
 <text x="16.4" y="165.6" fill="#666666" textLength="41.0" lengthAdjust="spacingAndGlyphs">Graph</text>
@@ -221,15 +193,10 @@
 <line x1="184.5" y1="161.5" x2="180.4" y2="161.5" stroke="#666666" stroke-width="1.2"/><line x1="184.5" y1="161.5" x2="188.6" y2="161.5" stroke="#666666" stroke-width="1.2"/>
 <path d="M192.7,170.0 Q192.7,161.5 188.6,161.5" fill="none" stroke="#666666" stroke-width="1.2"/>
 <line x1="200.9" y1="161.5" x2="200.9" y2="153.0" stroke="#666666" stroke-width="1.2"/><line x1="200.9" y1="161.5" x2="200.9" y2="170.0" stroke="#666666" stroke-width="1.2"/>
-<text x="229.6" y="165.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">8</text>
-<text x="278.8" y="165.6" fill="#9cdcfe" textLength="57.4" lengthAdjust="spacingAndGlyphs">summary</text>
-<text x="336.2" y="165.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
-<text x="352.6" y="165.6" fill="#4ec9b0" textLength="24.6" lengthAdjust="spacingAndGlyphs">str</text>
-<line x1="586.3" y1="161.5" x2="586.3" y2="153.0" stroke="#666666" stroke-width="1.2"/><line x1="586.3" y1="161.5" x2="586.3" y2="170.0" stroke="#666666" stroke-width="1.2"/>
-<text x="615.0" y="165.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">8</text>
-<text x="664.2" y="165.6" fill="#9cdcfe" textLength="57.4" lengthAdjust="spacingAndGlyphs">summary</text>
-<text x="721.6" y="165.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
-<text x="738.0" y="165.6" fill="#4ec9b0" textLength="24.6" lengthAdjust="spacingAndGlyphs">str</text>
+<text x="229.6" y="165.6" fill="#666666" textLength="49.2" lengthAdjust="spacingAndGlyphs">8    8</text>
+<text x="319.8" y="165.6" fill="#9cdcfe" textLength="57.4" lengthAdjust="spacingAndGlyphs">summary</text>
+<text x="377.2" y="165.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="393.6" y="165.6" fill="#4ec9b0" textLength="24.6" lengthAdjust="spacingAndGlyphs">str</text>
 <line x1="979.9" y1="161.5" x2="979.9" y2="153.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="161.5" x2="979.9" y2="170.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="178.5" x2="4.1" y2="170.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="178.5" x2="4.1" y2="187.0" stroke="#666666" stroke-width="1.2"/>
 <rect x="8.2" y="170" width="8.2" height="17" fill="#3a3a3a"/>
@@ -239,28 +206,19 @@
 <text x="32.8" y="182.6" fill="#c5c8c6" textLength="155.8" lengthAdjust="spacingAndGlyphs">Space before the de</text>
 <line x1="192.7" y1="178.5" x2="192.7" y2="170.0" stroke="#666666" stroke-width="1.2"/><line x1="192.7" y1="178.5" x2="192.7" y2="187.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="200.9" y1="178.5" x2="200.9" y2="170.0" stroke="#666666" stroke-width="1.2"/><line x1="200.9" y1="178.5" x2="200.9" y2="187.0" stroke="#666666" stroke-width="1.2"/>
-<text x="229.6" y="182.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">9</text>
-<text x="278.8" y="182.6" fill="#9cdcfe" textLength="41.0" lengthAdjust="spacingAndGlyphs">units</text>
-<text x="319.8" y="182.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
-<text x="336.2" y="182.6" fill="#4ec9b0" textLength="24.6" lengthAdjust="spacingAndGlyphs">str</text>
-<text x="369.0" y="182.6" fill="#d4d4d4" textLength="8.2" lengthAdjust="spacingAndGlyphs">=</text>
-<text x="385.4" y="182.6" fill="#ce9178" textLength="24.6" lengthAdjust="spacingAndGlyphs">"C"</text>
-<line x1="586.3" y1="178.5" x2="586.3" y2="170.0" stroke="#666666" stroke-width="1.2"/><line x1="586.3" y1="178.5" x2="586.3" y2="187.0" stroke="#666666" stroke-width="1.2"/>
-<text x="615.0" y="182.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">9</text>
-<text x="664.2" y="182.6" fill="#9cdcfe" textLength="41.0" lengthAdjust="spacingAndGlyphs">units</text>
-<text x="705.2" y="182.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
-<text x="721.6" y="182.6" fill="#4ec9b0" textLength="24.6" lengthAdjust="spacingAndGlyphs">str</text>
-<text x="754.4" y="182.6" fill="#d4d4d4" textLength="8.2" lengthAdjust="spacingAndGlyphs">=</text>
-<text x="770.8" y="182.6" fill="#ce9178" textLength="24.6" lengthAdjust="spacingAndGlyphs">"C"</text>
+<text x="229.6" y="182.6" fill="#666666" textLength="49.2" lengthAdjust="spacingAndGlyphs">9    9</text>
+<text x="319.8" y="182.6" fill="#9cdcfe" textLength="41.0" lengthAdjust="spacingAndGlyphs">units</text>
+<text x="360.8" y="182.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="377.2" y="182.6" fill="#4ec9b0" textLength="24.6" lengthAdjust="spacingAndGlyphs">str</text>
+<text x="410.0" y="182.6" fill="#d4d4d4" textLength="8.2" lengthAdjust="spacingAndGlyphs">=</text>
+<text x="426.4" y="182.6" fill="#ce9178" textLength="24.6" lengthAdjust="spacingAndGlyphs">"C"</text>
 <line x1="979.9" y1="178.5" x2="979.9" y2="170.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="178.5" x2="979.9" y2="187.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="195.5" x2="4.1" y2="187.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="195.5" x2="4.1" y2="204.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="195.5" x2="12.3" y2="187.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="195.5" x2="12.3" y2="204.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="195.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
 <text x="32.8" y="199.6" fill="#c5c8c6" textLength="155.8" lengthAdjust="spacingAndGlyphs">Test forecast descr</text>
 <line x1="192.7" y1="195.5" x2="192.7" y2="187.0" stroke="#666666" stroke-width="1.2"/><line x1="192.7" y1="195.5" x2="192.7" y2="204.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="200.9" y1="195.5" x2="200.9" y2="187.0" stroke="#666666" stroke-width="1.2"/><line x1="200.9" y1="195.5" x2="200.9" y2="204.0" stroke="#666666" stroke-width="1.2"/>
-<text x="221.4" y="199.6" fill="#666666" textLength="16.4" lengthAdjust="spacingAndGlyphs">10</text>
-<line x1="586.3" y1="195.5" x2="586.3" y2="187.0" stroke="#666666" stroke-width="1.2"/><line x1="586.3" y1="195.5" x2="586.3" y2="204.0" stroke="#666666" stroke-width="1.2"/>
-<text x="606.8" y="199.6" fill="#666666" textLength="16.4" lengthAdjust="spacingAndGlyphs">10</text>
+<text x="221.4" y="199.6" fill="#666666" textLength="57.4" lengthAdjust="spacingAndGlyphs">10   10</text>
 <line x1="979.9" y1="195.5" x2="979.9" y2="187.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="195.5" x2="979.9" y2="204.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="212.5" x2="4.1" y2="204.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="212.5" x2="4.1" y2="221.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="212.5" x2="12.3" y2="204.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="212.5" x2="12.3" y2="221.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="212.5" x2="16.4" y2="212.5" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="212.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
@@ -269,23 +227,14 @@
 <text x="49.2" y="216.6" fill="#c5c8c6" textLength="139.4" lengthAdjust="spacingAndGlyphs">Merge branch 'uni</text>
 <line x1="192.7" y1="212.5" x2="192.7" y2="204.0" stroke="#666666" stroke-width="1.2"/><line x1="192.7" y1="212.5" x2="192.7" y2="221.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="200.9" y1="212.5" x2="200.9" y2="204.0" stroke="#666666" stroke-width="1.2"/><line x1="200.9" y1="212.5" x2="200.9" y2="221.0" stroke="#666666" stroke-width="1.2"/>
-<text x="221.4" y="216.6" fill="#666666" textLength="16.4" lengthAdjust="spacingAndGlyphs">11</text>
-<text x="278.8" y="216.6" fill="#569cd6" textLength="24.6" lengthAdjust="spacingAndGlyphs">def</text>
-<text x="311.6" y="216.6" fill="#dcdcaa" textLength="65.6" lengthAdjust="spacingAndGlyphs">describe</text>
-<text x="377.2" y="216.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">(</text>
-<text x="385.4" y="216.6" fill="#9cdcfe" textLength="32.8" lengthAdjust="spacingAndGlyphs">self</text>
-<text x="418.2" y="216.6" fill="#cccccc" textLength="32.8" lengthAdjust="spacingAndGlyphs">) -&gt;</text>
-<text x="459.2" y="216.6" fill="#4ec9b0" textLength="24.6" lengthAdjust="spacingAndGlyphs">str</text>
-<text x="483.8" y="216.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
-<line x1="586.3" y1="212.5" x2="586.3" y2="204.0" stroke="#666666" stroke-width="1.2"/><line x1="586.3" y1="212.5" x2="586.3" y2="221.0" stroke="#666666" stroke-width="1.2"/>
-<text x="606.8" y="216.6" fill="#666666" textLength="16.4" lengthAdjust="spacingAndGlyphs">11</text>
-<text x="664.2" y="216.6" fill="#569cd6" textLength="24.6" lengthAdjust="spacingAndGlyphs">def</text>
-<text x="697.0" y="216.6" fill="#dcdcaa" textLength="65.6" lengthAdjust="spacingAndGlyphs">describe</text>
-<text x="762.6" y="216.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">(</text>
-<text x="770.8" y="216.6" fill="#9cdcfe" textLength="32.8" lengthAdjust="spacingAndGlyphs">self</text>
-<text x="803.6" y="216.6" fill="#cccccc" textLength="32.8" lengthAdjust="spacingAndGlyphs">) -&gt;</text>
-<text x="844.6" y="216.6" fill="#4ec9b0" textLength="24.6" lengthAdjust="spacingAndGlyphs">str</text>
-<text x="869.2" y="216.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
+<text x="221.4" y="216.6" fill="#666666" textLength="57.4" lengthAdjust="spacingAndGlyphs">11   11</text>
+<text x="319.8" y="216.6" fill="#569cd6" textLength="24.6" lengthAdjust="spacingAndGlyphs">def</text>
+<text x="352.6" y="216.6" fill="#dcdcaa" textLength="65.6" lengthAdjust="spacingAndGlyphs">describe</text>
+<text x="418.2" y="216.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">(</text>
+<text x="426.4" y="216.6" fill="#9cdcfe" textLength="32.8" lengthAdjust="spacingAndGlyphs">self</text>
+<text x="459.2" y="216.6" fill="#cccccc" textLength="32.8" lengthAdjust="spacingAndGlyphs">) -&gt;</text>
+<text x="500.2" y="216.6" fill="#4ec9b0" textLength="24.6" lengthAdjust="spacingAndGlyphs">str</text>
+<text x="524.8" y="216.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
 <line x1="979.9" y1="212.5" x2="979.9" y2="204.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="212.5" x2="979.9" y2="221.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="229.5" x2="4.1" y2="221.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="229.5" x2="4.1" y2="238.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="229.5" x2="12.3" y2="221.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="229.5" x2="12.3" y2="238.0" stroke="#7aa6da" stroke-width="1.2"/>
@@ -301,12 +250,70 @@
 <text x="49.2" y="250.6" fill="#c5c8c6" textLength="139.4" lengthAdjust="spacingAndGlyphs">Support Fahrenhei</text>
 <line x1="192.7" y1="246.5" x2="192.7" y2="238.0" stroke="#666666" stroke-width="1.2"/><line x1="192.7" y1="246.5" x2="192.7" y2="255.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="200.9" y1="246.5" x2="200.9" y2="238.0" stroke="#666666" stroke-width="1.2"/><line x1="200.9" y1="246.5" x2="200.9" y2="255.0" stroke="#666666" stroke-width="1.2"/>
-<line x1="586.3" y1="246.5" x2="586.3" y2="238.0" stroke="#666666" stroke-width="1.2"/><line x1="586.3" y1="246.5" x2="586.3" y2="255.0" stroke="#666666" stroke-width="1.2"/>
-<rect x="590.4" y="238" width="41.0" height="17" fill="#1a2a40"/>
-<text x="606.8" y="250.6" fill="#666666" textLength="16.4" lengthAdjust="spacingAndGlyphs">15</text>
-<rect x="631.4" y="238" width="65.6" height="17" fill="#1a2a40"/>
-<rect x="697.0" y="238" width="278.8" height="17" fill="#1a2a40"/>
-<text x="697.0" y="250.6" fill="#6a9955" textLength="278.8" lengthAdjust="spacingAndGlyphs"># One decimal, as stations report.</text>
+<rect x="205.0" y="238" width="82.0" height="17" fill="#1a342e"/>
+<text x="221.4" y="250.6" fill="#666666" textLength="16.4" lengthAdjust="spacingAndGlyphs">13</text>
+<rect x="287.0" y="238" width="65.6" height="17" fill="#1a342e"/>
+<rect x="352.6" y="238" width="49.2" height="17" fill="#1a342e"/>
+<text x="352.6" y="250.6" fill="#c586c0" textLength="49.2" lengthAdjust="spacingAndGlyphs">return</text>
+<rect x="401.8" y="238" width="8.2" height="17" fill="#1a342e"/>
+<rect x="410.0" y="238" width="8.2" height="17" fill="#1a342e"/>
+<text x="410.0" y="250.6" fill="#569cd6" textLength="8.2" lengthAdjust="spacingAndGlyphs">f</text>
+<rect x="418.2" y="238" width="8.2" height="17" fill="#1a342e"/>
+<text x="418.2" y="250.6" fill="#ce9178" textLength="8.2" lengthAdjust="spacingAndGlyphs">"</text>
+<rect x="426.4" y="238" width="8.2" height="17" fill="#1a342e"/>
+<text x="426.4" y="250.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">{</text>
+<rect x="434.6" y="238" width="32.8" height="17" fill="#1a342e"/>
+<text x="434.6" y="250.6" fill="#569cd6" textLength="32.8" lengthAdjust="spacingAndGlyphs">self</text>
+<rect x="467.4" y="238" width="8.2" height="17" fill="#1a342e"/>
+<text x="467.4" y="250.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">.</text>
+<rect x="475.6" y="238" width="32.8" height="17" fill="#1a342e"/>
+<text x="475.6" y="250.6" fill="#9cdcfe" textLength="32.8" lengthAdjust="spacingAndGlyphs">city</text>
+<rect x="508.4" y="238" width="8.2" height="17" fill="#1a342e"/>
+<text x="508.4" y="250.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">}</text>
+<rect x="516.6" y="238" width="16.4" height="17" fill="#1a342e"/>
+<text x="516.6" y="250.6" fill="#ce9178" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
+<rect x="533.0" y="238" width="8.2" height="17" fill="#1a342e"/>
+<text x="533.0" y="250.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">{</text>
+<rect x="541.2" y="238" width="32.8" height="17" fill="#1a342e"/>
+<text x="541.2" y="250.6" fill="#569cd6" textLength="32.8" lengthAdjust="spacingAndGlyphs">self</text>
+<rect x="574.0" y="238" width="8.2" height="17" fill="#1a342e"/>
+<text x="574.0" y="250.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">.</text>
+<rect x="582.2" y="238" width="90.2" height="17" fill="#1a342e"/>
+<text x="582.2" y="250.6" fill="#9cdcfe" textLength="90.2" lengthAdjust="spacingAndGlyphs">temperature</text>
+<rect x="672.4" y="238" width="16.4" height="17" fill="#1a342e"/>
+<text x="672.4" y="250.6" fill="#4fc1ff" textLength="16.4" lengthAdjust="spacingAndGlyphs">:.</text>
+<rect x="688.8" y="238" width="16.4" height="17" fill="#286254"/>
+<text x="688.8" y="250.6" fill="#4fc1ff" textLength="16.4" lengthAdjust="spacingAndGlyphs">0f</text>
+<rect x="705.2" y="238" width="8.2" height="17" fill="#1a342e"/>
+<text x="705.2" y="250.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">}</text>
+<rect x="713.4" y="238" width="8.2" height="17" fill="#286254"/>
+<rect x="721.6" y="238" width="8.2" height="17" fill="#1a342e"/>
+<text x="721.6" y="250.6" fill="#ce9178" textLength="8.2" lengthAdjust="spacingAndGlyphs">°</text>
+<rect x="729.8" y="238" width="8.2" height="17" fill="#1a342e"/>
+<text x="729.8" y="250.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">{</text>
+<rect x="738.0" y="238" width="32.8" height="17" fill="#1a342e"/>
+<text x="738.0" y="250.6" fill="#569cd6" textLength="32.8" lengthAdjust="spacingAndGlyphs">self</text>
+<rect x="770.8" y="238" width="8.2" height="17" fill="#1a342e"/>
+<text x="770.8" y="250.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">.</text>
+<rect x="779.0" y="238" width="41.0" height="17" fill="#1a342e"/>
+<text x="779.0" y="250.6" fill="#9cdcfe" textLength="41.0" lengthAdjust="spacingAndGlyphs">units</text>
+<rect x="820.0" y="238" width="8.2" height="17" fill="#1a342e"/>
+<text x="820.0" y="250.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">}</text>
+<rect x="828.2" y="238" width="16.4" height="17" fill="#1a342e"/>
+<text x="828.2" y="250.6" fill="#ce9178" textLength="8.2" lengthAdjust="spacingAndGlyphs">,</text>
+<rect x="844.6" y="238" width="8.2" height="17" fill="#1a342e"/>
+<text x="844.6" y="250.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">{</text>
+<rect x="852.8" y="238" width="32.8" height="17" fill="#1a342e"/>
+<text x="852.8" y="250.6" fill="#569cd6" textLength="32.8" lengthAdjust="spacingAndGlyphs">self</text>
+<rect x="885.6" y="238" width="8.2" height="17" fill="#1a342e"/>
+<text x="885.6" y="250.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">.</text>
+<rect x="893.8" y="238" width="57.4" height="17" fill="#1a342e"/>
+<text x="893.8" y="250.6" fill="#9cdcfe" textLength="57.4" lengthAdjust="spacingAndGlyphs">summary</text>
+<rect x="951.2" y="238" width="8.2" height="17" fill="#1a342e"/>
+<text x="951.2" y="250.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">}</text>
+<rect x="959.4" y="238" width="8.2" height="17" fill="#1a342e"/>
+<text x="959.4" y="250.6" fill="#ce9178" textLength="8.2" lengthAdjust="spacingAndGlyphs">"</text>
+<rect x="967.6" y="238" width="8.2" height="17" fill="#1a342e"/>
 <line x1="979.9" y1="246.5" x2="979.9" y2="238.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="246.5" x2="979.9" y2="255.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="263.5" x2="4.1" y2="255.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="263.5" x2="4.1" y2="272.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="263.5" x2="12.3" y2="255.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="263.5" x2="12.3" y2="272.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="263.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
@@ -314,67 +321,12 @@
 <text x="49.2" y="267.6" fill="#c5c8c6" textLength="139.4" lengthAdjust="spacingAndGlyphs">Cache API respons</text>
 <line x1="192.7" y1="263.5" x2="192.7" y2="255.0" stroke="#666666" stroke-width="1.2"/><line x1="192.7" y1="263.5" x2="192.7" y2="272.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="200.9" y1="263.5" x2="200.9" y2="255.0" stroke="#666666" stroke-width="1.2"/><line x1="200.9" y1="263.5" x2="200.9" y2="272.0" stroke="#666666" stroke-width="1.2"/>
-<rect x="205.0" y="255" width="41.0" height="17" fill="#1a342e"/>
-<text x="221.4" y="267.6" fill="#666666" textLength="16.4" lengthAdjust="spacingAndGlyphs">13</text>
-<rect x="246.0" y="255" width="65.6" height="17" fill="#1a342e"/>
-<rect x="311.6" y="255" width="49.2" height="17" fill="#1a342e"/>
-<text x="311.6" y="267.6" fill="#c586c0" textLength="49.2" lengthAdjust="spacingAndGlyphs">return</text>
-<rect x="360.8" y="255" width="8.2" height="17" fill="#1a342e"/>
-<rect x="369.0" y="255" width="8.2" height="17" fill="#1a342e"/>
-<text x="369.0" y="267.6" fill="#569cd6" textLength="8.2" lengthAdjust="spacingAndGlyphs">f</text>
-<rect x="377.2" y="255" width="8.2" height="17" fill="#1a342e"/>
-<text x="377.2" y="267.6" fill="#ce9178" textLength="8.2" lengthAdjust="spacingAndGlyphs">"</text>
-<rect x="385.4" y="255" width="8.2" height="17" fill="#1a342e"/>
-<text x="385.4" y="267.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">{</text>
-<rect x="393.6" y="255" width="32.8" height="17" fill="#1a342e"/>
-<text x="393.6" y="267.6" fill="#569cd6" textLength="32.8" lengthAdjust="spacingAndGlyphs">self</text>
-<rect x="426.4" y="255" width="8.2" height="17" fill="#1a342e"/>
-<text x="426.4" y="267.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">.</text>
-<rect x="434.6" y="255" width="32.8" height="17" fill="#1a342e"/>
-<text x="434.6" y="267.6" fill="#9cdcfe" textLength="32.8" lengthAdjust="spacingAndGlyphs">city</text>
-<rect x="467.4" y="255" width="8.2" height="17" fill="#1a342e"/>
-<text x="467.4" y="267.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">}</text>
-<rect x="475.6" y="255" width="16.4" height="17" fill="#1a342e"/>
-<text x="475.6" y="267.6" fill="#ce9178" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
-<rect x="492.0" y="255" width="8.2" height="17" fill="#1a342e"/>
-<text x="492.0" y="267.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">{</text>
-<rect x="500.2" y="255" width="32.8" height="17" fill="#1a342e"/>
-<text x="500.2" y="267.6" fill="#569cd6" textLength="32.8" lengthAdjust="spacingAndGlyphs">self</text>
-<rect x="533.0" y="255" width="8.2" height="17" fill="#1a342e"/>
-<text x="533.0" y="267.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">.</text>
-<rect x="541.2" y="255" width="41.0" height="17" fill="#1a342e"/>
-<text x="541.2" y="267.6" fill="#9cdcfe" textLength="41.0" lengthAdjust="spacingAndGlyphs">tempe</text>
-<line x1="586.3" y1="263.5" x2="586.3" y2="255.0" stroke="#666666" stroke-width="1.2"/><line x1="586.3" y1="263.5" x2="586.3" y2="272.0" stroke="#666666" stroke-width="1.2"/>
-<rect x="590.4" y="255" width="41.0" height="17" fill="#1a2a40"/>
-<text x="606.8" y="267.6" fill="#666666" textLength="16.4" lengthAdjust="spacingAndGlyphs">16</text>
-<rect x="631.4" y="255" width="65.6" height="17" fill="#1a2a40"/>
-<rect x="697.0" y="255" width="49.2" height="17" fill="#1a2a40"/>
-<text x="697.0" y="267.6" fill="#c586c0" textLength="49.2" lengthAdjust="spacingAndGlyphs">return</text>
-<rect x="746.2" y="255" width="8.2" height="17" fill="#1a2a40"/>
-<rect x="754.4" y="255" width="8.2" height="17" fill="#1a2a40"/>
-<text x="754.4" y="267.6" fill="#569cd6" textLength="8.2" lengthAdjust="spacingAndGlyphs">f</text>
-<rect x="762.6" y="255" width="8.2" height="17" fill="#1a2a40"/>
-<text x="762.6" y="267.6" fill="#ce9178" textLength="8.2" lengthAdjust="spacingAndGlyphs">"</text>
-<rect x="770.8" y="255" width="8.2" height="17" fill="#1a2a40"/>
-<text x="770.8" y="267.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">{</text>
-<rect x="779.0" y="255" width="32.8" height="17" fill="#1a2a40"/>
-<text x="779.0" y="267.6" fill="#569cd6" textLength="32.8" lengthAdjust="spacingAndGlyphs">self</text>
-<rect x="811.8" y="255" width="8.2" height="17" fill="#1a2a40"/>
-<text x="811.8" y="267.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">.</text>
-<rect x="820.0" y="255" width="32.8" height="17" fill="#1a2a40"/>
-<text x="820.0" y="267.6" fill="#9cdcfe" textLength="32.8" lengthAdjust="spacingAndGlyphs">city</text>
-<rect x="852.8" y="255" width="8.2" height="17" fill="#1a2a40"/>
-<text x="852.8" y="267.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">}</text>
-<rect x="861.0" y="255" width="16.4" height="17" fill="#1a2a40"/>
-<text x="861.0" y="267.6" fill="#ce9178" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
-<rect x="877.4" y="255" width="8.2" height="17" fill="#1a2a40"/>
-<text x="877.4" y="267.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">{</text>
-<rect x="885.6" y="255" width="32.8" height="17" fill="#1a2a40"/>
-<text x="885.6" y="267.6" fill="#569cd6" textLength="32.8" lengthAdjust="spacingAndGlyphs">self</text>
-<rect x="918.4" y="255" width="8.2" height="17" fill="#1a2a40"/>
-<text x="918.4" y="267.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">.</text>
-<rect x="926.6" y="255" width="49.2" height="17" fill="#1a2a40"/>
-<text x="926.6" y="267.6" fill="#9cdcfe" textLength="49.2" lengthAdjust="spacingAndGlyphs">temper</text>
+<rect x="205.0" y="255" width="82.0" height="17" fill="#1a2a40"/>
+<text x="262.4" y="267.6" fill="#666666" textLength="16.4" lengthAdjust="spacingAndGlyphs">15</text>
+<rect x="287.0" y="255" width="65.6" height="17" fill="#1a2a40"/>
+<rect x="352.6" y="255" width="278.8" height="17" fill="#1a2a40"/>
+<text x="352.6" y="267.6" fill="#6a9955" textLength="278.8" lengthAdjust="spacingAndGlyphs"># One decimal, as stations report.</text>
+<rect x="631.4" y="255" width="344.4" height="17" fill="#1a2a40"/>
 <line x1="979.9" y1="263.5" x2="979.9" y2="255.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="263.5" x2="979.9" y2="272.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="280.5" x2="4.1" y2="272.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="280.5" x2="4.1" y2="289.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="280.5" x2="12.3" y2="272.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="280.5" x2="12.3" y2="289.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="280.5" x2="16.4" y2="280.5" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="280.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
@@ -383,6 +335,69 @@
 <text x="49.2" y="284.6" fill="#c5c8c6" textLength="139.4" lengthAdjust="spacingAndGlyphs">Fetch forecasts f</text>
 <line x1="192.7" y1="280.5" x2="192.7" y2="272.0" stroke="#666666" stroke-width="1.2"/><line x1="192.7" y1="280.5" x2="192.7" y2="289.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="200.9" y1="280.5" x2="200.9" y2="272.0" stroke="#666666" stroke-width="1.2"/><line x1="200.9" y1="280.5" x2="200.9" y2="289.0" stroke="#666666" stroke-width="1.2"/>
+<rect x="205.0" y="272" width="82.0" height="17" fill="#1a2a40"/>
+<text x="262.4" y="284.6" fill="#666666" textLength="16.4" lengthAdjust="spacingAndGlyphs">16</text>
+<rect x="287.0" y="272" width="65.6" height="17" fill="#1a2a40"/>
+<rect x="352.6" y="272" width="49.2" height="17" fill="#1a2a40"/>
+<text x="352.6" y="284.6" fill="#c586c0" textLength="49.2" lengthAdjust="spacingAndGlyphs">return</text>
+<rect x="401.8" y="272" width="8.2" height="17" fill="#1a2a40"/>
+<rect x="410.0" y="272" width="8.2" height="17" fill="#1a2a40"/>
+<text x="410.0" y="284.6" fill="#569cd6" textLength="8.2" lengthAdjust="spacingAndGlyphs">f</text>
+<rect x="418.2" y="272" width="8.2" height="17" fill="#1a2a40"/>
+<text x="418.2" y="284.6" fill="#ce9178" textLength="8.2" lengthAdjust="spacingAndGlyphs">"</text>
+<rect x="426.4" y="272" width="8.2" height="17" fill="#1a2a40"/>
+<text x="426.4" y="284.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">{</text>
+<rect x="434.6" y="272" width="32.8" height="17" fill="#1a2a40"/>
+<text x="434.6" y="284.6" fill="#569cd6" textLength="32.8" lengthAdjust="spacingAndGlyphs">self</text>
+<rect x="467.4" y="272" width="8.2" height="17" fill="#1a2a40"/>
+<text x="467.4" y="284.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">.</text>
+<rect x="475.6" y="272" width="32.8" height="17" fill="#1a2a40"/>
+<text x="475.6" y="284.6" fill="#9cdcfe" textLength="32.8" lengthAdjust="spacingAndGlyphs">city</text>
+<rect x="508.4" y="272" width="8.2" height="17" fill="#1a2a40"/>
+<text x="508.4" y="284.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">}</text>
+<rect x="516.6" y="272" width="16.4" height="17" fill="#1a2a40"/>
+<text x="516.6" y="284.6" fill="#ce9178" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
+<rect x="533.0" y="272" width="8.2" height="17" fill="#1a2a40"/>
+<text x="533.0" y="284.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">{</text>
+<rect x="541.2" y="272" width="32.8" height="17" fill="#1a2a40"/>
+<text x="541.2" y="284.6" fill="#569cd6" textLength="32.8" lengthAdjust="spacingAndGlyphs">self</text>
+<rect x="574.0" y="272" width="8.2" height="17" fill="#1a2a40"/>
+<text x="574.0" y="284.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">.</text>
+<rect x="582.2" y="272" width="90.2" height="17" fill="#1a2a40"/>
+<text x="582.2" y="284.6" fill="#9cdcfe" textLength="90.2" lengthAdjust="spacingAndGlyphs">temperature</text>
+<rect x="672.4" y="272" width="16.4" height="17" fill="#1a2a40"/>
+<text x="672.4" y="284.6" fill="#4fc1ff" textLength="16.4" lengthAdjust="spacingAndGlyphs">:.</text>
+<rect x="688.8" y="272" width="16.4" height="17" fill="#2a4a74"/>
+<text x="688.8" y="284.6" fill="#4fc1ff" textLength="16.4" lengthAdjust="spacingAndGlyphs">1f</text>
+<rect x="705.2" y="272" width="8.2" height="17" fill="#1a2a40"/>
+<text x="705.2" y="284.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">}</text>
+<rect x="713.4" y="272" width="8.2" height="17" fill="#1a2a40"/>
+<text x="713.4" y="284.6" fill="#ce9178" textLength="8.2" lengthAdjust="spacingAndGlyphs">°</text>
+<rect x="721.6" y="272" width="8.2" height="17" fill="#1a2a40"/>
+<text x="721.6" y="284.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">{</text>
+<rect x="729.8" y="272" width="32.8" height="17" fill="#1a2a40"/>
+<text x="729.8" y="284.6" fill="#569cd6" textLength="32.8" lengthAdjust="spacingAndGlyphs">self</text>
+<rect x="762.6" y="272" width="8.2" height="17" fill="#1a2a40"/>
+<text x="762.6" y="284.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">.</text>
+<rect x="770.8" y="272" width="41.0" height="17" fill="#1a2a40"/>
+<text x="770.8" y="284.6" fill="#9cdcfe" textLength="41.0" lengthAdjust="spacingAndGlyphs">units</text>
+<rect x="811.8" y="272" width="8.2" height="17" fill="#1a2a40"/>
+<text x="811.8" y="284.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">}</text>
+<rect x="820.0" y="272" width="16.4" height="17" fill="#1a2a40"/>
+<text x="820.0" y="284.6" fill="#ce9178" textLength="8.2" lengthAdjust="spacingAndGlyphs">,</text>
+<rect x="836.4" y="272" width="8.2" height="17" fill="#1a2a40"/>
+<text x="836.4" y="284.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">{</text>
+<rect x="844.6" y="272" width="32.8" height="17" fill="#1a2a40"/>
+<text x="844.6" y="284.6" fill="#569cd6" textLength="32.8" lengthAdjust="spacingAndGlyphs">self</text>
+<rect x="877.4" y="272" width="8.2" height="17" fill="#1a2a40"/>
+<text x="877.4" y="284.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">.</text>
+<rect x="885.6" y="272" width="57.4" height="17" fill="#1a2a40"/>
+<text x="885.6" y="284.6" fill="#9cdcfe" textLength="57.4" lengthAdjust="spacingAndGlyphs">summary</text>
+<rect x="943.0" y="272" width="8.2" height="17" fill="#1a2a40"/>
+<text x="943.0" y="284.6" fill="#cccccc" textLength="8.2" lengthAdjust="spacingAndGlyphs">}</text>
+<rect x="951.2" y="272" width="8.2" height="17" fill="#1a2a40"/>
+<text x="951.2" y="284.6" fill="#ce9178" textLength="8.2" lengthAdjust="spacingAndGlyphs">"</text>
+<rect x="959.4" y="272" width="16.4" height="17" fill="#1a2a40"/>
 <line x1="979.9" y1="280.5" x2="979.9" y2="272.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="280.5" x2="979.9" y2="289.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="297.5" x2="4.1" y2="289.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="297.5" x2="4.1" y2="306.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="297.5" x2="12.3" y2="289.0" stroke="#7aa6da" stroke-width="1.2"/><line x1="12.3" y1="297.5" x2="12.3" y2="306.0" stroke="#7aa6da" stroke-width="1.2"/><circle cx="12.3" cy="297.5" r="3.3" fill="#7aa6da" stroke="#7aa6da" stroke-width="1.2"/>
@@ -555,18 +570,7 @@
 <line x1="856.9" y1="552.5" x2="852.8" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="856.9" y1="552.5" x2="861.0" y2="552.5" stroke="#666666" stroke-width="1.2"/>
 <line x1="865.1" y1="552.5" x2="861.0" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="865.1" y1="552.5" x2="869.2" y2="552.5" stroke="#666666" stroke-width="1.2"/>
 <line x1="873.3" y1="552.5" x2="869.2" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="873.3" y1="552.5" x2="877.4" y2="552.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="881.5" y1="552.5" x2="877.4" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="881.5" y1="552.5" x2="885.6" y2="552.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="889.7" y1="552.5" x2="885.6" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="889.7" y1="552.5" x2="893.8" y2="552.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="897.9" y1="552.5" x2="893.8" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="897.9" y1="552.5" x2="902.0" y2="552.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="906.1" y1="552.5" x2="902.0" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="906.1" y1="552.5" x2="910.2" y2="552.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="914.3" y1="552.5" x2="910.2" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="914.3" y1="552.5" x2="918.4" y2="552.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="922.5" y1="552.5" x2="918.4" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="922.5" y1="552.5" x2="926.6" y2="552.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="930.7" y1="552.5" x2="926.6" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="930.7" y1="552.5" x2="934.8" y2="552.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="938.9" y1="552.5" x2="934.8" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="938.9" y1="552.5" x2="943.0" y2="552.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="947.1" y1="552.5" x2="943.0" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="947.1" y1="552.5" x2="951.2" y2="552.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="955.3" y1="552.5" x2="951.2" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="955.3" y1="552.5" x2="959.4" y2="552.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="963.5" y1="552.5" x2="959.4" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="963.5" y1="552.5" x2="967.6" y2="552.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="971.7" y1="552.5" x2="967.6" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="971.7" y1="552.5" x2="975.8" y2="552.5" stroke="#666666" stroke-width="1.2"/>
+<text x="885.6" y="556.6" fill="#666666" textLength="82.0" lengthAdjust="spacingAndGlyphs">1 conflict</text>
 <path d="M979.9,544.0 Q979.9,552.5 975.8,552.5" fill="none" stroke="#666666" stroke-width="1.2"/>
 <text x="8.2" y="573.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">space</text>
 <text x="57.4" y="573.6" fill="#ffffff" textLength="41.0" lengthAdjust="spacingAndGlyphs">stage</text>
@@ -577,15 +581,16 @@
 <text x="319.8" y="573.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">enter</text>
 <text x="369.0" y="573.6" fill="#ffffff" textLength="82.0" lengthAdjust="spacingAndGlyphs">focus diff</text>
 <text x="459.2" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
-<text x="475.6" y="573.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">o</text>
-<text x="492.0" y="573.6" fill="#ffffff" textLength="90.2" lengthAdjust="spacingAndGlyphs">open in zed</text>
-<text x="590.4" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
-<text x="606.8" y="573.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">esc</text>
-<text x="639.6" y="573.6" fill="#ffffff" textLength="82.0" lengthAdjust="spacingAndGlyphs">close diff</text>
-<line x1="750.3" y1="569.5" x2="750.3" y2="561.0" stroke="#666666" stroke-width="1.2"/><line x1="750.3" y1="569.5" x2="750.3" y2="578.0" stroke="#666666" stroke-width="1.2"/>
-<text x="779.0" y="573.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">?</text>
-<text x="795.4" y="573.6" fill="#ffffff" textLength="32.8" lengthAdjust="spacingAndGlyphs">help</text>
-<text x="836.4" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
-<text x="852.8" y="573.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">q</text>
-<text x="869.2" y="573.6" fill="#ffffff" textLength="32.8" lengthAdjust="spacingAndGlyphs">quit</text>
+<text x="475.6" y="573.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">n/N</text>
+<text x="508.4" y="573.6" fill="#ffffff" textLength="49.2" lengthAdjust="spacingAndGlyphs">change</text>
+<text x="565.8" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="582.2" y="573.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">e</text>
+<text x="598.6" y="573.6" fill="#ffffff" textLength="82.0" lengthAdjust="spacingAndGlyphs">whole file</text>
+<text x="688.8" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="705.2" y="573.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">s</text>
+<text x="721.6" y="573.6" fill="#ffffff" textLength="98.4" lengthAdjust="spacingAndGlyphs">side by side</text>
+<text x="828.2" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="844.6" y="573.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">o</text>
+<text x="861.0" y="573.6" fill="#ffffff" textLength="90.2" lengthAdjust="spacingAndGlyphs">open in zed</text>
+<text x="959.4" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
 </g></svg>
