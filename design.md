@@ -49,7 +49,7 @@ Two tabs, `Repo` and `Compare`, switched with `tab`. A hint bar at the bottom li
 | `app.rs` | 1357 | `App`: all state, layout, key routing, popups, hints, tabs, the worker's results |
 | `git.rs` | 661 | Every git call, returning typed data, plus the parsers |
 | `worker.rs` | 195 | The background thread for slow reads |
-| `diff.rs` | 1108 | Unified diff and conflict parsing into side-by-side rows, line pairing, word marks, the diff pane, the colour cache |
+| `diff.rs` | 1562 | Unified diff and conflict parsing into side-by-side rows, line pairing, word marks, the diff pane (side by side or unified, with its minimap and change counter), the colour cache |
 | `highlight.rs` | 139 | Syntax highlighting with syntect |
 | `graph.rs` | 1176 | Lane layout (a pure function), colours, the Graph pane |
 | `branches.rs` | 436 | The Branches pane |
@@ -109,6 +109,10 @@ The measuring scripts lived in the git-ignored `target/bench/`. `docs/screenshot
 - **Compare is a tab.** It's a different view of the repo, not a pane, and the tab keeps a comparison around without losing it. `c` starts one from wherever you are, and closing it asks first.
 - **Git's status letters, VS Code's colours.** `?` untracked and `U` conflicted, as git has them, coloured as VS Code's git panel colours files.
 - **Zed only, for now,** on `o`, run in the background while gclic carries on.
+- **Compare goes *from* one ref *to* another,** not *before* and *after*: a comparison is a trip through the commit graph, and the two refs need not be ordered in time.
+- **Diffs are side by side or unified depending on the room,** side by side when each side gets 80 columns of text. `s` overrides that for the rest of the session. It used to stage in Changes too, as an alias of `space`, and gave that up to work from every pane. Unified is made from the same rows, each change's removed lines then its added ones, so pairing, word marks and colours carry over, and switching keeps the active row.
+- **The minimap measures the file, not the diff,** so it looks the same with the whole file or just the changes, and shows where the hunks sit in it. The file's length comes free with highlighting, which reads both versions anyway, and until then the diff's last line stands in.
+- **A diff on screen takes `n`/`N`, `e` and `s` from any pane,** so its changes can be stepped through while browsing files, and from then on its active line shows, as that's where the user is. The graph's own `n`/`N` between commits only work with no diff open.
 - **Commit details as a preview,** following the selected commit, rather than a popup.
 
 ## Considered and declined

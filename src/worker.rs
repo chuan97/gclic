@@ -6,7 +6,7 @@
 //! thread, in order. Results say what they answer, so the UI can drop any
 //! that are out of date by the time they arrive.
 
-use crate::diff::{self, DiffView, Row};
+use crate::diff::{self, Colored, DiffView};
 use crate::git::{self, DiffSource, Status};
 use anyhow::Result;
 use std::collections::VecDeque;
@@ -31,7 +31,7 @@ pub enum Done {
         diff: Option<(DiffSource, Result<String>)>,
     },
     /// `text` is the diff the colours belong to.
-    Highlight { view: DiffView, text: String, rows: Vec<Row> },
+    Highlight { view: DiffView, text: String, colored: Colored },
 }
 
 /// The jobs waiting. A poll goes before any highlighting, and there's at most
@@ -146,8 +146,8 @@ fn run(job: Job) -> Option<Done> {
             // error when it loads the diff itself.
             let text = git::diff_with(&view.source, view.whole).ok()?;
             let mut rows = diff::rows_for(&view.source, &text);
-            diff::highlight_rows(&mut rows, &view.source);
-            Some(Done::Highlight { view, text, rows })
+            let file_lines = diff::highlight_rows(&mut rows, &view.source);
+            Some(Done::Highlight { view, text, colored: Colored { rows, file_lines } })
         }
     }
 }
@@ -155,6 +155,7 @@ fn run(job: Job) -> Option<Done> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::diff::Row;
 
     fn file(path: &str) -> DiffView {
         DiffView { source: DiffSource::Unstaged(path.to_string()), whole: false }
@@ -187,7 +188,7 @@ mod tests {
         let worker = Worker::start();
         worker.highlight(vec![DiffView { source: source.clone(), whole: false }]);
         let done = worker.results.recv_timeout(std::time::Duration::from_secs(10)).unwrap();
-        let Done::Highlight { view, rows, .. } = done else { panic!("expected colours") };
+        let Done::Highlight { view, colored: Colored { rows, .. }, .. } = done else { panic!("expected colours") };
         assert_eq!(view.source, source);
         let colored = rows.iter().any(|row| matches!(row, Row::Lines { right: Some(cell), .. } if !cell.colors.is_empty()));
         assert!(colored);

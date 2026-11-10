@@ -188,8 +188,9 @@ fn changed_cell(number: usize, content: &str) -> Cell {
 
 /// Gives each line its syntax colours. They come from the whole old and new
 /// files, as a hunk on its own can start inside a comment or a string. Slow
-/// for big files, so the worker thread does it.
-pub fn highlight_rows(rows: &mut [Row], source: &DiffSource) {
+/// for big files, so the worker thread does it. Returns the length of the file
+/// the minimap measures, which reading them finds out on the way.
+pub fn highlight_rows(rows: &mut [Row], source: &DiffSource) -> usize {
     let last_line = |side: fn(&Row) -> Option<&Cell>| {
         rows.iter().filter_map(side).map(|cell| cell.number).max().unwrap_or(0)
     };
@@ -202,9 +203,11 @@ pub fn highlight_rows(rows: &mut [Row], source: &DiffSource) {
         Row::Heading(_) => None,
     });
     if last_old == 0 && last_new == 0 {
-        return; // Nothing to colour, as in a binary file's diff.
+        return 0; // Nothing to colour, as in a binary file's diff.
     }
     let (old, new) = git::file_versions(source);
+    let measured = if measures_new_side(rows) { &new } else { &old };
+    let file_lines = measured.as_ref().map_or(0, |text| text.lines().count());
     let colored = |text: Option<String>, last: usize| {
         text.map(|text| highlight::highlight(source.path(), &text, last)).unwrap_or_default()
     };
@@ -215,6 +218,7 @@ pub fn highlight_rows(rows: &mut [Row], source: &DiffSource) {
             color_cell(right.as_mut(), &new);
         }
     }
+    file_lines
 }
 
 /// Only takes the colours when the file's line is the one in the diff, in case
@@ -441,13 +445,163 @@ fn clean(text: &str) -> String {
     text.replace('\t', "    ")
 }
 
+/// Rows with their syntax colours, and the length of the file the minimap
+/// measures, which colouring them finds out. Zero while not known.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Colored {
+    pub rows: Vec<Row>,
+    pub file_lines: usize,
+}
+
+/// One line on screen. Side by side, each row is one. Unified, a change's
+/// rows split into their removed lines, then their added ones.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Item {
+    /// A whole row: a heading, context, or side by side, a change.
+    Row(usize),
+    /// A row's left side, on its own line.
+    Old(usize),
+    /// A row's right side, on its own line.
+    New(usize),
+}
+
+impl Item {
+    fn row(self) -> usize {
+        match self {
+            Item::Row(row) | Item::Old(row) | Item::New(row) => row,
+        }
+    }
+}
+
+/// Whether a row has a changed line on either side.
+fn row_is_changed(row: &Row) -> bool {
+    let changed = |cell: &Option<Cell>| cell.as_ref().is_some_and(|cell| cell.changed);
+    matches!(row, Row::Lines { left, right } if changed(left) || changed(right))
+}
+
+/// The lines to show for these rows, side by side or unified.
+fn layout(rows: &[Row], split: bool) -> Vec<Item> {
+    if split {
+        return (0..rows.len()).map(Item::Row).collect();
+    }
+    let mut items = Vec::with_capacity(rows.len());
+    let mut i = 0;
+    while i < rows.len() {
+        if !row_is_changed(&rows[i]) {
+            items.push(Item::Row(i));
+            i += 1;
+            continue;
+        }
+        let end = (i..rows.len()).find(|&j| !row_is_changed(&rows[j])).unwrap_or(rows.len());
+        let has = |j: &usize, left: bool| match &rows[*j] {
+            Row::Lines { left: l, right: r } => if left { l.is_some() } else { r.is_some() },
+            Row::Heading(_) => false,
+        };
+        items.extend((i..end).filter(|j| has(j, true)).map(Item::Old));
+        items.extend((i..end).filter(|j| has(j, false)).map(Item::New));
+        i = end;
+    }
+    items
+}
+
+/// Side by side when each side gets at least this many columns of text, and
+/// unified otherwise, unless the user chose one with `s`.
+const SPLIT_MIN_TEXT: usize = 80;
+/// Unified, the line numbers of both versions come before the text.
+const UNIFIED_GUTTER_WIDTH: usize = 2 * GUTTER_WIDTH;
+/// The minimap's columns, one for each side, and the gap before them.
+const MINIMAP_WIDTH: u16 = 3;
+const MINIMAP_TRACK: Color = Color::Indexed(235);
+const MINIMAP_VIEW: Color = Color::Indexed(240);
+/// Changes are brighter where they're on screen, so the view still shows
+/// over them.
+const MINIMAP_REMOVED: [Color; 2] = [REMOVED_WORD_BG, Color::Rgb(205, 80, 88)];
+const MINIMAP_ADDED: [Color; 2] = [ADDED_WORD_BG, Color::Rgb(88, 184, 112)];
+const MINIMAP_CURRENT: [Color; 2] = [CURRENT_WORD_BG, Color::Rgb(72, 180, 146)];
+const MINIMAP_INCOMING: [Color; 2] = [INCOMING_WORD_BG, Color::Rgb(90, 146, 220)];
+
+/// Whether the minimap measures the new version of the file: the one the
+/// diff goes to, unless it has no lines, as when the file was deleted.
+fn measures_new_side(rows: &[Row]) -> bool {
+    rows.iter().any(|row| matches!(row, Row::Lines { right: Some(_), .. }))
+}
+
+/// Where each row sits in the measured file, as a line index from 0. A row
+/// with no line on that side, such as a removed line or a heading, sits
+/// where the next line does, as that's where it would be inserted.
+fn file_positions(rows: &[Row]) -> Vec<usize> {
+    let new_side = measures_new_side(rows);
+    let mut positions = vec![0; rows.len()];
+    let mut next = rows.iter().filter_map(|row| side_number(row, new_side)).max().unwrap_or(0);
+    for (index, row) in rows.iter().enumerate().rev() {
+        if let Some(number) = side_number(row, new_side) {
+            next = number.saturating_sub(1);
+        }
+        positions[index] = next;
+    }
+    positions
+}
+
+fn side_number(row: &Row, new_side: bool) -> Option<usize> {
+    match row {
+        Row::Lines { left, right } => if new_side { right } else { left }.as_ref().map(|cell| cell.number),
+        Row::Heading(_) => None,
+    }
+}
+
+/// The length of the file the minimap measures. Until it's known, the last
+/// line the diff reaches stands in.
+fn file_length(rows: &[Row], file_lines: usize) -> usize {
+    let new_side = measures_new_side(rows);
+    file_lines.max(rows.iter().filter_map(|row| side_number(row, new_side)).max().unwrap_or(0))
+}
+
+/// One of the minimap's rows: whether it covers removed lines, added lines,
+/// and lines on screen.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct MapCell {
+    removed: bool,
+    added: bool,
+    in_view: bool,
+}
+
+/// The whole file squeezed into `height` rows, each covering an equal share
+/// of its lines, with the changes and the part on screen marked. `visible`
+/// are the rows of the diff on screen. Empty when the file fits anyway.
+fn minimap(rows: &[Row], file_lines: usize, height: usize, visible: &[usize]) -> Vec<MapCell> {
+    let positions = file_positions(rows);
+    let total = file_length(rows, file_lines);
+    if height == 0 || total <= height {
+        return Vec::new();
+    }
+    let mut cells = vec![MapCell::default(); height];
+    let cell_of = |row: usize| (positions[row] * height / total).min(height - 1);
+    for (index, row) in rows.iter().enumerate() {
+        if let Row::Lines { left, right } = row {
+            let cell = &mut cells[cell_of(index)];
+            cell.removed |= left.as_ref().is_some_and(|cell| cell.changed);
+            cell.added |= right.as_ref().is_some_and(|cell| cell.changed);
+        }
+    }
+    for &row in visible {
+        cells[cell_of(row)].in_view = true;
+    }
+    cells
+}
+
 pub struct DiffPane {
     pub source: DiffSource,
     /// The diff as git printed it, to tell whether a reload changed anything.
     text: String,
     rows: Vec<Row>,
-    /// The row under the cursor. The view keeps it in the middle, except near
-    /// the ends, where it moves on without scrolling further.
+    /// The lines shown, made from `rows` for the layout in use.
+    items: Vec<Item>,
+    /// Side by side, or unified.
+    split: bool,
+    /// The length of the file the minimap measures, once known.
+    file_lines: usize,
+    /// The line under the cursor, an index into `items`. The view keeps it in
+    /// the middle, except near the ends, where it moves on without scrolling.
     active: usize,
     height: usize,
     /// How many characters each side's text is scrolled to the left.
@@ -457,6 +611,9 @@ pub struct DiffPane {
     /// Whether the rows have their syntax colours yet. The worker thread
     /// makes them, and `apply_colors` takes them.
     colored: bool,
+    /// Whether the user has stepped to a change with n or N, which makes the
+    /// active line worth showing even while another pane has focus.
+    navigated: bool,
 }
 
 /// The most rows the colour cache keeps, over all its diffs. Enough for the
@@ -474,21 +631,21 @@ pub struct DiffView {
 /// shows its colours straight away. The most recently used come last.
 #[derive(Default)]
 pub struct ColorCache {
-    entries: Vec<(DiffView, String, Vec<Row>)>,
+    entries: Vec<(DiffView, String, Colored)>,
 }
 
 impl ColorCache {
     /// The coloured rows of this diff, if they were made from this same text.
-    pub fn get(&mut self, view: &DiffView, text: &str) -> Option<Vec<Row>> {
+    pub fn get(&mut self, view: &DiffView, text: &str) -> Option<Colored> {
         let position = self.entries.iter().position(|(v, t, _)| v == view && t == text)?;
         let entry = self.entries.remove(position);
-        let rows = entry.2.clone();
+        let colored = entry.2.clone();
         self.entries.push(entry);
-        Some(rows)
+        Some(colored)
     }
 
     /// The most recent version of this diff, whatever its text.
-    pub fn latest(&mut self, view: &DiffView) -> Option<(String, Vec<Row>)> {
+    pub fn latest(&mut self, view: &DiffView) -> Option<(String, Colored)> {
         let position = self.entries.iter().position(|(v, ..)| v == view)?;
         let entry = self.entries.remove(position);
         let found = (entry.1.clone(), entry.2.clone());
@@ -504,11 +661,11 @@ impl ColorCache {
 
     /// Adds a diff, replacing an older version of it and dropping the least
     /// recently used ones past the limit.
-    pub fn insert(&mut self, view: DiffView, text: String, rows: Vec<Row>) {
+    pub fn insert(&mut self, view: DiffView, text: String, colored: Colored) {
         self.entries.retain(|(v, ..)| *v != view);
-        self.entries.push((view, text, rows));
-        let total = |entries: &[(DiffView, String, Vec<Row>)]| -> usize {
-            entries.iter().map(|(.., rows)| rows.len()).sum()
+        self.entries.push((view, text, colored));
+        let total = |entries: &[(DiffView, String, Colored)]| -> usize {
+            entries.iter().map(|(.., colored)| colored.rows.len()).sum()
         };
         while self.entries.len() > 1 && total(&self.entries) > CACHE_ROWS {
             self.entries.remove(0);
@@ -531,16 +688,30 @@ impl DiffPane {
     pub fn load(source: DiffSource) -> Result<DiffPane> {
         let text = git::diff(&source)?;
         let rows = rows_for(&source, &text);
-        Ok(DiffPane::new(source, text, rows, false))
+        Ok(DiffPane::new(source, text, Colored { rows, file_lines: 0 }, false))
     }
 
     /// A diff already coloured, as the cache keeps them, without asking git.
-    pub fn colored(source: DiffSource, text: String, rows: Vec<Row>) -> DiffPane {
-        DiffPane::new(source, text, rows, true)
+    pub fn colored(source: DiffSource, text: String, colored: Colored) -> DiffPane {
+        DiffPane::new(source, text, colored, true)
     }
 
-    fn new(source: DiffSource, text: String, rows: Vec<Row>, colored: bool) -> DiffPane {
-        DiffPane { source, text, rows, active: 0, height: 0, shift: 0, text_width: 0, colored }
+    fn new(source: DiffSource, text: String, colored: Colored, is_colored: bool) -> DiffPane {
+        let Colored { rows, file_lines } = colored;
+        DiffPane {
+            source,
+            text,
+            items: layout(&rows, true),
+            rows,
+            split: true,
+            file_lines,
+            active: 0,
+            height: 0,
+            shift: 0,
+            text_width: 0,
+            colored: is_colored,
+            navigated: false,
+        }
     }
 
     pub fn text(&self) -> &str {
@@ -551,11 +722,17 @@ impl DiffPane {
         !self.colored
     }
 
+    /// Whether it showed side by side when last drawn.
+    pub fn is_split(&self) -> bool {
+        self.split
+    }
+
     /// Takes coloured rows, if they were made from the diff on screen. Ones
     /// for an older version of it are dropped.
-    pub fn apply_colors(&mut self, text: &str, rows: Vec<Row>) {
+    pub fn apply_colors(&mut self, text: &str, colored: Colored) {
         if self.text == text {
-            self.rows = rows;
+            self.set_rows(colored.rows);
+            self.file_lines = colored.file_lines;
             self.colored = true;
         }
     }
@@ -572,16 +749,32 @@ impl DiffPane {
         if text == self.text {
             return;
         }
-        self.rows = rows_for(&self.source, &text);
+        self.set_rows(rows_for(&self.source, &text));
         self.colored = false;
         self.text = text;
-        self.active = self.active.min(self.rows.len().saturating_sub(1));
     }
 
-    /// The first row on screen: the one that centres the active row, without
+    fn set_rows(&mut self, rows: Vec<Row>) {
+        self.rows = rows;
+        self.items = layout(&self.rows, self.split);
+        self.active = self.active.min(self.items.len().saturating_sub(1));
+    }
+
+    /// Switches between side by side and unified, staying on the same row.
+    fn set_split(&mut self, split: bool) {
+        if split == self.split {
+            return;
+        }
+        let row = self.items.get(self.active).map_or(0, |item| item.row());
+        self.split = split;
+        self.items = layout(&self.rows, split);
+        self.active = self.items.iter().position(|item| item.row() == row).unwrap_or(0);
+    }
+
+    /// The first line on screen: the one that centres the active line, without
     /// going past either end.
     fn scroll(&self) -> usize {
-        let furthest = self.rows.len().saturating_sub(self.height);
+        let furthest = self.items.len().saturating_sub(self.height);
         self.active.saturating_sub(self.height / 2).min(furthest)
     }
 
@@ -593,8 +786,13 @@ impl DiffPane {
             Row::Lines { right: Some(cell), .. } => Some(cell.number),
             _ => None,
         };
-        let below = self.rows.iter().skip(self.active).find_map(new_line);
-        below.or_else(|| self.rows.iter().take(self.active).rev().find_map(new_line))
+        let active = match self.items.get(self.active) {
+            Some(Item::New(row)) => return new_line(&self.rows[*row]),
+            Some(item) => item.row(),
+            None => 0,
+        };
+        let below = self.rows.iter().skip(active).find_map(new_line);
+        below.or_else(|| self.rows.iter().take(active).rev().find_map(new_line))
     }
 
     /// Back to the start of the lines, for when the diff loses focus, as h and l
@@ -623,9 +821,27 @@ impl DiffPane {
         if whole { format!("{title}· whole file ") } else { title }
     }
 
-    /// Moves the active row, stopping at the ends.
+    /// How many changes there are, and which one the active line is in, if any.
+    fn change_position(&self) -> (Option<usize>, usize) {
+        let starts: Vec<usize> = (0..self.items.len()).filter(|&i| self.starts_change(i)).collect();
+        let current = self.is_changed(self.active).then(|| starts.iter().filter(|&&start| start <= self.active).count());
+        (current, starts.len())
+    }
+
+    /// "change 3 of 12" while on a change, or how many there are otherwise.
+    fn change_counter(&self) -> Option<String> {
+        let noun = if matches!(self.source, DiffSource::Conflict(_)) { "conflict" } else { "change" };
+        match self.change_position() {
+            (_, 0) => None,
+            (Some(current), total) => Some(format!(" {noun} {current} of {total} ")),
+            (None, 1) => Some(format!(" 1 {noun} ")),
+            (None, total) => Some(format!(" {total} {noun}s ")),
+        }
+    }
+
+    /// Moves the active line, stopping at the ends.
     pub fn handle_key(&mut self, key: KeyEvent) {
-        let last = self.rows.len().saturating_sub(1);
+        let last = self.items.len().saturating_sub(1);
         let half_page = (self.height / 2).max(1);
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
@@ -642,10 +858,12 @@ impl DiffPane {
             // Between changes rather than hunks, so it still works when a whole
             // file is one hunk. From inside a change, N goes to its start.
             KeyCode::Char('n') => {
-                let next = (self.active + 1..self.rows.len()).find(|&i| self.starts_change(i));
+                self.navigated = true;
+                let next = (self.active + 1..self.items.len()).find(|&i| self.starts_change(i));
                 self.active = next.unwrap_or(self.active);
             }
             KeyCode::Char('N') => {
+                self.navigated = true;
                 let previous = (0..self.active).rev().find(|&i| self.starts_change(i));
                 self.active = previous.unwrap_or(self.active);
             }
@@ -653,20 +871,28 @@ impl DiffPane {
         }
     }
 
-    /// Whether a row has a changed line on either side.
+    /// Whether a line on screen is part of a change.
     fn is_changed(&self, index: usize) -> bool {
-        let changed = |cell: &Option<Cell>| cell.as_ref().is_some_and(|cell| cell.changed);
-        matches!(&self.rows[index], Row::Lines { left, right } if changed(left) || changed(right))
+        match self.items.get(index) {
+            Some(Item::Row(row)) => row_is_changed(&self.rows[*row]),
+            Some(Item::Old(_) | Item::New(_)) => true,
+            None => false,
+        }
     }
 
-    /// Whether a change starts at this row: a changed row at the top, or after
-    /// a row that isn't changed, such as context or a hunk's heading.
+    /// Whether a change starts at this line: a changed line at the top, or
+    /// after one that isn't changed, such as context or a hunk's heading.
     fn starts_change(&self, index: usize) -> bool {
         self.is_changed(index) && (index == 0 || !self.is_changed(index - 1))
     }
 
-    pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
-        let block = ui::panel(self.title(), focused);
+    /// Draws the diff. `split` is the user's choice of layout, if they made
+    /// one; otherwise it depends on the room there is.
+    pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool, split: Option<bool>) {
+        let mut block = ui::panel(self.title(), focused);
+        if let Some(counter) = self.change_counter() {
+            block = block.title_bottom(Line::styled(counter, Style::default().fg(ui::DIM)).right_aligned());
+        }
         let inner = block.inner(area);
         frame.render_widget(block, area);
         self.height = inner.height as usize;
@@ -677,46 +903,110 @@ impl DiffPane {
             return;
         }
 
-        let column_width = inner.width.saturating_sub(1) / 2;
-        // Both sides get the same room, as the right one only gains a spare column.
-        self.text_width = (column_width as usize).saturating_sub(GUTTER_WIDTH);
+        let has_map = file_length(&self.rows, self.file_lines) > self.height && inner.width > MINIMAP_WIDTH * 4;
+        let content = if has_map { Rect { width: inner.width - MINIMAP_WIDTH, ..inner } } else { inner };
+        let column_width = content.width.saturating_sub(1) / 2;
+        let auto = (column_width as usize).saturating_sub(GUTTER_WIDTH) >= SPLIT_MIN_TEXT;
+        self.set_split(split.unwrap_or(auto));
+
+        let scroll = self.scroll();
+        if has_map {
+            let visible: Vec<usize> =
+                self.items.iter().skip(scroll).take(self.height).map(|item| item.row()).collect();
+            let map = minimap(&self.rows, self.file_lines, self.height, &visible);
+            let map_area = Rect { x: inner.right() - MINIMAP_WIDTH + 1, width: MINIMAP_WIDTH - 1, ..inner };
+            self.render_minimap(frame, map_area, &map);
+        }
+        self.text_width = if self.split {
+            // Both sides get the same room, as the right one only gains a spare column.
+            (column_width as usize).saturating_sub(GUTTER_WIDTH)
+        } else {
+            (content.width as usize).saturating_sub(UNIFIED_GUTTER_WIDTH)
+        };
         // The pane may have widened since the last scroll.
         self.shift = self.shift.min(self.max_shift());
-        let scroll = self.scroll();
-        let visible = self.rows.iter().enumerate().skip(scroll).take(self.height);
-        for (i, (index, row)) in visible.enumerate() {
-            let y = inner.y + i as u16;
-            let full = Rect { y, height: 1, ..inner };
-            // Like a list's selection, the active row only shows while focused.
-            let active = focused && index == self.active;
-            match row {
-                Row::Heading(text) => {
-                    let line = Line::styled(text.as_str(), Style::default().fg(Color::Cyan));
-                    let line = if active { line.style(Style::default().bg(ui::SELECTED_BG)) } else { line };
-                    frame.render_widget(line, full);
-                }
-                Row::Lines { left, right } => {
+
+        let conflict = matches!(self.source, DiffSource::Conflict(_));
+        let (old_colors, new_colors) = if conflict {
+            ((CURRENT_BG, CURRENT_WORD_BG), (INCOMING_BG, INCOMING_WORD_BG))
+        } else {
+            ((REMOVED_BG, REMOVED_WORD_BG), (ADDED_BG, ADDED_WORD_BG))
+        };
+        let shown = self.items.iter().enumerate().skip(scroll).take(self.height);
+        for (i, (index, item)) in shown.enumerate() {
+            let full = Rect { y: content.y + i as u16, height: 1, ..content };
+            // Like a list's selection, the active line only shows while focused,
+            // or once n or N has moved it, as then it's where the user is.
+            let active = (focused || self.navigated) && index == self.active;
+            let row = &self.rows[item.row()];
+            if let Row::Heading(text) = row {
+                let line = Line::styled(text.as_str(), Style::default().fg(Color::Cyan));
+                let line = if active { line.style(Style::default().bg(ui::SELECTED_BG)) } else { line };
+                frame.render_widget(line, full);
+                continue;
+            }
+            let Row::Lines { left, right } = row else { continue };
+            let (left, right) = (left.as_ref(), right.as_ref());
+            match item {
+                Item::Row(_) if self.split => {
                     let left_area = Rect { width: column_width, ..full };
                     let separator = Rect { x: full.x + column_width, width: 1, ..full };
                     let right_area = Rect {
                         x: full.x + column_width + 1,
-                        width: inner.width.saturating_sub(column_width + 1),
+                        width: content.width.saturating_sub(column_width + 1),
                         ..full
                     };
-                    let conflict = matches!(self.source, DiffSource::Conflict(_));
-                    let ((left_bg, left_word), (right_bg, right_word)) = if conflict {
-                        ((CURRENT_BG, CURRENT_WORD_BG), (INCOMING_BG, INCOMING_WORD_BG))
-                    } else {
-                        ((REMOVED_BG, REMOVED_WORD_BG), (ADDED_BG, ADDED_WORD_BG))
-                    };
-                    let left = side_line(left.as_ref(), self.shift, active, left_bg, left_word);
-                    let right = side_line(right.as_ref(), self.shift, active, right_bg, right_word);
-                    frame.render_widget(left, left_area);
+                    let (left_bg, left_word) = old_colors;
+                    let (right_bg, right_word) = new_colors;
+                    frame.render_widget(side_line(left, self.shift, active, left_bg, left_word), left_area);
                     frame.render_widget(Line::styled("│", Style::default().fg(ui::DIM)), separator);
-                    frame.render_widget(right, right_area);
+                    frame.render_widget(side_line(right, self.shift, active, right_bg, right_word), right_area);
+                }
+                // Context, with both line numbers.
+                Item::Row(_) => {
+                    let numbers = (left.map(|cell| cell.number), right.map(|cell| cell.number));
+                    if let Some(cell) = right.or(left) {
+                        frame.render_widget(unified_line(numbers, cell, self.shift, active, new_colors), full);
+                    }
+                }
+                Item::Old(_) => {
+                    if let Some(cell) = left {
+                        let line = unified_line((Some(cell.number), None), cell, self.shift, active, old_colors);
+                        frame.render_widget(line, full);
+                    }
+                }
+                Item::New(_) => {
+                    if let Some(cell) = right {
+                        let line = unified_line((None, Some(cell.number)), cell, self.shift, active, new_colors);
+                        frame.render_widget(line, full);
+                    }
                 }
             }
         }
+    }
+
+    /// Two columns, the old side's changes and the new side's, over a track
+    /// that's lighter where the lines on screen are.
+    fn render_minimap(&self, frame: &mut Frame, area: Rect, map: &[MapCell]) {
+        let conflict = matches!(self.source, DiffSource::Conflict(_));
+        let (old_color, new_color) =
+            if conflict { (MINIMAP_CURRENT, MINIMAP_INCOMING) } else { (MINIMAP_REMOVED, MINIMAP_ADDED) };
+        for (y, cell) in map.iter().enumerate() {
+            let track = if cell.in_view { MINIMAP_VIEW } else { MINIMAP_TRACK };
+            let side = |marked: bool, colors: [Color; 2]| {
+                Span::styled(" ", Style::default().bg(if marked { colors[cell.in_view as usize] } else { track }))
+            };
+            let line = Line::from(vec![side(cell.removed, old_color), side(cell.added, new_color)]);
+            frame.render_widget(line, Rect { y: area.y + y as u16, height: 1, ..area });
+        }
+    }
+}
+
+fn gutter_style(active: bool) -> Style {
+    if active {
+        Style::default().fg(Color::White).bg(ui::SELECTED_BG).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(ui::DIM)
     }
 }
 
@@ -733,16 +1023,29 @@ fn side_line(
     let Some(cell) = cell else {
         return Line::default().style(Style::default().bg(FILLER_BG));
     };
-    let gutter_style = if active {
-        Style::default().fg(Color::White).bg(ui::SELECTED_BG).add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(ui::DIM)
-    };
-    let gutter = Span::styled(format!("{:>4} ", cell.number), gutter_style);
-    let mut spans = vec![gutter];
+    let gutter = Span::styled(format!("{:>4} ", cell.number), gutter_style(active));
+    finish_line(gutter, cell, shift, changed_bg, word_bg)
+}
 
-    // The visible text, cut wherever a syntax colour or a changed word starts
-    // or ends, so each piece has one text colour and one background.
+/// A line of a unified diff: the old and new line numbers, either of which
+/// may be blank, then the text.
+fn unified_line(
+    (old, new): (Option<usize>, Option<usize>),
+    cell: &Cell,
+    shift: usize,
+    active: bool,
+    (changed_bg, word_bg): (Color, Color),
+) -> Line<'_> {
+    let number = |n: Option<usize>| n.map_or("    ".to_string(), |n| format!("{n:>4}"));
+    let gutter = Span::styled(format!("{} {} ", number(old), number(new)), gutter_style(active));
+    finish_line(gutter, cell, shift, changed_bg, word_bg)
+}
+
+/// The gutter, then the visible text, cut wherever a syntax colour or a
+/// changed word starts or ends, so each piece has one text colour and one
+/// background.
+fn finish_line<'a>(gutter: Span<'a>, cell: &'a Cell, shift: usize, changed_bg: Color, word_bg: Color) -> Line<'a> {
+    let mut spans = vec![gutter];
     let text = &cell.text;
     let start = text.char_indices().nth(shift).map_or(text.len(), |(i, _)| i);
     let mut cuts = vec![start, text.len()];
@@ -787,16 +1090,19 @@ mod tests {
     }
 
     fn pane_with_rows(count: usize, height: usize) -> DiffPane {
-        DiffPane {
-            source: DiffSource::Unstaged("f".to_string()),
-            text: String::new(),
-            rows: vec![Row::Heading("x".to_string()); count],
-            active: 0,
-            height,
-            shift: 0,
-            text_width: 0,
-            colored: true,
-        }
+        let rows = vec![Row::Heading("x".to_string()); count];
+        let mut pane = pane_of(rows);
+        pane.height = height;
+        pane
+    }
+
+    fn pane_of(rows: Vec<Row>) -> DiffPane {
+        let source = DiffSource::Unstaged("f".to_string());
+        DiffPane::colored(source, String::new(), Colored { rows, file_lines: 0 })
+    }
+
+    fn colored(rows: Vec<Row>) -> Colored {
+        Colored { rows, file_lines: 0 }
     }
 
     fn text_of(line: &Line) -> String {
@@ -864,7 +1170,7 @@ mod tests {
     #[test]
     fn scrolling_sideways_stops_once_the_longest_line_ends() {
         let mut pane = pane_with_rows(1, 10);
-        pane.rows = vec![Row::Lines { left: cell(1, &"x".repeat(10), false), right: None }];
+        pane.set_rows(vec![Row::Lines { left: cell(1, &"x".repeat(10), false), right: None }]);
         pane.text_width = 4;
         for _ in 0..5 {
             pane.handle_key(KeyEvent::from(KeyCode::Char('l')));
@@ -912,7 +1218,7 @@ mod tests {
     fn the_cache_only_matches_the_same_text() {
         let mut cache = ColorCache::default();
         let view = view("f", false);
-        cache.insert(view.clone(), "v1".to_string(), parse_diff("@@ -1 +1 @@\n-a\n+b"));
+        cache.insert(view.clone(), "v1".to_string(), colored(parse_diff("@@ -1 +1 @@\n-a\n+b")));
         assert!(cache.get(&view, "v1").is_some());
         assert!(cache.get(&view, "v2").is_none());
         assert!(cache.contains(&view));
@@ -921,8 +1227,8 @@ mod tests {
     #[test]
     fn the_cache_keeps_a_files_whole_and_changes_only_diffs_apart() {
         let mut cache = ColorCache::default();
-        cache.insert(view("f", false), "changes".to_string(), Vec::new());
-        cache.insert(view("f", true), "whole".to_string(), Vec::new());
+        cache.insert(view("f", false), "changes".to_string(), Colored::default());
+        cache.insert(view("f", true), "whole".to_string(), Colored::default());
         assert_eq!(cache.latest(&view("f", false)).map(|(text, _)| text).as_deref(), Some("changes"));
         assert_eq!(cache.latest(&view("f", true)).map(|(text, _)| text).as_deref(), Some("whole"));
     }
@@ -932,10 +1238,10 @@ mod tests {
         let mut cache = ColorCache::default();
         let file = |name: &str| view(name, false);
         let rows = vec![Row::Heading("x".to_string()); CACHE_ROWS / 2];
-        cache.insert(file("a"), String::new(), rows.clone());
-        cache.insert(file("b"), String::new(), rows.clone());
+        cache.insert(file("a"), String::new(), colored(rows.clone()));
+        cache.insert(file("b"), String::new(), colored(rows.clone()));
         cache.get(&file("a"), ""); // a is now the most recently used
-        cache.insert(file("c"), String::new(), rows);
+        cache.insert(file("c"), String::new(), colored(rows));
         assert!(cache.contains(&file("a")) && cache.contains(&file("c")));
         assert!(!cache.contains(&file("b")));
     }
@@ -945,9 +1251,9 @@ mod tests {
         let mut pane = pane_with_rows(1, 10);
         pane.text = "new".to_string();
         pane.colored = false;
-        pane.apply_colors("old", Vec::new());
+        pane.apply_colors("old", Colored::default());
         assert!(pane.needs_colors());
-        pane.apply_colors("new", Vec::new());
+        pane.apply_colors("new", Colored::default());
         assert!(!pane.needs_colors());
     }
 
@@ -955,7 +1261,7 @@ mod tests {
     fn n_and_shift_n_jump_between_changes_even_in_one_hunk() {
         // One hunk holding two separate changes, as a whole-file diff does.
         let mut pane = pane_with_rows(0, 10);
-        pane.rows = parse_diff("@@ -1,7 +1,7 @@\n a\n-b\n+B\n c\n d\n-e\n-f\n+E\n g");
+        pane.set_rows(parse_diff("@@ -1,7 +1,7 @@\n a\n-b\n+B\n c\n d\n-e\n-f\n+E\n g"));
         let press = |pane: &mut DiffPane, ch| pane.handle_key(KeyEvent::from(KeyCode::Char(ch)));
         press(&mut pane, 'n');
         assert_eq!(pane.active, 2); // b → B
@@ -968,6 +1274,106 @@ mod tests {
         assert_eq!(pane.active, 5); // back to its start
         press(&mut pane, 'N');
         assert_eq!(pane.active, 2);
+    }
+
+    fn press(pane: &mut DiffPane, ch: char) {
+        pane.handle_key(KeyEvent::from(KeyCode::Char(ch)));
+    }
+
+    #[test]
+    fn unified_shows_a_changes_removed_lines_then_its_added_ones() {
+        let rows = parse_diff("@@ -1,3 +1,3 @@\n a\n-b\n-c\n+B\n+C\n d");
+        // Side by side: a, b|B, c|C, d after the heading.
+        assert_eq!(layout(&rows, true).len(), 5);
+        assert_eq!(
+            layout(&rows, false),
+            [Item::Row(0), Item::Row(1), Item::Old(2), Item::Old(3), Item::New(2), Item::New(3), Item::Row(4)]
+        );
+    }
+
+    #[test]
+    fn unified_skips_the_empty_side_of_a_row() {
+        let rows = parse_diff("@@ -1,2 +1,3 @@\n a\n+new\n b");
+        assert_eq!(layout(&rows, false), [Item::Row(0), Item::Row(1), Item::New(2), Item::Row(3)]);
+    }
+
+    #[test]
+    fn switching_layout_stays_on_the_same_row() {
+        let mut pane = pane_of(parse_diff("@@ -1,3 +1,3 @@\n a\n-b\n-c\n+B\n+C\n d"));
+        pane.height = 20;
+        pane.active = 4; // d
+        pane.set_split(false);
+        assert_eq!(pane.items[pane.active], Item::Row(4));
+        pane.active = 4; // B, unified
+        pane.set_split(true);
+        assert_eq!(pane.active, 2); // the row b|B
+    }
+
+    #[test]
+    fn n_jumps_over_a_whole_unified_change() {
+        let mut pane = pane_of(parse_diff("@@ -1,5 +1,5 @@\n a\n-b\n+B\n c\n-d\n+D\n e"));
+        pane.height = 20;
+        pane.set_split(false);
+        press(&mut pane, 'n');
+        assert_eq!(pane.items[pane.active], Item::Old(2));
+        press(&mut pane, 'n');
+        assert_eq!(pane.items[pane.active], Item::Old(4));
+        assert_eq!(pane.change_counter().as_deref(), Some(" change 2 of 2 "));
+    }
+
+    #[test]
+    fn the_active_line_on_an_added_line_is_its_own() {
+        let mut pane = pane_of(parse_diff("@@ -1,2 +1,3 @@\n-x\n+y\n+z\n w"));
+        pane.set_split(false);
+        pane.active = 3; // z, after x, y
+        assert_eq!(pane.items[pane.active], Item::New(2));
+        assert_eq!(pane.active_line(), Some(2));
+    }
+
+    #[test]
+    fn the_counter_says_which_change_or_how_many() {
+        let mut pane = pane_of(parse_diff("@@ -1,5 +1,5 @@\n a\n-b\n+B\n c\n-d\n+D\n e"));
+        assert_eq!(pane.change_counter().as_deref(), Some(" 2 changes "));
+        press(&mut pane, 'n');
+        assert_eq!(pane.change_counter().as_deref(), Some(" change 1 of 2 "));
+        press(&mut pane, 'j');
+        assert_eq!(pane.change_counter().as_deref(), Some(" 2 changes "));
+        assert_eq!(pane_of(parse_diff("@@ -1 +1 @@\n a")).change_counter(), None);
+    }
+
+    #[test]
+    fn removed_lines_sit_where_the_next_line_is() {
+        let rows = parse_diff("@@ -1,3 +1,2 @@\n a\n-gone\n b\n c");
+        // heading, a, gone, b, c: at the new file's lines 1, 1, 2, 2, 3.
+        assert_eq!(file_positions(&rows), [0, 0, 1, 1, 2]);
+    }
+
+    #[test]
+    fn a_deleted_file_is_measured_by_its_old_lines() {
+        let rows = parse_diff("@@ -1,2 +0,0 @@\n-a\n-b");
+        assert_eq!(file_positions(&rows), [0, 0, 1]);
+    }
+
+    #[test]
+    fn the_minimap_marks_changes_and_the_view_across_the_whole_file() {
+        // Changes at lines 10 and 90 of a 100-line file, in 10 rows.
+        let rows = parse_diff("@@ -10 +10 @@\n-x\n+X\n@@ -90,0 +91 @@\n+new");
+        let map = minimap(&rows, 100, 10, &[0, 1]);
+        let marked: Vec<_> = map.iter().map(|c| (c.removed, c.added)).collect();
+        assert_eq!(marked[0], (true, true)); // line 10 is in the first tenth
+        assert_eq!(marked[9], (false, true)); // line 91, added only
+        assert!(marked[1..9].iter().all(|m| *m == (false, false)));
+        let in_view: Vec<_> = map.iter().map(|c| c.in_view).collect();
+        assert_eq!(in_view.iter().filter(|v| **v).count(), 1);
+        assert!(in_view[0]);
+    }
+
+    #[test]
+    fn no_minimap_for_a_file_that_fits() {
+        let rows = parse_diff("@@ -1 +1 @@\n-x\n+X");
+        assert!(minimap(&rows, 5, 10, &[0]).is_empty());
+        // Until the length is known, the diff's last line stands in.
+        assert_eq!(file_length(&rows, 0), 1);
     }
 
     #[test]
@@ -1001,7 +1407,7 @@ mod tests {
     #[test]
     fn the_active_line_is_the_next_one_in_the_current_file() {
         let mut pane = pane_with_rows(0, 10);
-        pane.rows = parse_diff("@@ -4,2 +4,1 @@\n-gone\n same\n-also gone");
+        pane.set_rows(parse_diff("@@ -4,2 +4,1 @@\n-gone\n same\n-also gone"));
         // The heading and a removed line both lead to `same`, line 4 now.
         assert_eq!(pane.active_line(), Some(4));
         pane.active = 1;

@@ -10,7 +10,7 @@ gclic is heavily inspired by the features I like and have grown accustomed to in
 - **[Staging and commit](#staging-and-commit):** browse changed files, stage, unstage or restore them, and commit.
 - **[Branch graph](#branch-graph):** navigate a commit graph of any set of branches, open a commit's files and diffs, read its details and copy its sha.
 - **[Branches](#branches):** fuzzy search and check out branches, and see how far each one is ahead of or behind its remotes.
-- **[Diffs](#diffs):** read any file's changes side by side, with syntax highlighting and the changed words marked.
+- **[Diffs](#diffs):** read any file's changes side by side or unified, with syntax highlighting, the changed words marked, and a minimap of the whole file.
 - **[Compare](#compare):** pick any two refs to see how far they have diverged and which files differ.
 - **[Merge conflicts](#merge-conflicts):** see each conflict as your side against theirs, and open it in your editor to resolve it.
 - **[Keyboard driven](#keyboard-driven):** with Vim-style keybindings, and the keys that apply always shown at the bottom.
@@ -62,13 +62,15 @@ The Branches pane shows the checked-out branch, and when focused, every branch. 
 
 ## Diffs
 
-Diffs are side by side, syntax highlighted with VS Code's Dark Modern colours, with the words that changed marked. A second `enter` moves into a diff: `j`/`k` move the active line, `h`/`l` scroll sideways, `n`/`N` jump between changes, `e` switches between the whole file and just the changes, and `o` opens the file in Zed at the active line.
+Diffs are syntax highlighted with VS Code's Dark Modern colours, with the words that changed marked. They're side by side when the pane is wide enough for about 80 columns of text a side, and unified otherwise. A minimap down the right edge shows the whole file, its removed lines on the left and its added ones on the right, with the part on screen lighter. The bottom border counts the changes, and says which one you're on.
+
+From any pane, while a diff is showing, `n`/`N` jump between its changes, `e` switches between the whole file and just the changes, and `s` between side by side and unified. A second `enter` moves into a diff: `j`/`k` move the active line, `h`/`l` scroll sideways, and `o` opens the file in Zed at the active line.
 
 ![A commit's diff, with the active line a few rows down](docs/images/diff.svg)
 
 ## Compare
 
-The Compare tab, reached with `tab`, shows how two refs differ, a *before* and an *after*: how far the after is ahead of and behind the before, their common ancestor, and the files that differ, in a tree of their folders, each with its diff. `c` starts a comparison, from the Branches pane, the graph, or the tab itself, and `r` swaps before and after.
+The Compare tab, reached with `tab`, shows how two refs differ, going *from* one *to* the other, a trip through the commit graph rather than an order in time: how far the to is ahead of and behind the from, their common ancestor, and the files that differ, in a tree of their folders, each with its diff. `c` starts a comparison, from the Branches pane, the graph, or the tab itself, and `r` swaps from and to.
 
 ![Comparing main with hourly](docs/images/compare.svg)
 

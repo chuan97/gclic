@@ -45,7 +45,7 @@ const LEFT: &[Section] = &[
     Section {
         title: "Changes",
         keys: &[
-            ("space s", "stage or unstage"),
+            ("space", "stage or unstage"),
             ("a A", "stage all, unstage all"),
             ("d", "restore the file, or delete it if new"),
             ("c", "commit what's staged"),
@@ -56,7 +56,7 @@ const LEFT: &[Section] = &[
         title: "Graph",
         keys: &[
             ("enter", "expand a commit, show a file's diff"),
-            ("n N", "next/previous commit, past files"),
+            ("n N", "next/previous commit, if no diff is open"),
             ("i", "commit details, again to move in"),
             ("c", "compare the commit with a ref"),
             ("y", "copy the commit's sha"),
@@ -74,7 +74,7 @@ const RIGHT: &[Section] = &[
             ("enter", "show the diff, or fold a folder"),
             ("h l", "fold a folder or go up, unfold or go in"),
             ("c", "new comparison: choose two refs"),
-            ("r", "swap before and after"),
+            ("r", "swap from and to"),
             ("esc", "close it after confirming, back to Repo"),
         ],
     },
@@ -84,9 +84,10 @@ const RIGHT: &[Section] = &[
             ("j k", "move the active line"),
             ("g G", "first/last line"),
             ("ctrl-d u", "half a page down/up"),
-            ("n N", "next/previous change"),
+            ("n N", "next/previous change, from any pane"),
             ("h l", "scroll sideways"),
-            ("e", "whole file, or just the changes"),
+            ("e", "whole file, or just the changes, from any pane"),
+            ("s", "side by side, or unified, from any pane"),
         ],
     },
     Section {
