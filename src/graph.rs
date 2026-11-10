@@ -472,6 +472,13 @@ impl GraphPanel {
         self.commit_colors = commit_colors(&reach_masks(&self.commits, &shas), &self.colors);
     }
 
+    /// The first ref on screen pointing at this commit, in the order they were
+    /// picked, or the sha if none does. A comparison then names the branch,
+    /// and follows it if it moves.
+    fn name_for(&self, sha: String) -> String {
+        self.tips.iter().find(|tip| tip.sha == sha).map_or(sha, |tip| tip.name.clone())
+    }
+
     pub fn handle_key(&mut self, key: KeyEvent) -> Action {
         // Checked first, as it's the way out if the chosen branches were deleted.
         if key.code == KeyCode::Char('b') {
@@ -482,7 +489,7 @@ impl GraphPanel {
         };
         match key.code {
             KeyCode::Char('y') => return Action::Copy(sha),
-            KeyCode::Char('c') => return Action::CompareWith(sha),
+            KeyCode::Char('c') => return Action::CompareWith(self.name_for(sha)),
             KeyCode::Char('i') => {
                 return match git::commit_details(&sha) {
                     Ok(details) => Action::OpenDetails(details),
@@ -1070,6 +1077,16 @@ mod tests {
 
     fn panel_with_expanded_first_commit(shas: &[&str], files: &[&str]) -> GraphPanel {
         panel_with_expanded(shas, &shas[..1], files)
+    }
+
+    #[test]
+    fn comparing_a_branch_tip_names_the_branch() {
+        let mut panel = panel_with_expanded(&["a", "b"], &[], &[]);
+        let tip = |name: &str, sha: &str| Tip { name: name.to_string(), sha: sha.to_string() };
+        panel.tips = vec![tip("feature", "a"), tip("origin/feature", "a"), tip("main", "b")];
+        assert_eq!(panel.name_for("a".to_string()), "feature");
+        assert_eq!(panel.name_for("b".to_string()), "main");
+        assert_eq!(panel.name_for("c".to_string()), "c");
     }
 
     #[test]
