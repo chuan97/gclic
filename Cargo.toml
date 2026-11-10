@@ -2,6 +2,7 @@
 name = "gclic"
 version = "0.2.1"
 edition = "2024"
+license = "MIT"
 
 [dependencies]
 anyhow = "1"

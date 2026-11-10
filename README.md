@@ -89,3 +89,7 @@ Every action has a key, mostly Vim-style. `h`/`l` move between panes, marked `[h
 ---
 
 The screenshots are made from gclic itself, by `docs/screenshots.py`, on a demo repo it builds.
+
+## License
+
+gclic is under the [MIT License](LICENSE). Its colours are those of VS Code's Dark Modern theme, from [VS Code](https://github.com/microsoft/vscode), Copyright (c) Microsoft Corporation, also under the MIT License.

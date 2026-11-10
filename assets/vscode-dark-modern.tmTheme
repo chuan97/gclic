@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The colours of VS Code's Dark Modern theme, as Zed's "VSCode Dark Modern"
+  theme has them. VS Code is Copyright (c) Microsoft Corporation, under the
+  MIT License: https://github.com/microsoft/vscode/blob/main/LICENSE.txt
+-->
 <plist version="1.0">
 <dict>
   <key>name</key>

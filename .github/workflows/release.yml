@@ -34,7 +34,7 @@ jobs:
         run: cargo build --release --locked
       - name: Package
         shell: pwsh
-        run: Compress-Archive -Path target/release/gclic.exe, README.md -DestinationPath "gclic-$env:GITHUB_REF_NAME-windows-x86_64.zip"
+        run: Compress-Archive -Path target/release/gclic.exe, README.md, LICENSE -DestinationPath "gclic-$env:GITHUB_REF_NAME-windows-x86_64.zip"
       - name: Publish the release
         shell: bash
         env:
