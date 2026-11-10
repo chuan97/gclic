@@ -134,7 +134,7 @@ impl StagingPanel {
                     None => Action::None,
                 };
             }
-            KeyCode::Char(' ') | KeyCode::Char('s') => return self.toggle_stage(),
+            KeyCode::Char(' ') => return self.toggle_stage(),
             KeyCode::Char('a') => return Action::after_change(git::stage_all()),
             KeyCode::Char('A') => return Action::after_change(git::unstage_all()),
             KeyCode::Char('d') => return self.ask_to_restore(),

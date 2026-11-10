@@ -4,7 +4,7 @@
 use crate::branches::BranchesPanel;
 use crate::compare::ComparePanel;
 use crate::details::DetailsPane;
-use crate::diff::{ColorCache, DiffPane, DiffView, Row};
+use crate::diff::{ColorCache, Colored, DiffPane, DiffView};
 use crate::git::{self, CommitDetails, DiffSource};
 use crate::graph::GraphPanel;
 use crate::help::HelpPopup;
@@ -141,6 +141,9 @@ pub struct App {
     /// moving onto a file leaves the details alone.
     diff: Option<DiffPane>,
     details: Option<DetailsPane>,
+    /// Diffs side by side or unified, once the user chooses with `s`. Until
+    /// then it depends on the room there is.
+    split: Option<bool>,
     zoomed: bool,
     focus: Focus,
     /// The left-hand panel to return to when leaving the preview.
@@ -182,6 +185,7 @@ impl App {
             compare: None,
             diff: None,
             details: None,
+            split: None,
             zoomed: false,
             focus: Focus::Changes,
             last_left_focus: Focus::Changes,
@@ -277,7 +281,7 @@ impl App {
                 Done::Poll { generation, fingerprint, status, diff } => {
                     self.apply_poll(generation, fingerprint, status, diff);
                 }
-                Done::Highlight { view, text, rows } => self.apply_highlight(view, text, rows),
+                Done::Highlight { view, text, colored } => self.apply_highlight(view, text, colored),
             }
         }
         if !alive {
@@ -325,15 +329,15 @@ impl App {
         self.request_colors();
     }
 
-    fn apply_highlight(&mut self, view: DiffView, text: String, rows: Vec<Row>) {
+    fn apply_highlight(&mut self, view: DiffView, text: String, colored: Colored) {
         if let Some(diff) = &mut self.diff
             && diff.source == view.source
             && diff.needs_colors()
         {
             // Only taken if the text matches, so not for the other kind of diff.
-            diff.apply_colors(&text, rows.clone());
+            diff.apply_colors(&text, colored.clone());
         }
-        self.colors.insert(view, text, rows);
+        self.colors.insert(view, text, colored);
     }
 
     /// A diff as it would show now, whole or just the changes.
@@ -353,9 +357,9 @@ impl App {
             let view = App::view_of(&diff.source);
             if diff.needs_colors() {
                 match self.colors.get(&view, diff.text()) {
-                    Some(rows) => {
+                    Some(colored) => {
                         let text = diff.text().to_string();
-                        diff.apply_colors(&text, rows);
+                        diff.apply_colors(&text, colored);
                     }
                     None => wanted.push(view.clone()),
                 }
@@ -440,8 +444,8 @@ impl App {
                 self.report(result);
                 return;
             }
-        if let Some((text, rows)) = self.colors.latest(&App::view_of(&source)) {
-            self.diff = Some(DiffPane::colored(source, text, rows));
+        if let Some((text, colored)) = self.colors.latest(&App::view_of(&source)) {
+            self.diff = Some(DiffPane::colored(source, text, colored));
             self.details = None;
             return;
         }
@@ -507,6 +511,17 @@ impl App {
             KeyCode::Char('r') if self.tab == Tab::Compare && self.compare.is_some() => self.swap_compare(),
             KeyCode::Tab | KeyCode::BackTab => self.switch_tab(),
             KeyCode::Char('e') if self.diff.is_some() => self.toggle_whole_files(),
+            // A diff on screen takes n and N from any pane, so its changes can
+            // be stepped through while browsing files. The graph's own n and N,
+            // between commits, work when there's no diff.
+            KeyCode::Char('n' | 'N') if self.focus != Focus::Preview && self.diff.is_some() => {
+                if let Some(diff) = &mut self.diff {
+                    diff.handle_key(key);
+                }
+            }
+            KeyCode::Char('s') if self.diff.is_some() => {
+                self.split = self.diff.as_ref().map(|diff| !diff.is_split());
+            }
             // On the Compare tab, c starts a new comparison, as c compares from
             // where the user is in the other panes.
             KeyCode::Char('c') if self.focus == Focus::Compare => self.open_compare_picker(),
@@ -765,7 +780,7 @@ impl App {
             Ok(mut items) => {
                 // Comparing a ref with itself shows nothing.
                 items.retain(|item| item.split_whitespace().next() != Some(a.as_str()));
-                let title = format!("Compare {a} with: after");
+                let title = format!("Compare from {a}: to");
                 let picker = Picker::with_free_text(&title, items).with_hints(&COMPARE_PICKER_KEYS);
                 self.modal = Modal::Picker(picker, PickerUse::CompareB { a });
             }
@@ -848,7 +863,7 @@ impl App {
     fn open_compare_picker(&mut self) {
         match compare_items(&self.recent_yanks) {
             Ok(items) => {
-                let picker = Picker::with_free_text("Compare: before", items).with_hints(&COMPARE_PICKER_KEYS);
+                let picker = Picker::with_free_text("Compare: from", items).with_hints(&COMPARE_PICKER_KEYS);
                 self.modal = Modal::Picker(picker, PickerUse::CompareA);
             }
             Err(error) => self.modal = Modal::Error(error.to_string()),
@@ -957,7 +972,7 @@ impl App {
     fn render_preview(&mut self, frame: &mut Frame, area: Rect) {
         let focused = self.focus == Focus::Preview;
         if let Some(diff) = &mut self.diff {
-            diff.render(frame, area, focused);
+            diff.render(frame, area, focused, self.split);
         } else if let Some(details) = &mut self.details {
             details.render(frame, area, focused);
         }
@@ -1027,7 +1042,9 @@ impl App {
             }
             Focus::Graph if self.graph.is_on_file() => {
                 hints.extend(self.enter_diff_hint(self.graph.selected_file_source()));
-                hints.push("n/N commit");
+                if self.diff.is_none() {
+                    hints.push("n/N commit");
+                }
                 hints.extend([self.details_hint(), "y copy sha"]);
                 esc = Some("esc collapse");
             }
@@ -1036,7 +1053,7 @@ impl App {
                 hints.push(if expanded { "enter collapse" } else { "enter expand" });
                 hints.extend([self.details_hint(), "c compare", "y copy sha", "b choose branches"]);
                 // Only worth it when open commits' files are in the way.
-                if self.graph.has_expanded() {
+                if self.graph.has_expanded() && self.diff.is_none() {
                     hints.push("n/N commit");
                 }
                 if expanded {
@@ -1052,19 +1069,22 @@ impl App {
             Focus::Compare => {
                 let source = self.compare.as_ref().and_then(|compare| compare.selected_source());
                 hints.extend(self.enter_diff_hint(source));
-                hints.extend(["h/l fold", "r swap before and after", "c new comparison"]);
+                hints.extend(["h/l fold", "r swap from and to", "c new comparison"]);
                 esc = Some("esc close compare");
             }
             Focus::Preview => {
                 if self.diff.is_some() {
-                    hints.extend(["j/k move", "h/l sideways", "ctrl-d/u page", "n/N change"]);
-                    hints.push(if git::whole_files() { "e changes only" } else { "e whole file" });
+                    hints.extend(["j/k move", "h/l sideways", "ctrl-d/u page"]);
+                    hints.extend(self.diff_view_hints());
                 } else {
                     hints.extend(["j/k scroll", "ctrl-d/u page", "y copy sha"]);
                 }
                 hints.push(if self.zoomed { "z unzoom" } else { "z zoom" });
                 esc = Some("esc back");
             }
+        }
+        if self.focus != Focus::Preview {
+            hints.extend(self.diff_view_hints());
         }
         if self.focused_file().is_some() {
             hints.push("o open in zed");
@@ -1152,6 +1172,18 @@ impl App {
             }
             Err(error) => self.modal = Modal::Error(format!("Couldn't run zed: {error}")),
         }
+    }
+
+    /// The keys that work on a diff on screen, from any pane.
+    fn diff_view_hints(&self) -> Vec<&'static str> {
+        let Some(diff) = &self.diff else {
+            return Vec::new();
+        };
+        vec![
+            "n/N change",
+            if git::whole_files() { "e changes only" } else { "e whole file" },
+            if diff.is_split() { "s unified" } else { "s side by side" },
+        ]
     }
 
     /// Enter on a file shows its diff, or moves into the diff if it's showing.

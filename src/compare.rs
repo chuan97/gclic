@@ -1,6 +1,6 @@
-//! Feature 4: how two refs differ. The first is "before" and the second
-//! "after": the diff goes from one to the other, as VS Code puts the
-//! original on the left and the change on the right.
+//! Feature 4: how two refs differ. The first is "from" and the second "to":
+//! a trip through the commit graph, not an order in time. The diff goes from
+//! one to the other, with the origin on the left and the destination on the right.
 
 use crate::app::Action;
 use crate::file_list::FileList;
@@ -15,27 +15,27 @@ use ratatui::text::{Line, Span};
 use std::thread;
 
 pub struct ComparePanel {
-    before: String,
-    after: String,
-    /// Commits only in `before`, and only in `after`.
-    only_before: usize,
-    only_after: usize,
+    from: String,
+    to: String,
+    /// Commits only in `from`, and only in `to`.
+    only_from: usize,
+    only_to: usize,
     merge_base: Option<String>,
     files: FileList,
 }
 
 impl ComparePanel {
-    pub fn new(before: String, after: String) -> Result<ComparePanel> {
-        let files = FileList::new(before.clone(), after.clone(), Vec::new());
+    pub fn new(from: String, to: String) -> Result<ComparePanel> {
+        let files = FileList::new(from.clone(), to.clone(), Vec::new());
         let mut compare =
-            ComparePanel { before, after, only_before: 0, only_after: 0, merge_base: None, files };
+            ComparePanel { from, to, only_from: 0, only_to: 0, merge_base: None, files };
         compare.refresh()?;
         Ok(compare)
     }
 
     /// Three separate git calls, so they run at once.
     pub fn refresh(&mut self) -> Result<()> {
-        let (a, b) = (&self.before, &self.after);
+        let (a, b) = (&self.from, &self.to);
         let (counts, merge_base, files) = thread::scope(|scope| {
             let merge_base = scope.spawn(|| git::merge_base(a, b));
             let files = scope.spawn(|| git::changed_files(a, b));
@@ -43,18 +43,18 @@ impl ComparePanel {
             let crashed = || Err(anyhow::anyhow!("git crashed"));
             (counts, merge_base.join().unwrap_or(None), files.join().unwrap_or_else(|_| crashed()))
         });
-        (self.only_before, self.only_after) = counts?;
+        (self.only_from, self.only_to) = counts?;
         self.merge_base = merge_base;
         self.files.set_files(files?);
         Ok(())
     }
 
-    /// Swaps before and after. Nothing needs asking git again: the common
+    /// Swaps from and to. Nothing needs asking git again: the common
     /// ancestor stays, the commit counts trade places, and so do added and
     /// deleted files. An open diff follows, through the action returned.
     pub fn swap(&mut self) -> Action {
-        std::mem::swap(&mut self.before, &mut self.after);
-        std::mem::swap(&mut self.only_before, &mut self.only_after);
+        std::mem::swap(&mut self.from, &mut self.to);
+        std::mem::swap(&mut self.only_from, &mut self.only_to);
         self.files.swap_refs();
         match self.files.selected_source() {
             Some(source) => Action::PreviewDiff(source),
@@ -64,7 +64,7 @@ impl ComparePanel {
 
     /// What's compared, as `A → B`.
     pub fn refs(&self) -> String {
-        format!("{} → {}", self.before, self.after)
+        format!("{} → {}", self.from, self.to)
     }
 
     pub fn selected_source(&self) -> Option<DiffSource> {
@@ -72,7 +72,7 @@ impl ComparePanel {
     }
 
     /// The diffs one key away, most likely first: the selected file's, then
-    /// the same file with before and after swapped, which r leads to, then the files
+    /// the same file with from and to swapped, which r leads to, then the files
     /// j, k, g and G lead to.
     pub fn sources_around(&self) -> Vec<DiffSource> {
         let mut sources = self.files.sources_around();
@@ -103,16 +103,16 @@ impl ComparePanel {
             Some(sha) => format!("common ancestor {}", &sha[..sha.len().min(7)]),
             None => "no common ancestor".to_string(),
         };
-        // From after's point of view: what it adds to before, and what it lacks.
+        // From to's point of view: what it adds to from, and what it lacks.
         let lines = vec![
             Line::from(vec![
-                Span::styled(self.after.as_str(), bold),
+                Span::styled(self.to.as_str(), bold),
                 Span::raw(" is "),
-                Span::styled(format!("{} ahead", self.only_after), Style::default().fg(Color::Green)),
+                Span::styled(format!("{} ahead", self.only_to), Style::default().fg(Color::Green)),
                 Span::raw(", "),
-                Span::styled(format!("{} behind", self.only_before), Style::default().fg(Color::Red)),
+                Span::styled(format!("{} behind", self.only_from), Style::default().fg(Color::Red)),
                 Span::raw(" "),
-                Span::styled(self.before.as_str(), bold),
+                Span::styled(self.from.as_str(), bold),
             ]),
             Line::styled(base, Style::default().fg(ui::DIM)),
             Line::default(),
@@ -135,10 +135,10 @@ mod tests {
             FileEntry { status: 'A', path: "new".to_string() },
         ];
         ComparePanel {
-            before: "main".to_string(),
-            after: "feature".to_string(),
-            only_before: 1,
-            only_after: 3,
+            from: "main".to_string(),
+            to: "feature".to_string(),
+            only_from: 1,
+            only_to: 3,
             merge_base: Some("abc".to_string()),
             files: FileList::new("main".to_string(), "feature".to_string(), files),
         }
@@ -149,7 +149,7 @@ mod tests {
         let mut compare = panel();
         compare.swap();
         assert_eq!(compare.refs(), "feature → main");
-        assert_eq!((compare.only_before, compare.only_after), (3, 1));
+        assert_eq!((compare.only_from, compare.only_to), (3, 1));
         assert_eq!(compare.merge_base.as_deref(), Some("abc"));
         let source = compare.selected_source().unwrap();
         assert_eq!(source, DiffSource::Refs { a: "feature".into(), b: "main".into(), path: "edited".into() });
