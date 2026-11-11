@@ -4,6 +4,7 @@
 use crate::branches::BranchesPanel;
 use crate::compare::ComparePanel;
 use crate::details::DetailsPane;
+use crate::repos;
 use crate::diff::{ColorCache, Colored, DiffPane, DiffView};
 use crate::git::{self, CommitDetails, DiffSource};
 use crate::graph::GraphPanel;
@@ -19,6 +20,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph, Wrap};
 use ratatui::{DefaultTerminal, Frame};
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -27,8 +29,9 @@ const AUTO_REFRESH: Duration = Duration::from_millis(500);
 /// How long to wait for a key before checking on the worker's results. Short,
 /// so colours appear soon after they're ready.
 const KEY_WAIT: Duration = Duration::from_millis(30);
-const GLOBAL_HINTS: &str = "? help · q quit";
+const GLOBAL_HINTS: &str = ": command · ? help · q quit";
 /// The keys shown on the pickers that choose refs to compare.
+const REPO_PICKER_KEYS: [(&str, &str); 3] = [("i", "type"), ("enter", "open"), ("esc", "close")];
 const COMPARE_PICKER_KEYS: [(&str, &str); 4] =
     [("i", "type"), ("p", "paste"), ("enter", "choose"), ("esc", "close")];
 /// The preview's share of the width, focused or not. Zooming gives it all of it.
@@ -115,6 +118,8 @@ enum PickerUse {
     GraphBranches,
     CompareA,
     CompareB { a: String },
+    /// `:cd`: each repo's label, and where it is.
+    Repo(Vec<(String, PathBuf)>),
 }
 
 /// The popup currently on top of everything, which gets all the keys.
@@ -126,6 +131,8 @@ enum Modal {
     ConfirmQuit,
     Error(String),
     Help(HelpPopup),
+    /// The command line, opened with `:`, holding what's typed so far.
+    Command(String),
 }
 
 pub struct App {
@@ -162,6 +169,9 @@ pub struct App {
     /// The background thread doing slow reads: auto-refresh and colouring.
     worker: Worker,
     colors: ColorCache,
+    /// Where `:cd` looks for repos. It stays put as the repo changes, so the
+    /// same repos are a few keys away.
+    search_root: PathBuf,
     /// Where the repo is, for the tab bar: the folder it's in, with `~` for
     /// home, and its own name.
     project: (String, String),
@@ -172,8 +182,9 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> App {
+    pub fn new(search_root: PathBuf) -> App {
         let mut app = App {
+            search_root,
             tab: Tab::Repo,
             other_tab: TabState {
                 focus: Focus::Compare,
@@ -492,6 +503,7 @@ impl App {
             }
             // Any key dismisses it.
             Modal::Error(_) => {}
+            Modal::Command(line) => self.handle_command_key(line, key),
         }
         // The cursor may have moved, so the diffs one key away may have changed.
         self.request_colors();
@@ -511,6 +523,7 @@ impl App {
             KeyCode::Char('h') if self.tab == Tab::Repo && self.focus != Focus::Preview => self.move_focus(false),
             KeyCode::Char('l') if self.tab == Tab::Repo && self.focus != Focus::Preview => self.move_focus(true),
             KeyCode::Char('?') => self.modal = Modal::Help(HelpPopup::new(self.help_section())),
+            KeyCode::Char(':') => self.modal = Modal::Command(String::new()),
             KeyCode::Char('o') => self.open_in_editor(),
             KeyCode::Char('r') if self.tab == Tab::Compare && self.compare.is_some() => self.swap_compare(),
             KeyCode::Tab | KeyCode::BackTab => self.switch_tab(),
@@ -538,6 +551,93 @@ impl App {
             KeyCode::Esc => self.handle_escape(),
             _ => self.send_to_focused_panel(key),
         }
+    }
+
+    /// Typing on the command line. Enter runs it, and esc, or backspace with
+    /// nothing left, closes it.
+    fn handle_command_key(&mut self, mut line: String, key: KeyEvent) {
+        match key.code {
+            KeyCode::Enter => self.run_command(&line),
+            KeyCode::Esc => {}
+            KeyCode::Backspace if line.is_empty() => {}
+            KeyCode::Backspace => {
+                line.pop();
+                self.modal = Modal::Command(line);
+            }
+            KeyCode::Char(ch) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                line.push(ch);
+                self.modal = Modal::Command(line);
+            }
+            _ => self.modal = Modal::Command(line),
+        }
+    }
+
+    /// Runs a command typed after `:`. The first word names it, and the rest
+    /// are its arguments.
+    fn run_command(&mut self, line: &str) {
+        let (name, rest) = line.trim().split_once(' ').unwrap_or((line.trim(), ""));
+        match name {
+            "" => {}
+            "cd" => self.change_repo(rest.trim()),
+            _ => self.message = format!("Unknown command :{name}. Try :cd to switch repo"),
+        }
+    }
+
+    /// `:cd`: on its own, the finder. With `..`, the finder a folder up. With
+    /// a name, straight to the repo it can only mean, or else the finder with
+    /// the name typed in.
+    fn change_repo(&mut self, name: &str) {
+        if name.is_empty() {
+            return self.open_repo_picker("");
+        }
+        if name == repos::UP {
+            if let Some(parent) = self.search_root.parent() {
+                self.search_root = parent.to_path_buf();
+            }
+            return self.open_repo_picker("");
+        }
+        let entries = repos::entries(&self.search_root);
+        match repos::target(name, &entries) {
+            repos::Target::Repo(repo) => self.switch_repo(&repo),
+            repos::Target::Choose => self.open_repo_picker(name),
+            repos::Target::None => {
+                self.message = format!("No repo matches {name} in {}", repos::tilde(&self.search_root));
+            }
+        }
+    }
+
+    /// The repos under the search folder, to switch to one, after `..` to
+    /// search a folder up. Opens as the other pickers do, with `query` as the
+    /// search if there is one, and otherwise on the current repo.
+    fn open_repo_picker(&mut self, query: &str) {
+        let repos = repos::entries(&self.search_root);
+        let labels = repos.iter().map(|(label, _)| label.clone()).collect();
+        let title = format!("Switch repo, in {}", repos::tilde(&self.search_root));
+        let mut picker = Picker::single(&title, labels).with_hints(&REPO_PICKER_KEYS);
+        if !query.is_empty() {
+            picker.set_query(query.to_string());
+        }
+        let current = std::env::current_dir().ok();
+        if query.is_empty()
+            && let Some((label, _)) = repos.iter().find(|(_, repo)| Some(repo) == current.as_ref())
+        {
+            picker.select_item(&label.clone());
+        }
+        self.modal = Modal::Picker(picker, PickerUse::Repo(repos));
+    }
+
+    /// Makes another repo the one gclic shows and runs git in. Everything
+    /// read from the old one goes, so the app starts afresh, keeping only the
+    /// user's choices of how to show things.
+    fn switch_repo(&mut self, repo: &Path) {
+        if let Err(error) = std::env::set_current_dir(repo) {
+            self.modal = Modal::Error(format!("Can't open {}: {error}", repo.display()));
+            return;
+        }
+        let mut fresh = App::new(self.search_root.clone());
+        fresh.split = self.split;
+        // The old worker stops once it finds no one listening for its results.
+        *self = fresh;
     }
 
     fn handle_escape(&mut self) {
@@ -753,6 +853,18 @@ impl App {
         let first = picked.first().and_then(|item| item.split_whitespace().next());
         let first = first.unwrap_or_default().to_string();
         match usage {
+            PickerUse::Repo(repos) => {
+                let picked = picked.first();
+                match repos.into_iter().find(|(label, _)| Some(label) == picked) {
+                    // The search moves up for the rest of the session.
+                    Some((label, parent)) if label == repos::UP => {
+                        self.search_root = parent;
+                        self.open_repo_picker("");
+                    }
+                    Some((_, repo)) => self.switch_repo(&repo),
+                    None => {}
+                }
+            }
             PickerUse::GraphBranches => {
                 // Confirming the default view's branches as they were keeps the
                 // default view, which follows a checkout to another branch.
@@ -997,13 +1109,23 @@ impl App {
 
     /// The pane's own keys, then the keys that work everywhere.
     fn render_status_line(&self, frame: &mut Frame, area: Rect) {
+        // A column of margin at each end, which also lines the text up with
+        // the text inside the panes' borders.
+        let area = Rect { x: area.x + 1, width: area.width.saturating_sub(2), ..area };
+        // The command line takes the place of the hints, as in vim.
+        if let Modal::Command(line) = &self.modal {
+            let cyan = Style::default().fg(Color::Cyan);
+            let mut spans = vec![Span::styled(":", cyan), Span::raw(line.as_str()), Span::styled("▏", cyan)];
+            if line.is_empty() {
+                spans.push(Span::styled("cd to switch repo · enter run · esc cancel", Style::default().fg(ui::DIM)));
+            }
+            frame.render_widget(Line::from(spans), area);
+            return;
+        }
         // A popup takes every key and lists its own on its border.
         if !matches!(self.modal, Modal::None) {
             return;
         }
-        // A column of margin at each end, which also lines the text up with
-        // the text inside the panes' borders.
-        let area = Rect { x: area.x + 1, width: area.width.saturating_sub(2), ..area };
         let dim = Style::default().fg(ui::DIM);
         let (mut spans, empty) = if self.message.is_empty() {
             let hints = self.hints();
@@ -1031,7 +1153,8 @@ impl App {
         match self.focus {
             Focus::Branches if self.branches.is_typing() => {
                 // Every other key is typed into the search, ? and q included.
-                return "type to filter · enter check out · esc stop typing".to_string();
+                // The search box says what esc does.
+                return "type to filter · enter check out".to_string();
             }
             Focus::Branches => {
                 hints.extend(["enter check out", "c compare", "space remotes", "i search"]);
@@ -1214,7 +1337,8 @@ impl App {
     fn render_modal(&mut self, frame: &mut Frame) {
         let area = frame.area();
         match &mut self.modal {
-            Modal::None => {}
+            // The command line is drawn in place of the hints.
+            Modal::None | Modal::Command(_) => {}
             Modal::Picker(picker, _) => picker.render(frame, area),
             Modal::Confirm(confirm) => {
                 let bold = Style::default().add_modifier(Modifier::BOLD);
@@ -1387,13 +1511,7 @@ fn project_location() -> (String, String) {
         return (String::new(), String::new());
     };
     let name = root.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
-    let parent = root.parent().map(|parent| parent.to_path_buf()).unwrap_or_default();
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
-    let folder = match home.and_then(|home| parent.strip_prefix(home).ok().map(|rest| rest.to_path_buf())) {
-        Some(rest) if rest.as_os_str().is_empty() => "~".to_string(),
-        Some(rest) => format!("~{}{}", std::path::MAIN_SEPARATOR, rest.display()),
-        None => parent.display().to_string(),
-    };
+    let folder = root.parent().map(repos::tilde).unwrap_or_default();
     let separator = if folder.ends_with(std::path::MAIN_SEPARATOR) { "" } else { std::path::MAIN_SEPARATOR_STR };
     (format!("{folder}{separator}"), name)
 }
@@ -1416,6 +1534,46 @@ fn fit_folder(folder: &str, name: &str, room: usize) -> Option<String> {
     }
     let tail: String = folder.chars().skip(width - (left - 1)).collect();
     Some(format!("…{tail}"))
+}
+
+/// Picks the repo to open, for when gclic starts outside one: the same list
+/// as `:cd`, on its own. Returns the repo, and the search folder, which `..`
+/// may have moved. None if the user leaves without picking.
+pub fn choose_repo(terminal: &mut DefaultTerminal, mut root: PathBuf) -> Result<Option<(PathBuf, PathBuf)>> {
+    let finder = |root: &Path| {
+        let repos = repos::entries(root);
+        let labels = repos.iter().map(|(label, _)| label.clone()).collect();
+        let title = format!("Open a repo, in {}", repos::tilde(root));
+        (Picker::single(&title, labels).with_hints(&REPO_PICKER_KEYS), repos)
+    };
+    let (mut picker, mut repos) = finder(&root);
+    loop {
+        terminal.draw(|frame| picker.render(frame, frame.area()))?;
+        let Event::Key(key) = event::read()? else {
+            continue;
+        };
+        if key.kind != KeyEventKind::Press {
+            continue;
+        }
+        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            return Ok(None);
+        }
+        match picker.handle_key(key) {
+            Outcome::Open => {}
+            Outcome::Cancelled => return Ok(None),
+            Outcome::Picked(picked) => {
+                let picked = picked.first();
+                match repos.iter().find(|(label, _)| Some(label) == picked) {
+                    Some((label, parent)) if label == repos::UP => {
+                        root = parent.clone();
+                        (picker, repos) = finder(&root);
+                    }
+                    Some((_, repo)) => return Ok(Some((repo.clone(), root))),
+                    None => {}
+                }
+            }
+        }
+    }
 }
 
 /// The first word on the clipboard, which is all a ref could be. None if it
@@ -1456,7 +1614,7 @@ mod tests {
 
     #[test]
     fn each_tab_keeps_its_own_focus() {
-        let mut app = App::new();
+        let mut app = App::new(PathBuf::new());
         app.focus_left(Focus::Graph);
         press(&mut app, KeyCode::Tab);
         assert!(app.tab == Tab::Compare && app.focus == Focus::Compare);
@@ -1466,7 +1624,7 @@ mod tests {
 
     #[test]
     fn h_and_l_still_move_on_the_repo_tab_with_a_comparison_kept() {
-        let mut app = App::new();
+        let mut app = App::new(PathBuf::new());
         app.start_compare("HEAD~1".to_string(), "HEAD".to_string());
         press(&mut app, KeyCode::Tab);
         assert!(app.tab == Tab::Repo && app.compare.is_some());
@@ -1497,7 +1655,7 @@ mod tests {
 
     #[test]
     fn confirming_the_default_branches_keeps_the_default_view() {
-        let mut app = App::new();
+        let mut app = App::new(PathBuf::new());
         let shown = app.graph.shown_refs();
         assert!(app.graph.is_default_view() && !shown.is_empty());
         app.use_picked(PickerUse::GraphBranches, shown.into_iter().rev().collect());
@@ -1509,7 +1667,7 @@ mod tests {
 
     #[test]
     fn esc_on_an_empty_compare_tab_goes_back_to_repo() {
-        let mut app = App::new();
+        let mut app = App::new(PathBuf::new());
         press(&mut app, KeyCode::Tab);
         press(&mut app, KeyCode::Esc);
         assert!(app.tab == Tab::Repo);
@@ -1517,7 +1675,7 @@ mod tests {
 
     #[test]
     fn c_on_the_compare_tab_asks_for_refs() {
-        let mut app = App::new();
+        let mut app = App::new(PathBuf::new());
         press(&mut app, KeyCode::Tab);
         press(&mut app, KeyCode::Char('c'));
         assert!(matches!(app.modal, Modal::Picker(_, PickerUse::CompareA)));
@@ -1525,7 +1683,7 @@ mod tests {
 
     #[test]
     fn starting_a_comparison_switches_to_its_tab() {
-        let mut app = App::new();
+        let mut app = App::new(PathBuf::new());
         app.start_compare("HEAD~1".to_string(), "HEAD".to_string());
         assert!(app.tab == Tab::Compare && app.focus == Focus::Compare);
         assert!(app.compare.as_ref().is_some_and(|c| c.refs() == "HEAD~1 → HEAD"));

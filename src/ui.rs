@@ -15,6 +15,10 @@ pub const KEY: Color = Color::Yellow;
 /// actions in the normal colour. The key for the action named `danger`, if
 /// any, is bold red instead, as it's the key that's about to be pressed.
 pub fn key_hints(hints: &[(&str, &str)], danger: Option<&str>) -> Line<'static> {
+    // Nothing at all, as even padding would cut into the border.
+    if hints.is_empty() {
+        return Line::default();
+    }
     let mut spans = vec![Span::raw(" ")];
     for (i, (key, action)) in hints.iter().enumerate() {
         if i > 0 {
@@ -133,6 +137,11 @@ mod tests {
         assert_eq!(style_of("esc").fg, Some(KEY));
         assert_eq!(style_of(" discard").fg, Some(Color::Reset));
         assert_eq!(style_of(" cancel").fg, Some(Color::Reset));
+    }
+
+    #[test]
+    fn no_hints_leave_the_border_whole() {
+        assert_eq!(key_hints(&[], None).width(), 0);
     }
 
     #[test]

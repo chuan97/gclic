@@ -259,7 +259,7 @@ impl Picker {
     pub fn render(&mut self, frame: &mut Frame, area: Rect) {
         let popup = ui::centered(area, 60, 20);
         frame.render_widget(Clear, popup);
-        let block = ui::panel(self.title.clone(), true).title_bottom(ui::key_hints(&self.hints, None));
+        let block = ui::panel(self.title.clone(), true).title_bottom(ui::key_hints(&self.shown_hints(), None));
         let inner = block.inner(popup);
         frame.render_widget(block, popup);
         if inner.height == 0 {
@@ -288,13 +288,31 @@ impl Picker {
         }
     }
 
+    /// The hints for the border. `i` only shows with a search in the box and
+    /// typing stopped: an empty box says "i to search" itself, and while
+    /// typing, i is a letter. Nor does `esc` while typing, as the search box
+    /// says what it does then.
+    fn shown_hints(&self) -> Vec<(&'static str, &'static str)> {
+        let needs_i = !self.typing && !self.query.is_empty();
+        let shown = |key: &str| match key {
+            "i" => needs_i,
+            "esc" => !self.typing,
+            _ => true,
+        };
+        self.hints.iter().copied().filter(|(key, _)| shown(key)).collect()
+    }
+
     pub fn render_query(&self, frame: &mut Frame, area: Rect) {
         let mut query = vec![
             Span::styled("> ", Style::default().fg(Color::Cyan)),
             Span::raw(self.query.as_str()),
         ];
+        // Each mode says how to leave it, right where the search is: "i to
+        // search" before typing, and "esc done" just past the cursor while
+        // typing, moving along as the search grows.
         if self.typing {
             query.push(Span::styled("▏", Style::default().fg(Color::Cyan)));
+            query.push(Span::styled(" esc done", Style::default().fg(ui::DIM)));
         } else if self.query.is_empty() {
             query.push(Span::styled("i to search", Style::default().fg(ui::DIM)));
         }
@@ -330,6 +348,17 @@ mod tests {
         for ch in text.chars() {
             picker.handle_key(key(KeyCode::Char(ch)));
         }
+    }
+
+    #[test]
+    fn the_i_hint_only_shows_when_the_search_box_doesnt_say_it() {
+        let hints = [("i", "type"), ("esc", "close")];
+        let mut picker = Picker::single("t", vec!["a".to_string()]).with_hints(&hints);
+        assert_eq!(picker.shown_hints(), [("esc", "close")]); // "i to search" in the box
+        picker.set_query("a".to_string());
+        assert_eq!(picker.shown_hints(), hints);
+        picker.handle_key(KeyEvent::from(KeyCode::Char('i')));
+        assert!(picker.shown_hints().is_empty()); // typing: "esc done" is in the box
     }
 
     #[test]
