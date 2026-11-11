@@ -541,7 +541,9 @@ impl App {
                     running.stop();
                 }
             }
-            KeyCode::Char('c') if ctrl => self.should_quit = true,
+            // Asks first, as q does: pressed to stop a command just as it ends,
+            // it would otherwise quit gclic.
+            KeyCode::Char('c') if ctrl => self.modal = Modal::ConfirmQuit,
             // While searching branches, letters belong to the search.
             _ if self.focus == Focus::Branches && self.branches.is_typing() => {
                 self.send_to_focused_panel(key);

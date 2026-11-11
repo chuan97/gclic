@@ -30,7 +30,7 @@ const LEFT: &[Section] = &[
             ("tab", "switch between Repo and Compare"),
             (":", "commands: :cd [name | ..], :git …, :!…"),
             ("?", "this help"),
-            ("q", "quit, or ctrl-c at once"),
+            ("q ctrl-c", "quit, after asking; ctrl-c stops a :git first"),
         ],
     },
     Section {
