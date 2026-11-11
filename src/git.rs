@@ -18,6 +18,8 @@ pub struct FileEntry {
 
 #[derive(Debug, Default, PartialEq)]
 pub struct Status {
+    /// Files with merge conflicts, which are neither staged nor plain changes.
+    pub conflicted: Vec<FileEntry>,
     pub staged: Vec<FileEntry>,
     pub unstaged: Vec<FileEntry>,
 }
@@ -146,7 +148,7 @@ fn parse_status(text: &str) -> Status {
         let path = entry[3..].to_string();
         let conflicted = x == 'U' || y == 'U' || (x == y && (x == 'A' || x == 'D'));
         if conflicted {
-            status.unstaged.push(FileEntry { status: 'U', path });
+            status.conflicted.push(FileEntry { status: 'U', path });
         } else if x == '?' {
             status.unstaged.push(FileEntry { status: '?', path });
         } else if x != '!' {
@@ -599,10 +601,11 @@ mod tests {
     }
 
     #[test]
-    fn status_treats_merge_conflicts_as_unstaged() {
-        let status = parse_status("UU a\0AA b\0DD c\0");
+    fn status_keeps_merge_conflicts_apart() {
+        let status = parse_status("UU a\0AA b\0DD c\0 M d\0");
         assert!(status.staged.is_empty());
-        assert_eq!(status.unstaged, vec![entry('U', "a"), entry('U', "b"), entry('U', "c")]);
+        assert_eq!(status.conflicted, vec![entry('U', "a"), entry('U', "b"), entry('U', "c")]);
+        assert_eq!(status.unstaged, vec![entry('M', "d")]);
     }
 
     #[test]

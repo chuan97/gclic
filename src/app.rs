@@ -162,6 +162,9 @@ pub struct App {
     /// The background thread doing slow reads: auto-refresh and colouring.
     worker: Worker,
     colors: ColorCache,
+    /// Where the repo is, for the tab bar: the folder it's in, with `~` for
+    /// home, and its own name.
+    project: (String, String),
     /// Counts the refreshes, which follow every change gclic makes. A poll
     /// asked for before the latest one may have read the repo before a
     /// change, so its result is dropped.
@@ -199,6 +202,7 @@ impl App {
             editor_commands: Vec::new(),
             worker: Worker::start(),
             colors: ColorCache::default(),
+            project: project_location(),
             generation: 0,
         };
         app.refresh();
@@ -900,7 +904,9 @@ impl App {
 
     /// The tab bar: both tabs, the showing one highlighted, the comparison's
     /// refs on its tab so it's visible from the Repo tab too. The other tab is
-    /// marked with the key that leads to it, like the panes' [h] and [l].
+    /// marked with the key that leads to it, like the panes' [h] and [l]. The
+    /// project goes on the right: its folder dimmed, and its name in the accent
+    /// colour, shortened to fit.
     fn render_tabs(&self, frame: &mut Frame, area: Rect) {
         let area = Rect { x: area.x + 1, width: area.width.saturating_sub(2), ..area };
         let compare = match &self.compare {
@@ -918,7 +924,18 @@ impl App {
             }
             spans.push(Span::raw("  "));
         }
-        frame.render_widget(Line::from(spans), area);
+        let tabs = Line::from(spans);
+        // Two columns at least between the tabs and the project.
+        let room = (area.width as usize).saturating_sub(tabs.width() + 2);
+        let (folder, name) = &self.project;
+        if let Some(folder) = fit_folder(folder, name, room) {
+            let project = Line::from(vec![
+                Span::styled(folder, Style::default().fg(ui::DIM)),
+                Span::styled(name.as_str(), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            ]);
+            frame.render_widget(project.right_aligned(), area);
+        }
+        frame.render_widget(tabs, area);
     }
 
     fn render_left(&mut self, frame: &mut Frame, area: Rect) {
@@ -1026,6 +1043,7 @@ impl App {
                 let source = self.staging.selected_source();
                 match &source {
                     Some(DiffSource::Staged(_)) => hints.push("space unstage"),
+                    Some(DiffSource::Conflict(_)) => hints.push("space mark resolved"),
                     Some(_) => hints.push("space stage"),
                     None => {}
                 }
@@ -1361,6 +1379,45 @@ fn compare_items(recent_yanks: &[String]) -> Result<Vec<String>> {
     Ok(items)
 }
 
+/// The folder holding the repo, ending in a separator and with `~` for the
+/// home folder, and the repo's own folder name. gclic runs from the repo's
+/// root, which main moves to.
+fn project_location() -> (String, String) {
+    let Ok(root) = std::env::current_dir() else {
+        return (String::new(), String::new());
+    };
+    let name = root.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
+    let parent = root.parent().map(|parent| parent.to_path_buf()).unwrap_or_default();
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
+    let folder = match home.and_then(|home| parent.strip_prefix(home).ok().map(|rest| rest.to_path_buf())) {
+        Some(rest) if rest.as_os_str().is_empty() => "~".to_string(),
+        Some(rest) => format!("~{}{}", std::path::MAIN_SEPARATOR, rest.display()),
+        None => parent.display().to_string(),
+    };
+    let separator = if folder.ends_with(std::path::MAIN_SEPARATOR) { "" } else { std::path::MAIN_SEPARATOR_STR };
+    (format!("{folder}{separator}"), name)
+}
+
+/// The folder to show before the name in `room` columns: all of it, its end
+/// after an ellipsis, or nothing. None if even the name doesn't fit.
+fn fit_folder(folder: &str, name: &str, room: usize) -> Option<String> {
+    let name_width = name.chars().count();
+    if name_width > room {
+        return None;
+    }
+    let left = room - name_width;
+    let width = folder.chars().count();
+    if width <= left {
+        return Some(folder.to_string());
+    }
+    // Room for the ellipsis and at least a few characters, or it says nothing.
+    if left < 6 {
+        return Some(String::new());
+    }
+    let tail: String = folder.chars().skip(width - (left - 1)).collect();
+    Some(format!("…{tail}"))
+}
+
 /// The first word on the clipboard, which is all a ref could be. None if it
 /// holds no text.
 fn read_clipboard() -> Result<Option<String>> {
@@ -1386,6 +1443,15 @@ mod tests {
 
     fn press(app: &mut App, code: KeyCode) {
         app.handle_key(KeyEvent::from(code));
+    }
+
+    #[test]
+    fn the_project_shortens_its_folder_before_its_name() {
+        let (folder, name) = ("~/Code/", "gclic");
+        assert_eq!(fit_folder(folder, name, 40).as_deref(), Some("~/Code/"));
+        assert_eq!(fit_folder(folder, name, 11).as_deref(), Some("…Code/"));
+        assert_eq!(fit_folder(folder, name, 8).as_deref(), Some(""));
+        assert_eq!(fit_folder(folder, name, 4), None);
     }
 
     #[test]

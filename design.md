@@ -89,7 +89,7 @@ The measuring scripts lived in the git-ignored `target/bench/`. `docs/screenshot
 
 ### Git edge cases
 
-- **Merge conflicts:** a conflicted file previews as its two sides, read from its conflict markers, with the file's own line numbers so `o` opens the editor on the conflict. A diff3 base section is skipped. `d` isn't offered on it, and the Changes title says when a merge, rebase, cherry-pick or revert is in progress.
+- **Merge conflicts:** a conflicted file previews as its two sides, read from its conflict markers, with the file's own line numbers so `o` opens the editor on the conflict. A diff3 base section is skipped. `d` isn't offered on it, and the Changes title says when a merge, rebase, cherry-pick or revert is in progress. Conflicted files get their own section at the top of the Changes pane, as VS Code's "Merge Changes", shown only while there are any.
 - **Worktrees:** a branch checked out in another worktree shows `in ../name` and can't be checked out here. gclic stays in the worktree it started in.
 - **Submodules:** shown as one changed entry with git's "Subproject commit" diff. `d` isn't offered, as a plain restore doesn't touch them.
 

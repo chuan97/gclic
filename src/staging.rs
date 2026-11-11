@@ -14,8 +14,11 @@ use ratatui::text::Line;
 /// Also read by the app, which writes key marks right after it.
 pub const TITLE: &str = " Changes ";
 
+/// The pane's lists, in the order they're shown.
 #[derive(Clone, Copy, PartialEq)]
 enum Section {
+    /// Only shown while there are conflicts, as in VS Code's "Merge Changes".
+    Conflicts,
     Staged,
     Changes,
 }
@@ -24,7 +27,7 @@ pub struct StagingPanel {
     status: Status,
     /// A merge, rebase or the like that stopped halfway, shown in the title.
     operation: Option<&'static str>,
-    /// Index into the staged files followed by the unstaged files.
+    /// Index into the conflicted, staged and unstaged files, one after another.
     selected: usize,
     scroll: usize,
 }
@@ -38,23 +41,37 @@ impl StagingPanel {
         !self.status.staged.is_empty()
     }
 
+    /// Each list with its files, in the order they're shown.
+    fn sections(&self) -> [(Section, &Vec<FileEntry>); 3] {
+        [
+            (Section::Conflicts, &self.status.conflicted),
+            (Section::Staged, &self.status.staged),
+            (Section::Changes, &self.status.unstaged),
+        ]
+    }
+
     fn total(&self) -> usize {
-        self.status.staged.len() + self.status.unstaged.len()
+        self.sections().iter().map(|(_, files)| files.len()).sum()
+    }
+
+    /// Where a section's files start in the selection's numbering.
+    fn offset_of(&self, section: Section) -> usize {
+        self.sections().iter().take_while(|(s, _)| *s != section).map(|(_, files)| files.len()).sum()
     }
 
     fn selection(&self) -> Option<(Section, &FileEntry)> {
         self.entry_at(self.selected)
     }
 
-    /// `index` counts the staged files, then the unstaged ones.
-    fn entry_at(&self, index: usize) -> Option<(Section, &FileEntry)> {
-        let staged = self.status.staged.len();
-        if index < staged {
-            Some((Section::Staged, &self.status.staged[index]))
-        } else {
-            let entry = self.status.unstaged.get(index - staged)?;
-            Some((Section::Changes, entry))
+    /// `index` counts the conflicted files, then the staged, then the unstaged.
+    fn entry_at(&self, mut index: usize) -> Option<(Section, &FileEntry)> {
+        for (section, files) in self.sections() {
+            if index < files.len() {
+                return Some((section, &files[index]));
+            }
+            index -= files.len();
         }
+        None
     }
 
     pub fn selected_source(&self) -> Option<DiffSource> {
@@ -71,9 +88,9 @@ impl StagingPanel {
         let (section, entry) = self.entry_at(index)?;
         let path = entry.path.clone();
         Some(match (section, entry.status) {
+            (Section::Conflicts, _) => DiffSource::Conflict(path),
             (Section::Staged, _) => DiffSource::Staged(path),
             (Section::Changes, '?') => DiffSource::Untracked(path),
-            (Section::Changes, 'U') => DiffSource::Conflict(path),
             (Section::Changes, _) => DiffSource::Unstaged(path),
         })
     }
@@ -97,14 +114,15 @@ impl StagingPanel {
         let previous = self
             .selection()
             .map(|(section, entry)| (section, entry.path.clone()));
-        let old_staged = self.status.staged.len();
+        let old_offset = previous.as_ref().map_or(0, |(section, _)| self.offset_of(*section));
         self.status = status;
-        let new_staged = self.status.staged.len();
 
         if let Some((section, path)) = previous {
-            let (list, old_offset, new_offset) = match section {
-                Section::Staged => (&self.status.staged, 0, 0),
-                Section::Changes => (&self.status.unstaged, old_staged, new_staged),
+            let new_offset = self.offset_of(section);
+            let list = match section {
+                Section::Conflicts => &self.status.conflicted,
+                Section::Staged => &self.status.staged,
+                Section::Changes => &self.status.unstaged,
             };
             if let Some(position) = list.iter().position(|e| e.path == path) {
                 self.selected = new_offset + position;
@@ -159,15 +177,16 @@ impl StagingPanel {
     fn toggle_stage(&self) -> Action {
         match self.selection() {
             Some((Section::Staged, entry)) => Action::after_change(git::unstage(&entry.path)),
-            Some((Section::Changes, entry)) => Action::after_change(git::stage(&entry.path)),
+            // Staging a conflicted file is how git marks it resolved.
+            Some((Section::Conflicts | Section::Changes, entry)) => Action::after_change(git::stage(&entry.path)),
             None => Action::None,
         }
     }
 
     /// Whether d can restore the selected file: a change not yet staged, other
-    /// than a conflict or a submodule, which restoring doesn't handle.
+    /// than a submodule, which restoring doesn't handle.
     pub fn can_restore(&self) -> bool {
-        matches!(self.selection(), Some((Section::Changes, entry)) if entry.status != 'U' && !is_folder(&entry.path))
+        matches!(self.selection(), Some((Section::Changes, entry)) if !is_folder(&entry.path))
     }
 
     fn ask_to_restore(&self) -> Action {
@@ -175,7 +194,7 @@ impl StagingPanel {
             Some((Section::Staged, _)) => {
                 Action::Message("Unstage the file before restoring it".to_string())
             }
-            Some((Section::Changes, entry)) if entry.status == 'U' => Action::Message(
+            Some((Section::Conflicts, _)) => Action::Message(
                 "Resolve the conflict in your editor (o), then stage it (space)".to_string(),
             ),
             // git lists a submodule, or a repo nested inside this one, as a
@@ -194,17 +213,23 @@ impl StagingPanel {
         }
     }
 
-    /// The rows it asks for: both lists with their headings, or one line if
+    /// The rows it asks for: the lists with their headings, or one line if
     /// there's nothing to show.
     pub fn wanted_height(&self) -> u16 {
         match self.total() {
             0 => 1,
-            files => (files + 2) as u16,
+            files => (files + self.headings().len()) as u16,
         }
     }
 
+    /// The sections with a heading: Staged and Changes always, and Conflicts
+    /// while there are any.
+    fn headings(&self) -> Vec<(Section, &Vec<FileEntry>)> {
+        let shown = |(section, files): &(Section, &Vec<FileEntry>)| *section != Section::Conflicts || !files.is_empty();
+        self.sections().into_iter().filter(shown).collect()
+    }
+
     pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
-        let staged = self.status.staged.len();
         let block = ui::panel(self.title(), focused);
         let inner = block.inner(area);
         frame.render_widget(block, area);
@@ -215,21 +240,34 @@ impl StagingPanel {
             return;
         }
 
-        let heading = Style::default().fg(ui::DIM).add_modifier(Modifier::BOLD);
-        let mut lines = vec![Line::styled(format!("Staged ({staged})"), heading)];
-        for (i, entry) in self.status.staged.iter().enumerate() {
-            lines.push(file_line(entry, i == self.selected, focused));
+        // The selected file's row on screen, past the headings above it.
+        let (mut row, mut index, mut selected_row) = (0, 0, 0);
+        for (_, files) in self.headings() {
+            row += 1;
+            if (index..index + files.len()).contains(&self.selected) {
+                selected_row = row + self.selected - index;
+                break;
+            }
+            row += files.len();
+            index += files.len();
         }
-        let unstaged = self.status.unstaged.len();
-        lines.push(Line::styled(format!("Changes ({unstaged})"), heading));
-        for (i, entry) in self.status.unstaged.iter().enumerate() {
-            lines.push(file_line(entry, staged + i == self.selected, focused));
-        }
-
-        // Selected row on screen: one heading above, two once past the staged files.
-        let headings = if self.selected < staged { 1 } else { 2 };
-        let selected_row = self.selected + headings;
         self.scroll = ui::keep_visible(self.scroll, selected_row, inner.height as usize);
+
+        let heading = Style::default().fg(ui::DIM).add_modifier(Modifier::BOLD);
+        let mut lines = Vec::new();
+        let mut index = 0;
+        for (section, files) in self.headings() {
+            let name = match section {
+                Section::Conflicts => "Conflicts",
+                Section::Staged => "Staged",
+                Section::Changes => "Changes",
+            };
+            lines.push(Line::styled(format!("{name} ({})", files.len()), heading));
+            for entry in files {
+                lines.push(file_line(entry, index == self.selected, focused));
+                index += 1;
+            }
+        }
         let lines = lines.into_iter().skip(self.scroll).collect();
         ui::render_lines(frame, inner, lines);
     }
@@ -252,7 +290,7 @@ mod tests {
 
     fn panel(staged: &[&str], unstaged: &[&str], selected: usize) -> StagingPanel {
         StagingPanel {
-            status: Status { staged: entries(staged), unstaged: entries(unstaged) },
+            status: Status { staged: entries(staged), unstaged: entries(unstaged), ..Status::default() },
             operation: None,
             selected,
             scroll: 0,
@@ -266,15 +304,43 @@ mod tests {
     #[test]
     fn staging_a_file_moves_on_to_the_next_change() {
         let mut p = panel(&[], &["a", "b", "c"], 0);
-        p.set_status(Status { staged: entries(&["a"]), unstaged: entries(&["b", "c"]) });
+        p.set_status(Status { staged: entries(&["a"]), unstaged: entries(&["b", "c"]), ..Status::default() });
         assert_eq!(selected_path(&p), "b");
     }
 
     #[test]
     fn selection_follows_a_file_when_the_lists_shift() {
         let mut p = panel(&[], &["a", "b"], 1);
-        p.set_status(Status { staged: entries(&["x"]), unstaged: entries(&["a", "b"]) });
+        p.set_status(Status { staged: entries(&["x"]), unstaged: entries(&["a", "b"]), ..Status::default() });
         assert_eq!(selected_path(&p), "b");
+    }
+
+    fn conflicts(paths: &[&str]) -> Vec<FileEntry> {
+        paths.iter().map(|path| FileEntry { status: 'U', path: path.to_string() }).collect()
+    }
+
+    #[test]
+    fn conflicts_come_first_and_open_as_conflicts() {
+        let mut p = panel(&["s"], &["c"], 0);
+        p.status.conflicted = conflicts(&["x"]);
+        assert_eq!(p.selected_source(), Some(DiffSource::Conflict("x".to_string())));
+        assert_eq!(p.source_at(1), Some(DiffSource::Staged("s".to_string())));
+        assert_eq!(p.source_at(2), Some(DiffSource::Unstaged("c".to_string())));
+        assert_eq!(p.wanted_height(), 6); // three headings, three files
+    }
+
+    #[test]
+    fn resolving_a_conflict_moves_on_to_the_next() {
+        let mut p = panel(&[], &[], 0);
+        p.status.conflicted = conflicts(&["a", "b"]);
+        // Staging a marks it resolved, and it joins the staged files.
+        p.set_status(Status { conflicted: conflicts(&["b"]), staged: entries(&["a"]), ..Status::default() });
+        assert_eq!(selected_path(&p), "b");
+    }
+
+    #[test]
+    fn without_conflicts_there_is_no_conflicts_heading() {
+        assert_eq!(panel(&["a"], &["b"], 0).wanted_height(), 4);
     }
 
     #[test]
