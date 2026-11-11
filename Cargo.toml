@@ -10,6 +10,14 @@ arboard = { version = "3.7.0", default-features = false }
 ratatui = { version = "0.30", features = ["unstable-rendered-line-info"] }
 syntect = { version = "5.3.0", default-features = false, features = ["default-fancy"] }
 
+# To leave ctrl-c to a command run with :!, rather than be stopped by it too.
+# Both already come with the dependencies above.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Console"] }
+
 # Dependencies are optimised even in debug builds, as syntax highlighting is
 # painfully slow without it. gclic's own code still builds quickly for debugging.
 [profile.dev.package."*"]

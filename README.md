@@ -13,6 +13,7 @@ gclic is heavily inspired by the features I like and have grown accustomed to in
 - **[Diffs](#diffs):** read any file's changes side by side or unified, with syntax highlighting, the changed words marked, and a minimap of the whole file.
 - **[Compare](#compare):** pick any two refs to see how far they have diverged and which files differ.
 - **[Merge conflicts](#merge-conflicts):** see each conflict as your side against theirs, and open it in your editor to resolve it.
+- **[Running commands](#running-commands):** run git, or anything else, from gclic, in the repo it shows.
 - **[Switching repos](#switching-repos):** fuzzy find any repo near the one you're in, and switch to it without leaving gclic.
 - **[Keyboard driven](#keyboard-driven):** with Vim-style keybindings, and the keys that apply always shown at the bottom.
 
@@ -80,6 +81,12 @@ The Compare tab, reached with `tab`, shows how two refs differ, going *from* one
 While a merge, rebase or cherry-pick is stopped on conflicts, the Changes pane says so, and lists the conflicted files in a section of their own, above the staged ones. A conflicted file's preview shows each conflict as your side (green) against theirs (blue). Resolve them in your editor with `o`, which opens the file at the conflict, then mark the file resolved with `space`, which stages it.
 
 ![A merge conflict, yours against theirs](docs/images/conflict.svg)
+
+## Running commands
+
+`:git …` runs a git command in the background, in the repo gclic shows, which refreshes once it ends. A line of output goes to the message line, and more to a popup, red if it failed. `ctrl-c` stops it. It has no terminal to ask anything on, so a command that would open an editor or ask for a password fails at once, and says to run it with `:!` instead. Keys in an SSH agent still work.
+
+`:!…` runs any command in your shell, with the terminal to itself, gclic stepping aside meanwhile: an editor, `git add -p`, `git rebase -i`, or `gclic` itself. If it printed something, gclic waits for enter so you can read it, and otherwise, as when quitting vim, comes straight back.
 
 ## Switching repos
 

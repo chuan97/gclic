@@ -1,5 +1,6 @@
 mod app;
 mod branches;
+mod commands;
 mod compare;
 mod details;
 mod diff;
@@ -16,12 +17,7 @@ mod worker;
 
 use anyhow::Result;
 use app::App;
-use ratatui::crossterm::event::{
-    KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
-};
-use ratatui::crossterm::execute;
 use ratatui::DefaultTerminal;
-use ratatui::crossterm::terminal::supports_keyboard_enhancement;
 use std::path::PathBuf;
 
 fn main() -> Result<()> {
@@ -35,18 +31,9 @@ fn main() -> Result<()> {
     }
 
     let mut terminal = ratatui::init();
-    // Most terminals send ctrl-enter as plain enter, so gclic asks those that
-    // can to report it apart, for committing. Windows' console always does.
-    // Elsewhere ctrl-s commits too, as the help says.
-    let enhanced = matches!(supports_keyboard_enhancement(), Ok(true));
-    if enhanced {
-        let flags = KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES;
-        execute!(std::io::stdout(), PushKeyboardEnhancementFlags(flags))?;
-    }
+    commands::enhance_keys()?;
     let result = run(&mut terminal, repo_root, search_root);
-    if enhanced {
-        let _ = execute!(std::io::stdout(), PopKeyboardEnhancementFlags);
-    }
+    commands::plain_keys();
     ratatui::restore();
     result
 }

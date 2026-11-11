@@ -3,6 +3,7 @@
 
 use crate::branches::BranchesPanel;
 use crate::compare::ComparePanel;
+use crate::commands::{self, OutputPopup, Running};
 use crate::details::DetailsPane;
 use crate::repos;
 use crate::diff::{ColorCache, Colored, DiffPane, DiffView};
@@ -133,6 +134,8 @@ enum Modal {
     Help(HelpPopup),
     /// The command line, opened with `:`, holding what's typed so far.
     Command(String),
+    /// What a `:git` command printed.
+    Output(OutputPopup),
 }
 
 pub struct App {
@@ -169,6 +172,11 @@ pub struct App {
     /// The background thread doing slow reads: auto-refresh and colouring.
     worker: Worker,
     colors: ColorCache,
+    /// A `:git` command running in the background.
+    running: Option<Running>,
+    /// A `:!` command to run once the key that asked for it is handled, as
+    /// it needs the terminal, which only the main loop has.
+    shell_line: Option<String>,
     /// Where `:cd` looks for repos. It stays put as the repo changes, so the
     /// same repos are a few keys away.
     search_root: PathBuf,
@@ -185,6 +193,8 @@ impl App {
     pub fn new(search_root: PathBuf) -> App {
         let mut app = App {
             search_root,
+            running: None,
+            shell_line: None,
             tab: Tab::Repo,
             other_tab: TabState {
                 focus: Focus::Compare,
@@ -223,12 +233,20 @@ impl App {
     pub fn run(mut self, terminal: &mut DefaultTerminal) -> Result<()> {
         while !self.should_quit {
             self.take_worker_results();
+            self.take_command_result();
             terminal.draw(|frame| self.render(frame))?;
             if event::poll(KEY_WAIT)?
                 && let Event::Key(key) = event::read()?
                 && key.kind == KeyEventKind::Press
             {
                 self.handle_key(key);
+                if let Some(line) = self.shell_line.take() {
+                    let note = commands::run_in_terminal(terminal, &line)?;
+                    self.refresh();
+                    if let Some(note) = note {
+                        self.message = note;
+                    }
+                }
             }
             // Waits while a popup is open: it would only redraw what's behind it.
             let idle = matches!(self.modal, Modal::None);
@@ -504,6 +522,11 @@ impl App {
             // Any key dismisses it.
             Modal::Error(_) => {}
             Modal::Command(line) => self.handle_command_key(line, key),
+            Modal::Output(mut output) => {
+                if output.handle_key(key) {
+                    self.modal = Modal::Output(output);
+                }
+            }
         }
         // The cursor may have moved, so the diffs one key away may have changed.
         self.request_colors();
@@ -512,6 +535,12 @@ impl App {
     fn handle_main_key(&mut self, key: KeyEvent) {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
+            // While a command runs, ctrl-c stops it rather than gclic.
+            KeyCode::Char('c') if ctrl && self.running.is_some() => {
+                if let Some(running) = &mut self.running {
+                    running.stop();
+                }
+            }
             KeyCode::Char('c') if ctrl => self.should_quit = true,
             // While searching branches, letters belong to the search.
             _ if self.focus == Focus::Branches && self.branches.is_typing() => {
@@ -573,13 +602,70 @@ impl App {
     }
 
     /// Runs a command typed after `:`. The first word names it, and the rest
-    /// are its arguments.
+    /// are its arguments, except after `!`, which takes the whole line.
     fn run_command(&mut self, line: &str) {
-        let (name, rest) = line.trim().split_once(' ').unwrap_or((line.trim(), ""));
+        let line = line.trim();
+        if let Some(shell_line) = line.strip_prefix('!') {
+            if !shell_line.trim().is_empty() {
+                self.shell_line = Some(shell_line.trim().to_string());
+            }
+            return;
+        }
+        let (name, rest) = line.split_once(' ').unwrap_or((line, ""));
         match name {
             "" => {}
             "cd" => self.change_repo(rest.trim()),
-            _ => self.message = format!("Unknown command :{name}. Try :cd to switch repo"),
+            "git" => self.run_git(rest),
+            _ => self.message = format!("Unknown command :{name}. Try :cd, :git or :!"),
+        }
+    }
+
+    /// `:git …`: runs in the background, without a terminal, and shows what
+    /// it printed when it ends. One at a time, as git commands often lock.
+    fn run_git(&mut self, args: &str) {
+        if let Some(running) = &self.running {
+            self.message = format!("{} is still running: wait, or stop it with ctrl-c", running.label);
+            return;
+        }
+        let args = match commands::split_args(args) {
+            Ok(args) if args.is_empty() => {
+                self.message = "Type a git command after :git, as in :git fetch".to_string();
+                return;
+            }
+            Ok(args) => args,
+            Err(error) => {
+                self.message = error;
+                return;
+            }
+        };
+        let label = format!("git {}", args.join(" "));
+        match Running::start(label, git::user_command(&args)) {
+            Ok(running) => self.running = Some(running),
+            Err(error) => self.modal = Modal::Error(format!("Couldn't run git: {error}")),
+        }
+    }
+
+    /// Picks up a `:git` command that has ended. gclic refreshes, as it may
+    /// have changed anything. A line or less of output, after it worked,
+    /// goes to the message line, and anything else to a popup, unless another
+    /// popup is open, which it isn't worth taking over.
+    fn take_command_result(&mut self) {
+        let Some(finished) = self.running.as_ref().and_then(Running::finished) else {
+            return;
+        };
+        let Some(Running { label, stopped, .. }) = self.running.take() else {
+            return;
+        };
+        self.refresh();
+        if stopped {
+            self.message = format!("{label}: stopped");
+        } else if finished.succeeded() && finished.lines.len() <= 1 {
+            self.message = finished.lines.first().cloned().unwrap_or_else(|| format!("{label}: done"));
+        } else if matches!(self.modal, Modal::None) {
+            self.modal = Modal::Output(OutputPopup::new(&label, finished));
+        } else {
+            let outcome = if finished.succeeded() { "finished" } else { "failed" };
+            self.message = format!("{label} {outcome}");
         }
     }
 
@@ -636,6 +722,8 @@ impl App {
         }
         let mut fresh = App::new(self.search_root.clone());
         fresh.split = self.split;
+        // A command still running carries on, and its result shows here.
+        fresh.running = self.running.take();
         // The old worker stops once it finds no one listening for its results.
         *self = fresh;
     }
@@ -1117,7 +1205,8 @@ impl App {
             let cyan = Style::default().fg(Color::Cyan);
             let mut spans = vec![Span::styled(":", cyan), Span::raw(line.as_str()), Span::styled("▏", cyan)];
             if line.is_empty() {
-                spans.push(Span::styled("cd to switch repo · enter run · esc cancel", Style::default().fg(ui::DIM)));
+                let help = "cd switch repo · git … in the background · !… in the terminal · esc cancel";
+                spans.push(Span::styled(help, Style::default().fg(ui::DIM)));
             }
             frame.render_widget(Line::from(spans), area);
             return;
@@ -1127,7 +1216,13 @@ impl App {
             return;
         }
         let dim = Style::default().fg(ui::DIM);
-        let (mut spans, empty) = if self.message.is_empty() {
+        let (mut spans, empty) = if let Some(running) = self.running.as_ref().filter(|_| self.message.is_empty()) {
+            let running = format!("running {}… ", running.label);
+            (vec![Span::styled(running, Style::default().fg(Color::Yellow))]
+                .into_iter()
+                .chain(hint_spans("ctrl-c stop"))
+                .collect(), false)
+        } else if self.message.is_empty() {
             let hints = self.hints();
             (hint_spans(&hints), hints.is_empty())
         } else {
@@ -1339,6 +1434,7 @@ impl App {
         match &mut self.modal {
             // The command line is drawn in place of the hints.
             Modal::None | Modal::Command(_) => {}
+            Modal::Output(output) => output.render(frame, area),
             Modal::Picker(picker, _) => picker.render(frame, area),
             Modal::Confirm(confirm) => {
                 let bold = Style::default().add_modifier(Modifier::BOLD);

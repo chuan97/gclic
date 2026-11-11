@@ -121,6 +121,34 @@ fn try_run(args: &[&str]) -> Option<String> {
     run(args).ok().map(|text| text.trim().to_string())
 }
 
+/// A git command the user typed on gclic's command line, set up to run
+/// without a terminal: the TUI is drawing on it. Anything that would ask for
+/// something fails at once instead of waiting forever: the editor, passwords,
+/// and SSH passphrases. Keys in an SSH agent still work. Unlike gclic's own
+/// reads, it takes locks as git normally does.
+pub fn user_command(args: &[String]) -> Command {
+    let mut command = Command::new("git");
+    command
+        .args(args)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        // A command with a space runs through git's shell, on every platform.
+        // Git adds the file to edit after it, which the # makes a comment.
+        .env("GIT_EDITOR", "exit 1 #")
+        .env("GIT_SEQUENCE_EDITOR", "exit 1 #")
+        .env("GIT_PAGER", "cat")
+        .env("GIT_SSH_COMMAND", format!("{} -o BatchMode=yes", ssh_command()));
+    command
+}
+
+/// How git runs SSH: the user's own setting if they have one.
+fn ssh_command() -> String {
+    std::env::var("GIT_SSH_COMMAND")
+        .ok()
+        .or_else(|| try_run(&["config", "core.sshCommand"]))
+        .filter(|command| !command.is_empty())
+        .unwrap_or_else(|| "ssh".to_string())
+}
+
 pub fn repo_root() -> Result<String> {
     Ok(run(&["rev-parse", "--show-toplevel"])?.trim().to_string())
 }
