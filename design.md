@@ -74,7 +74,7 @@ Dependencies: `ratatui` (with crossterm), `anyhow`, and `syntect`, with its pure
 
 ### Concurrency
 
-- **The worker thread** (`worker.rs`) does the slow reads: the 500 ms auto-refresh poll (the refs fingerprint, `git status`, the open diff) and syntax highlighting. The UI hands it jobs through a small queue and picks up results from a channel every 30 ms, so keys never wait for it.
+- **The worker thread** (`worker.rs`) does the slow reads: the 500 ms auto-refresh poll (the refs fingerprint, `git status`, the open diff), which carries on under popups, as they only cover part of the screen, and syntax highlighting. The UI hands it jobs through a small queue and picks up results from a channel every 30 ms, so keys never wait for it.
 - **Only reads happen on it.** Anything that changes the repo, and the full refresh after it, stays on the UI thread, in order, so a change shows at once.
 - **Stale results are dropped:** each full refresh bumps a generation counter, and a poll asked for before the latest refresh is ignored. Colours only apply to the exact diff text they were made from.
 - **Short-lived parallelism** with `std::thread::scope`: the panes' refreshes, the graph's log and unpushed check, a poll's git calls, a comparison's refresh, and the two file versions read for highlighting all run at once.

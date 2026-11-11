@@ -248,9 +248,8 @@ impl App {
                     }
                 }
             }
-            // Waits while a popup is open: it would only redraw what's behind it.
-            let idle = matches!(self.modal, Modal::None);
-            if idle && self.last_refresh.elapsed() >= AUTO_REFRESH {
+            // Popups included, as they only cover part of the screen.
+            if self.last_refresh.elapsed() >= AUTO_REFRESH {
                 self.auto_refresh();
             }
         }
@@ -487,6 +486,9 @@ impl App {
                 self.diff = Some(diff);
                 self.details = None;
             }
+            // A refresh can get here while a popup is open, such as the
+            // command line while typing, which an error popup would replace.
+            Err(error) if !matches!(self.modal, Modal::None) => self.message = error.to_string(),
             Err(error) => self.modal = Modal::Error(error.to_string()),
         }
     }
@@ -662,7 +664,8 @@ impl App {
         if stopped {
             self.message = format!("{label}: stopped");
         } else if finished.succeeded() && finished.lines.len() <= 1 {
-            self.message = finished.lines.first().cloned().unwrap_or_else(|| format!("{label}: done"));
+            let line = finished.lines.first().map(|line| commands::strip_ansi(line));
+            self.message = line.unwrap_or_else(|| format!("{label}: done"));
         } else if matches!(self.modal, Modal::None) {
             self.modal = Modal::Output(OutputPopup::new(&label, finished));
         } else {

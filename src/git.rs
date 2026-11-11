@@ -129,6 +129,9 @@ fn try_run(args: &[&str]) -> Option<String> {
 pub fn user_command(args: &[String]) -> Command {
     let mut command = Command::new("git");
     command
+        // Git leaves colour out when its output isn't a terminal, and gclic
+        // shows it, as the user would see it in one.
+        .args(["-c", "color.ui=always"])
         .args(args)
         .env("GIT_TERMINAL_PROMPT", "0")
         // A command with a space runs through git's shell, on every platform.
