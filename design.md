@@ -49,6 +49,7 @@ Two tabs, `Repo` and `Compare`, switched with `tab`. A hint bar at the bottom li
 | `app.rs` | 1357 | `App`: all state, layout, key routing, popups, hints, tabs, the worker's results |
 | `commands.rs` | 414 | The command line's `:git` and `:!`: running in the background or in the terminal, and the output popup |
 | `repos.rs` | 203 | Finding the repos `:cd` switches between |
+| `editor.rs` | 214 | Opening a file in the user's editor at a line, or in the Neovim gclic runs in |
 | `git.rs` | 661 | Every git call, returning typed data, plus the parsers |
 | `worker.rs` | 195 | The background thread for slow reads |
 | `diff.rs` | 1562 | Unified diff and conflict parsing into side-by-side rows, line pairing, word marks, the diff pane (side by side or unified, with its minimap and change counter), the colour cache |
@@ -99,7 +100,7 @@ The measuring scripts lived in the git-ignored `target/bench/`. `docs/screenshot
 
 - The clipboard goes through `arboard`, which works on macOS, Windows and Linux.
 - The graph's beads are the branch-drawing characters (U+F5EE to U+F60D) in Ghostty and kitty, which draw them themselves, told apart by `TERM_PROGRAM` and `TERM`. WezTerm draws them only in nightly builds (since its PR #6873, April 2025), so it isn't detected. Elsewhere they're plain `●`/`○`, whose lines don't reach them.
-- `o` runs `zed path:line`, and says so if `zed` isn't on the `PATH`.
+- `o` opens the editor named by `$GCLIC_EDITOR`, `$VISUAL` or `$EDITOR`, with the line given the way each common editor takes it, and says so if it isn't on the `PATH`.
 - CI (`.github/workflows/ci.yml`) runs clippy and the tests on macOS and Windows. Pushing a version tag such as `v0.2.0` runs the release workflow (`release.yml`): it checks the tag against `Cargo.toml` and publishes a Windows zip as a GitHub Release.
 
 ## Decisions, and why
@@ -110,7 +111,7 @@ The measuring scripts lived in the git-ignored `target/bench/`. `docs/screenshot
 - **Line pairing by similarity.** Removed and added lines pair to maximise their total similarity in order, so an added line doesn't shift every pair below it. Positional pairing breaks the word marks as soon as a change adds a line.
 - **Compare is a tab.** It's a different view of the repo, not a pane, and the tab keeps a comparison around without losing it. `c` starts one from wherever you are, and closing it asks first.
 - **Git's status letters, VS Code's colours.** `?` untracked and `U` conflicted, as git has them, coloured as VS Code's git panel colours files.
-- **Zed only, for now,** on `o`, run in the background while gclic carries on.
+- **`o` opens the user's editor, and Neovim can host gclic.** The editor comes from the variables git reads. GUI editors start in the background; terminal ones get the terminal, as `:!` commands do, and quitting them comes back to gclic as it was. That starts a fresh editor each time, which is fine for an edit but not for reading code, where the language server and jump history should stay. So gclic also runs inside Neovim, through `lua/gclic.lua`, a small plugin that keeps it in a hidden floating terminal between uses. Inside Neovim, which `$NVIM` gives away, `o` asks that Neovim to open the file, through the plugin, and `:cd` changes its working folder, so the repo picked in gclic is the editor's project too. The plugin lives at the repo's root so the repo installs as a Neovim plugin.
 - **Compare goes *from* one ref *to* another,** not *before* and *after*: a comparison is a trip through the commit graph, and the two refs need not be ordered in time.
 - **Diffs are side by side or unified depending on the room,** side by side when each side gets 80 columns of text. `s` overrides that for the rest of the session. It used to stage in Changes too, as an alias of `space`, and gave that up to work from every pane. Unified is made from the same rows, each change's removed lines then its added ones, so pairing, word marks and colours carry over, and switching keeps the active row.
 - **The minimap measures the file, not the diff,** so it looks the same with the whole file or just the changes, and shows where the hunks sit in it. The file's length comes free with highlighting, which reads both versions anyway, and until then the diff's last line stands in.
@@ -128,7 +129,7 @@ The measuring scripts lived in the git-ignored `target/bench/`. `docs/screenshot
 - **Switching worktrees inside gclic:** your shell and editor would stay in the old folder. The model is one terminal tab and editor window per worktree, which is how VS Code does it too, a window per folder.
 - **A three-way merge editor:** resolving is for an editor. gclic shows the conflict and opens it in one. VS Code's merge editor works as `git mergetool`.
 - **Refreshing on terminal focus:** at 500 ms polling on the worker it adds nothing noticeable.
-- **Manual pane resizing, a vim-style cursor in diffs, editors other than Zed, a fallback for terminals without the bead characters, a quick first highlighting pass, showing a diff3 base:** each deferred until it's actually missed.
+- **Manual pane resizing, a vim-style cursor in diffs, a fallback for terminals without the bead characters, a quick first highlighting pass, showing a diff3 base:** each deferred until it's actually missed.
 
 ## Notes for the rewrite
 

@@ -3,7 +3,7 @@
 **gclic**, pronounced *g-click*, is a TUI that complements git's CLI for operations that are best done visually, and embeds a command line to run git's CLI itself for the rest.
 
 If you are looking for a mature and feature complete git TUI check out [lazygit](https://github.com/jesseduffield/lazygit).
-gclic is heavily inspired by the features I like and have grown accustomed to in [VS Code's git client](https://code.visualstudio.com/docs/sourcecontrol/overview) and the [GitLens](https://marketplace.visualstudio.com/items?itemName=eamodio.GitLens) extension and that I miss in [Zed](https://zed.dev). gclic intentionally relies on git's CLI for operations that, in my opinion, gain little from being visual, such as pushing, pulling, merging, rebasing or creating branches. Type `:git push`, or any other git command, on its built-in command line, and gclic runs it in the repo you have open. For commands that need the terminal, like interactive ones such as `git rebase -i`, `:!` sets gclic aside and runs them in your shell. Other operations, like resolving conflicts, certainly benefit from being visual, but belong in a full-fledged editor, which gclic does not aspire to be: it shows the conflict, and opens it in your editor.
+gclic is heavily inspired by the features I like and have grown accustomed to in [VS Code's git client](https://code.visualstudio.com/docs/sourcecontrol/overview) and the [GitLens](https://marketplace.visualstudio.com/items?itemName=eamodio.GitLens) extension and that I miss in other editors. gclic intentionally relies on git's CLI for operations that, in my opinion, gain little from being visual, such as pushing, pulling, merging, rebasing or creating branches. Type `:git push`, or any other git command, on its built-in command line, and gclic runs it in the repo you have open. For commands that need the terminal, like interactive ones such as `git rebase -i`, `:!` sets gclic aside and runs them in your shell. Other operations, like resolving conflicts, certainly benefit from being visual, but belong in a full-fledged editor, which gclic does not aspire to be: it shows the conflict, and opens it in your editor.
 
 ## Features
 
@@ -16,6 +16,7 @@ gclic is heavily inspired by the features I like and have grown accustomed to in
 - **[Stashes](#stashes):** see what's in each stash, and apply, pop or drop it.
 - **[Running commands](#running-commands):** run git, or anything else, from gclic, in the repo it shows.
 - **[Switching repos](#switching-repos):** fuzzy find any repo near the one you're in, and switch to it without leaving gclic.
+- **[Your editor](#your-editor):** open the file you're on in your editor, at the line.
 - **[Keyboard driven](#keyboard-driven):** with Vim-style keybindings, and the keys that apply always shown at the bottom.
 
 ## Installation
@@ -39,9 +40,7 @@ Then run `gclic` inside a git repository. Press `?` for help.
 
 **Note:** As of now, gclic is fully *vibe-coded*. It is barely a working prototype, and has only been tested in macOS with [Ghostty](https://ghostty.org) as the terminal emulator.
 
-gclic currently expects:
-- **git** on the `PATH`.
-- **[Zed](https://zed.dev)**, to open files in an editor with `o`.
+gclic currently expects **git** on the `PATH`.
 
 In [Ghostty](https://ghostty.org) and [kitty](https://sw.kovidgoyal.net/kitty/), which draw git graph symbols themselves, the graph's beads join up with their lines, as in the screenshots. Other terminals, including Windows Terminal, get plain beads, and look the same otherwise.
 
@@ -67,7 +66,7 @@ The Branches pane shows the checked-out branch, and when focused, every branch. 
 
 Diffs are syntax highlighted with VS Code's Dark Modern colours, with the words that changed marked. They're side by side when the pane is wide enough for about 80 columns of text a side, and unified otherwise. A minimap down the right edge shows the whole file, its removed lines on the left and its added ones on the right, with the part on screen lighter. The bottom border counts the changes, and says which one you're on.
 
-From any pane, while a diff is showing, `n`/`N` jump between its changes, `e` switches between the whole file and just the changes, and `s` between side by side and unified. A second `enter` moves into a diff: `j`/`k` move the active line, `h`/`l` scroll sideways, and `o` opens the file in Zed at the active line.
+From any pane, while a diff is showing, `n`/`N` jump between its changes, `e` switches between the whole file and just the changes, and `s` between side by side and unified. A second `enter` moves into a diff: `j`/`k` move the active line, `h`/`l` scroll sideways, and `o` opens the file in [your editor](#your-editor) at the active line.
 
 ![A commit's diff, with the active line a few rows down](docs/images/diff.svg)
 
@@ -96,6 +95,12 @@ While a merge, rebase or cherry-pick is stopped on conflicts, the Changes pane s
 ## Switching repos
 
 `:` opens a command line at the bottom, for things done now and then rather than all the time. `:cd` lists the git repos in the folder holding the current one, to fuzzy find one and switch to it, with `..` first to search a folder up. `:cd name` switches straight to the repo `name` can only mean, its folder's name or the only one it matches, and otherwise starts the search with `name` typed in. `:cd ..` searches a folder up. Started outside a repo, say in `~/Code`, gclic lists the repos under it to open one, and `:cd` keeps searching there.
+
+## Your editor
+
+`o` opens the file you're on in your editor, at the line you're on in its diff. The editor is the first of `$GCLIC_EDITOR`, `$VISUAL` and `$EDITOR` that's set, as git picks its own: vi if none is, Notepad on Windows. A terminal editor, such as vim, Neovim or Helix, gets the terminal, and quitting it brings you back to gclic as you left it. A GUI one, such as Zed or VS Code, opens in its own window. gclic knows how the common editors take a line. For another, say where the file and line go: `GCLIC_EDITOR="myeditor --line {line} {file}"`.
+
+To set it, add `export GCLIC_EDITOR=nvim` to your `~/.zshrc` or `~/.bashrc`, or on Windows run `[Environment]::SetEnvironmentVariable("GCLIC_EDITOR", "nvim", "User")` in PowerShell, and open a new terminal. The hint bar names the editor `o` will use.
 
 ## Keyboard driven
 
