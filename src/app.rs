@@ -102,6 +102,8 @@ impl Action {
 pub enum Confirm {
     Restore(String),
     DeleteUntracked(String),
+    /// D: every change not staged, as d would discard each.
+    DiscardAll { restore: Vec<String>, delete: Vec<String> },
     /// Closing loses refs the user may have taken a while to pick, and tab
     /// already leaves the comparison without losing it.
     CloseCompare,
@@ -1042,6 +1044,7 @@ impl App {
             KeyCode::Enter => {
                 let result = match &confirm {
                     Confirm::Restore(path) => git::restore(path),
+                    Confirm::DiscardAll { restore, delete } => git::discard_all(restore, delete),
                     Confirm::DeleteUntracked(path) => git::delete_untracked(path),
                     Confirm::CloseCompare => {
                         self.close_compare();
@@ -1479,6 +1482,10 @@ impl App {
                 if self.staging.can_restore() {
                     hints.push("d restore");
                 }
+                let (restore, delete) = self.staging.discardable();
+                if !restore.is_empty() || !delete.is_empty() {
+                    hints.push("D discard all");
+                }
                 if self.staging.has_staged() {
                     hints.push("c commit");
                 }
@@ -1663,6 +1670,25 @@ impl App {
                         ])],
                         "discard",
                     ),
+                    Confirm::DiscardAll { restore, delete } => {
+                        let files = |count: usize, kind: &str| match count {
+                            1 => format!("1 {kind}file"),
+                            n => format!("{n} {kind}files"),
+                        };
+                        let what = match (restore.len(), delete.len()) {
+                            (r, 0) => format!("Discard your changes to {}?", files(r, "")),
+                            (0, d) => format!("Delete {}?", files(d, "untracked ")),
+                            (r, d) => format!("Discard your changes to {} and delete {}?", files(r, ""), files(d, "untracked ")),
+                        };
+                        (
+                            " Discard all ",
+                            vec![
+                                Line::styled(what, bold),
+                                Line::styled("Staged changes stay. This can't be undone.", Style::default().fg(ui::DIM)),
+                            ],
+                            "discard",
+                        )
+                    }
                     Confirm::DropStash(stash) => (
                         " Drop stash ",
                         vec![

@@ -47,7 +47,7 @@ In [Ghostty](https://ghostty.org) and [kitty](https://sw.kovidgoyal.net/kitty/),
 
 ## Staging and commit
 
-The Changes pane lists staged and unstaged files, each name followed by its folder. `space` stages or unstages one, `a`/`A` all of them, `d` restores a file (after asking), and `c` commits what's staged, with `ctrl-enter` to confirm. `enter` shows a file's diff on the right, and the diff follows as you move through the list.
+The Changes pane lists staged and unstaged files, each name followed by its folder. `space` stages or unstages one, `a`/`A` all of them, `d` restores a file (after asking), `D` every file not staged, and `c` commits what's staged, with `ctrl-enter` to confirm. `enter` shows a file's diff on the right, and the diff follows as you move through the list.
 
 ![The Changes pane with a file's diff on the right](docs/images/staging.svg)
 

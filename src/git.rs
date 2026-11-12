@@ -277,6 +277,24 @@ pub fn delete_untracked(path: &str) -> Result<()> {
     run(&["clean", "-f", "--", path]).map(|_| ())
 }
 
+/// Restores these changed files and deletes these untracked ones, each kind
+/// in one git call.
+pub fn discard_all(restore: &[String], delete: &[String]) -> Result<()> {
+    let with_paths = |command: &[&str], paths: &[String]| {
+        let mut args: Vec<&str> = command.to_vec();
+        args.push("--");
+        args.extend(paths.iter().map(String::as_str));
+        run(&args).map(|_| ())
+    };
+    if !restore.is_empty() {
+        with_paths(&["restore"], restore)?;
+    }
+    if !delete.is_empty() {
+        with_paths(&["clean", "-f"], delete)?;
+    }
+    Ok(())
+}
+
 pub fn commit(message: &str) -> Result<()> {
     run(&["commit", "-m", message]).map(|_| ())
 }

@@ -49,6 +49,7 @@ const LEFT: &[Section] = &[
             ("space", "stage or unstage"),
             ("a A", "stage all, unstage all"),
             ("d", "restore the file, or delete it if new"),
+            ("D", "do that to every change not staged"),
             ("c", "commit what's staged"),
             ("enter", "show the diff"),
         ],

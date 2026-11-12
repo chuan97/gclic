@@ -156,6 +156,7 @@ impl StagingPanel {
             KeyCode::Char('a') => return Action::after_change(git::stage_all()),
             KeyCode::Char('A') => return Action::after_change(git::unstage_all()),
             KeyCode::Char('d') => return self.ask_to_restore(),
+            KeyCode::Char('D') => return self.ask_to_discard_all(),
             KeyCode::Char('c') => {
                 return if self.status.staged.is_empty() {
                     Action::Message("Nothing staged to commit".to_string())
@@ -187,6 +188,24 @@ impl StagingPanel {
     /// than a submodule, which restoring doesn't handle.
     pub fn can_restore(&self) -> bool {
         matches!(self.selection(), Some((Section::Changes, entry)) if !is_folder(&entry.path))
+    }
+
+    /// What D would discard: as d does it, file by file, the changed files to
+    /// restore and the untracked ones to delete. Submodules are left to git,
+    /// and conflicts and staged changes aren't in the list.
+    pub fn discardable(&self) -> (Vec<String>, Vec<String>) {
+        let files = self.status.unstaged.iter().filter(|entry| !is_folder(&entry.path));
+        let (delete, restore): (Vec<&FileEntry>, Vec<&FileEntry>) = files.partition(|entry| entry.status == '?');
+        let paths = |entries: Vec<&FileEntry>| entries.into_iter().map(|entry| entry.path.clone()).collect();
+        (paths(restore), paths(delete))
+    }
+
+    fn ask_to_discard_all(&self) -> Action {
+        let (restore, delete) = self.discardable();
+        if restore.is_empty() && delete.is_empty() {
+            return Action::Message("Nothing to discard: staged changes stay".to_string());
+        }
+        Action::Confirm(Confirm::DiscardAll { restore, delete })
     }
 
     fn ask_to_restore(&self) -> Action {
@@ -299,6 +318,18 @@ mod tests {
 
     fn selected_path(panel: &StagingPanel) -> &str {
         &panel.selection().unwrap().1.path
+    }
+
+    #[test]
+    fn discarding_all_restores_changes_and_deletes_new_files_but_not_staged_ones() {
+        let mut p = panel(&["staged"], &["edited", "new"], 0);
+        p.status.unstaged[1].status = '?';
+        p.status.conflicted = conflicts(&["clash"]);
+        let (restore, delete) = p.discardable();
+        assert_eq!((restore, delete), (vec!["edited".to_string()], vec!["new".to_string()]));
+        assert!(matches!(p.handle_key(KeyEvent::from(KeyCode::Char('D'))), Action::Confirm(Confirm::DiscardAll { .. })));
+        let nothing = panel(&["staged"], &[], 0);
+        assert!(matches!(nothing.ask_to_discard_all(), Action::Message(_)));
     }
 
     #[test]
