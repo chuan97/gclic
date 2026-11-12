@@ -1,9 +1,9 @@
 # gclic (git CLI companion)
 
-**gclic**, pronounced *g-click*, is a TUI intended to complement git's CLI for operations that are best done visually.
+**gclic**, pronounced *g-click*, is a TUI that complements git's CLI for operations that are best done visually, and embeds a command line to run git's CLI itself for the rest.
 
 If you are looking for a mature and feature complete git TUI check out [lazygit](https://github.com/jesseduffield/lazygit).
-gclic is heavily inspired by the features I like and have grown accustomed to in [VS Code's git client](https://code.visualstudio.com/docs/sourcecontrol/overview) and the [GitLens](https://marketplace.visualstudio.com/items?itemName=eamodio.GitLens) extension and that I miss in [Zed](https://zed.dev). gclic intentionally leaves out operations that in my opinion gain little from being visual, such as pushing, pulling and fetching, merging and rebasing, or creating branches, which it leaves to git's CLI, or to running git from gclic itself. The one exception is a fetch in the background, so what it shows of the remotes stays current. Others, like resolving conflicts, certainly benefit from being visual, but belong in a full-fledged editor, which gclic does not aspire to be: it shows the conflict, and opens it in your editor.
+gclic is heavily inspired by the features I like and have grown accustomed to in [VS Code's git client](https://code.visualstudio.com/docs/sourcecontrol/overview) and the [GitLens](https://marketplace.visualstudio.com/items?itemName=eamodio.GitLens) extension and that I miss in [Zed](https://zed.dev). gclic intentionally relies on git's CLI for operations that, in my opinion, gain little from being visual, such as pushing, pulling, merging, rebasing or creating branches. Type `:git push`, or any other git command, on its built-in command line, and gclic runs it in the repo you have open. For commands that need the terminal, like interactive ones such as `git rebase -i`, `:!` sets gclic aside and runs them in your shell. Other operations, like resolving conflicts, certainly benefit from being visual, but belong in a full-fledged editor, which gclic does not aspire to be: it shows the conflict, and opens it in your editor.
 
 ## Features
 
@@ -37,7 +37,7 @@ cargo install --git https://github.com/chuan97/gclic
 
 Then run `gclic` inside a git repository. Press `?` for help.
 
-**Note:** As of now, gclic is fully *vibe-coded*. It is barely a working prototype, and has only been tested in macOS with [Ghostty](https://ghostty.org) as the terminal emulator. It is best run in a horizontally split pane, with gclic in one pane and git's CLI in the other.
+**Note:** As of now, gclic is fully *vibe-coded*. It is barely a working prototype, and has only been tested in macOS with [Ghostty](https://ghostty.org) as the terminal emulator.
 
 gclic currently expects:
 - **git** on the `PATH`.
