@@ -19,10 +19,11 @@ local M = {}
 M.config = {
   -- The command that runs gclic.
   cmd = "gclic",
-  -- The window's share of the editor, wide and high.
-  width = 0.9,
-  height = 0.9,
-  border = "rounded",
+  -- The window's share of the editor, wide and high: all of it, but for the
+  -- command line, unless set lower for a pop-up, which a border then suits.
+  width = 1,
+  height = 1,
+  border = "none",
   -- A key that hides gclic from inside it too, where its keys are gclic's.
   -- One gclic doesn't use. False for none.
   toggle_key = "<C-g>",
@@ -38,19 +39,27 @@ local function valid_buf()
   return state.buf ~= nil and vim.api.nvim_buf_is_valid(state.buf)
 end
 
-local function show()
-  local columns, lines = vim.o.columns, vim.o.lines
-  local width = math.floor(columns * M.config.width)
-  local height = math.floor(lines * M.config.height)
-  state.win = vim.api.nvim_open_win(state.buf, true, {
+--- Where the window goes, for the editor's size now. A border takes a row
+--- and a column on each side, outside the window.
+local function placement()
+  local columns, lines = vim.o.columns, vim.o.lines - vim.o.cmdheight
+  local edge = M.config.border == "none" and 0 or 2
+  local width = math.max(1, math.floor(columns * M.config.width) - edge)
+  local height = math.max(1, math.floor(lines * M.config.height) - edge)
+  return {
     relative = "editor",
     width = width,
     height = height,
-    col = math.floor((columns - width) / 2),
-    row = math.floor((lines - height) / 2),
-    style = "minimal",
-    border = M.config.border,
-  })
+    col = math.floor((columns - width - edge) / 2),
+    row = math.floor((lines - height - edge) / 2),
+  }
+end
+
+local function show()
+  local options = placement()
+  options.style = "minimal"
+  options.border = M.config.border
+  state.win = vim.api.nvim_open_win(state.buf, true, options)
   vim.cmd.startinsert()
 end
 
@@ -115,6 +124,15 @@ end
 function M.setup(opts)
   M.config = vim.tbl_extend("force", M.config, opts or {})
   vim.api.nvim_create_user_command("Gclic", M.toggle, { desc = "Toggle gclic" })
+  -- The window follows the terminal's size, and gclic redraws to fit it.
+  vim.api.nvim_create_autocmd("VimResized", {
+    group = vim.api.nvim_create_augroup("gclic", { clear = true }),
+    callback = function()
+      if valid_win() then
+        vim.api.nvim_win_set_config(state.win, placement())
+      end
+    end,
+  })
 end
 
 return M
