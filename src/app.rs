@@ -1394,12 +1394,17 @@ impl App {
         self.render_modal(frame);
     }
 
-    /// A bar in the repo's colour across the top, with gclic's name in the
-    /// middle, to tell apart repos open side by side.
+    /// A line in the repo's colour across the top, broken in the middle by
+    /// gclic's name, to tell apart repos open side by side.
     fn render_accent_bar(&self, frame: &mut Frame, area: Rect) {
-        let style = Style::default().bg(self.accent.color()).fg(self.accent.text());
-        let name = Line::styled("gclic", style.add_modifier(Modifier::BOLD)).centered();
-        frame.render_widget(Paragraph::new(name).style(style), area);
+        let style = Style::default().fg(self.accent.color());
+        let (left, right) = accent_line(area.width as usize);
+        let line = Line::from(vec![
+            Span::styled(left, style),
+            Span::styled(ACCENT_NAME, style.add_modifier(Modifier::BOLD)),
+            Span::styled(right, style),
+        ]);
+        frame.render_widget(line, area);
     }
 
     /// The tab bar: both tabs, the showing one highlighted, the comparison's
@@ -1947,6 +1952,17 @@ fn compare_items(recent_yanks: &[String]) -> Result<Vec<String>> {
     Ok(items)
 }
 
+/// The name in the middle of the line at the top, with a space either side.
+const ACCENT_NAME: &str = " gclic ";
+
+/// The line either side of the name, to fill `width` columns with the name
+/// centred. The right side takes the odd column.
+fn accent_line(width: usize) -> (String, String) {
+    let line = width.saturating_sub(ACCENT_NAME.len());
+    let left = line / 2;
+    ("━".repeat(left), "━".repeat(line - left))
+}
+
 /// The folder holding the repo, ending in a separator and with `~` for the
 /// home folder, and the repo's own folder name. gclic runs from the repo's
 /// root, which main moves to.
@@ -2067,6 +2083,13 @@ mod tests {
         assert_eq!(minutes(3), "fetched 3m ago");
         assert_eq!(minutes(59), "fetched 59m ago");
         assert_eq!(minutes(130), "fetched 2h ago");
+    }
+
+    #[test]
+    fn the_accent_line_centres_the_name() {
+        let (left, right) = accent_line(20);
+        assert_eq!(format!("{left}{ACCENT_NAME}{right}"), "━━━━━━ gclic ━━━━━━━");
+        assert_eq!(accent_line(3), (String::new(), String::new()));
     }
 
     #[test]

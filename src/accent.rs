@@ -19,7 +19,8 @@ pub fn bar_shown() -> bool {
 }
 
 /// Lightness and chroma in OKLCH, the same for every repo, so each hue looks
-/// as strong as the others: light enough for black text, and not garish.
+/// as strong as the others: light enough to read on a dark background, and
+/// not garish.
 const LIGHTNESS: f64 = 0.72;
 const CHROMA: f64 = 0.12;
 
@@ -43,12 +44,6 @@ impl Accent {
     pub fn color(&self) -> Color {
         let (r, g, b) = self.rgb;
         Color::Rgb(r, g, b)
-    }
-
-    /// Black or white, whichever contrasts more with the colour. They tie at
-    /// a luminance of about 0.18.
-    pub fn text(&self) -> Color {
-        if luminance(self.rgb) > 0.179 { Color::Black } else { Color::White }
     }
 
     pub fn hex(&self) -> String {
@@ -137,15 +132,6 @@ fn gamma(c: f64) -> f64 {
     if c <= 0.0031308 { 12.92 * c } else { 1.055 * c.powf(1.0 / 2.4) - 0.055 }
 }
 
-/// Relative luminance, as WCAG defines it.
-fn luminance((r, g, b): (u8, u8, u8)) -> f64 {
-    let linear = |c: u8| {
-        let c = f64::from(c) / 255.0;
-        if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
-    };
-    0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -163,20 +149,6 @@ mod tests {
         assert_eq!(from_name("gclic"), from_name("gclic"));
         assert_eq!(from_name("gclic"), from_name("GCLIC"));
         assert_ne!(from_name("gclic"), from_name("dotfiles"));
-    }
-
-    #[test]
-    fn colours_from_names_all_take_black_text() {
-        for hue in (0..360).step_by(5) {
-            let rgb = oklch_to_rgb(LIGHTNESS, CHROMA, f64::from(hue));
-            let accent = Accent { rgb, custom: false };
-            assert_eq!(accent.text(), Color::Black, "hue {hue}: {}", accent.hex());
-        }
-    }
-
-    #[test]
-    fn dark_custom_colours_take_white_text() {
-        assert_eq!(Accent { rgb: (0x20, 0x30, 0x80), custom: true }.text(), Color::White);
     }
 
     #[test]
