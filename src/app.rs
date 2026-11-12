@@ -1411,7 +1411,8 @@ impl App {
             let cyan = Style::default().fg(Color::Cyan);
             let mut spans = vec![Span::styled(":", cyan), Span::raw(line.as_str()), Span::styled("▏", cyan)];
             if line.is_empty() {
-                let help = "cd switch repo · git … in the background · !… in the terminal · esc cancel";
+                // Just the names, so they fit a narrow window. The help has the rest.
+                let help = "cd · git … · !… · stash · fetch · enter run · esc cancel";
                 spans.push(Span::styled(help, Style::default().fg(ui::DIM)));
             }
             frame.render_widget(Line::from(spans), area);
