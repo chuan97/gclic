@@ -133,14 +133,68 @@ pub fn user_command(args: &[String]) -> Command {
         // shows it, as the user would see it in one.
         .args(["-c", "color.ui=always"])
         .args(args)
-        .env("GIT_TERMINAL_PROMPT", "0")
         // A command with a space runs through git's shell, on every platform.
         // Git adds the file to edit after it, which the # makes a comment.
         .env("GIT_EDITOR", "exit 1 #")
         .env("GIT_SEQUENCE_EDITOR", "exit 1 #")
-        .env("GIT_PAGER", "cat")
-        .env("GIT_SSH_COMMAND", format!("{} -o BatchMode=yes", ssh_command()));
+        .env("GIT_PAGER", "cat");
+    no_prompts(&mut command);
     command
+}
+
+/// Makes a command that reaches a remote fail rather than ask for a password
+/// or a passphrase, which there's no terminal to ask on.
+fn no_prompts(command: &mut Command) {
+    command
+        .stdin(Stdio::null())
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_SSH_COMMAND", format!("{} -o BatchMode=yes", ssh_command()));
+}
+
+// ---------------------------------------------------------------- fetching
+
+/// The remotes that local branches track, each once: what the background
+/// fetch keeps up to date. Others are fetched by hand.
+pub fn tracked_remotes() -> Vec<String> {
+    let text = try_run(&["for-each-ref", "--format=%(upstream:remotename)", "refs/heads"]);
+    parse_tracked_remotes(&text.unwrap_or_default())
+}
+
+/// A branch with no upstream has an empty line, and one tracking a local
+/// branch has `.`, neither of which is a remote.
+fn parse_tracked_remotes(text: &str) -> Vec<String> {
+    let mut remotes: Vec<String> = Vec::new();
+    for remote in text.lines().map(str::trim).filter(|remote| !remote.is_empty() && *remote != ".") {
+        if !remotes.iter().any(|known| known == remote) {
+            remotes.push(remote.to_string());
+        }
+    }
+    remotes
+}
+
+/// Fetches these remotes in the background, on a best-effort basis: it never
+/// asks for anything, not even through Git Credential Manager's sign-in
+/// window, so it only works where signing in already happened, as with an
+/// SSH agent or stored credentials. It leaves out the housekeeping a fetch
+/// may start, which can be slow, and FETCH_HEAD, which belongs to the user's
+/// own fetches.
+pub fn background_fetch(remotes: &[String]) -> Result<()> {
+    if remotes.is_empty() {
+        return Ok(());
+    }
+    let mut command = Command::new("git");
+    command
+        .args(["-c", "gc.auto=0", "-c", "maintenance.auto=false"])
+        .args(["fetch", "--quiet", "--no-write-fetch-head", "--multiple"])
+        .args(remotes)
+        .env("GCM_INTERACTIVE", "never");
+    no_prompts(&mut command);
+    let output = command.output().map_err(|e| anyhow!("could not run git: {e}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        bail!("{}", stderr.lines().next().unwrap_or("git fetch failed").trim());
+    }
+    Ok(())
 }
 
 /// How git runs SSH: the user's own setting if they have one.
@@ -637,6 +691,12 @@ mod tests {
         assert!(status.staged.is_empty());
         assert_eq!(status.conflicted, vec![entry('U', "a"), entry('U', "b"), entry('U', "c")]);
         assert_eq!(status.unstaged, vec![entry('M', "d")]);
+    }
+
+    #[test]
+    fn tracked_remotes_come_once_each_and_only_remotes() {
+        let text = "origin\n\norigin\nupstream\n.\n";
+        assert_eq!(parse_tracked_remotes(text), ["origin", "upstream"]);
     }
 
     #[test]

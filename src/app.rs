@@ -23,10 +23,13 @@ use ratatui::widgets::{Clear, Paragraph, Wrap};
 use ratatui::{DefaultTerminal, Frame};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant};
 
 const AUTO_REFRESH: Duration = Duration::from_millis(500);
+/// How often the remotes the branches track are fetched in the background.
+const FETCH_EVERY: Duration = Duration::from_secs(60);
 /// How long to wait for a key before checking on the worker's results. Short,
 /// so colours appear soon after they're ready.
 const KEY_WAIT: Duration = Duration::from_millis(30);
@@ -174,6 +177,14 @@ pub struct App {
     colors: ColorCache,
     /// A `:git` command running in the background.
     running: Option<Running>,
+    /// Whether the remotes are fetched every minute. On unless `:fetch off`.
+    auto_fetch: bool,
+    /// A fetch under way, on its own thread, as it can take seconds.
+    fetching: Option<Receiver<Result<()>>>,
+    /// When the last fetch started, to start the next a minute later.
+    fetch_started: Option<Instant>,
+    /// How the last fetch went: when it finished, or why it failed.
+    fetched: Option<Result<Instant, String>>,
     /// A `:!` command to run once the key that asked for it is handled, as
     /// it needs the terminal, which only the main loop has.
     shell_line: Option<String>,
@@ -194,6 +205,10 @@ impl App {
         let mut app = App {
             search_root,
             running: None,
+            auto_fetch: true,
+            fetching: None,
+            fetch_started: None,
+            fetched: None,
             shell_line: None,
             tab: Tab::Repo,
             other_tab: TabState {
@@ -234,6 +249,7 @@ impl App {
         while !self.should_quit {
             self.take_worker_results();
             self.take_command_result();
+            self.keep_fetching();
             terminal.draw(|frame| self.render(frame))?;
             if event::poll(KEY_WAIT)?
                 && let Event::Key(key) = event::read()?
@@ -620,7 +636,8 @@ impl App {
             "" => {}
             "cd" => self.change_repo(rest.trim()),
             "git" => self.run_git(rest),
-            _ => self.message = format!("Unknown command :{name}. Try :cd, :git or :!"),
+            "fetch" => self.fetch_command(rest.trim()),
+            _ => self.message = format!("Unknown command :{name}. Try :cd, :git, :fetch or :!"),
         }
     }
 
@@ -646,6 +663,69 @@ impl App {
         match Running::start(label, git::user_command(&args)) {
             Ok(running) => self.running = Some(running),
             Err(error) => self.modal = Modal::Error(format!("Couldn't run git: {error}")),
+        }
+    }
+
+    /// `:fetch` fetches now, and `:fetch on` or `off` turns fetching every
+    /// minute on or off, for the session.
+    fn fetch_command(&mut self, setting: &str) {
+        match setting {
+            "" if self.fetching.is_some() => self.message = "Already fetching".to_string(),
+            "" => self.start_fetch(),
+            "on" => {
+                self.auto_fetch = true;
+                self.message = "Fetching every minute".to_string();
+            }
+            "off" => {
+                self.auto_fetch = false;
+                self.message = "Not fetching any more, until :fetch on".to_string();
+            }
+            _ => self.message = "Try :fetch, :fetch on or :fetch off".to_string(),
+        }
+    }
+
+    /// Fetches the remotes the branches track, on a thread of its own, as it
+    /// can take seconds, which would hold up the worker's refreshes.
+    fn start_fetch(&mut self) {
+        let (send, receive) = mpsc::channel();
+        thread::spawn(move || {
+            let _ = send.send(git::background_fetch(&git::tracked_remotes()));
+        });
+        self.fetching = Some(receive);
+        self.fetch_started = Some(Instant::now());
+    }
+
+    /// Picks up a fetch that has ended, and starts the next when it's due. A
+    /// fetch that brought anything moves the remote refs, which the next poll
+    /// sees, refreshing everything.
+    fn keep_fetching(&mut self) {
+        if let Some(fetching) = &self.fetching {
+            match fetching.try_recv() {
+                Ok(result) => {
+                    self.fetched = Some(result.map(|()| Instant::now()).map_err(|error| error.to_string()));
+                    self.fetching = None;
+                }
+                Err(TryRecvError::Empty) => {}
+                Err(TryRecvError::Disconnected) => {
+                    self.fetched = Some(Err("the fetch crashed".to_string()));
+                    self.fetching = None;
+                }
+            }
+        }
+        let due = self.fetch_started.is_none_or(|started| started.elapsed() >= FETCH_EVERY);
+        if self.auto_fetch && self.fetching.is_none() && due {
+            self.start_fetch();
+        }
+    }
+
+    /// What the Branches title says about fetching: how long ago it last
+    /// worked, or that it failed. Nothing before the first fetch ends.
+    fn fetch_note(&self) -> Option<String> {
+        match &self.fetched {
+            None if self.fetching.is_some() => Some("fetching…".to_string()),
+            None => None,
+            Some(Ok(finished)) => Some(fetched_ago(finished.elapsed())),
+            Some(Err(_)) => Some("fetch failed".to_string()),
         }
     }
 
@@ -727,6 +807,7 @@ impl App {
         }
         let mut fresh = App::new(self.search_root.clone());
         fresh.split = self.split;
+        fresh.auto_fetch = self.auto_fetch;
         // A command still running carries on, and its result shows here.
         fresh.running = self.running.take();
         // The old worker stops once it finds no one listening for its results.
@@ -1171,7 +1252,8 @@ impl App {
             Constraint::Min(0),
         ])
         .areas(area);
-        self.branches.render(frame, branches, self.focus == Focus::Branches);
+        let note = self.fetch_note();
+        self.branches.render(frame, branches, self.focus == Focus::Branches, note.as_deref());
         self.staging.render(frame, changes, self.focus == Focus::Changes);
         self.graph.render(frame, graph, self.focus == Focus::Graph);
 
@@ -1677,6 +1759,17 @@ pub fn choose_repo(terminal: &mut DefaultTerminal, mut root: PathBuf) -> Result<
     }
 }
 
+/// How long ago, in minutes or hours, or under a minute in steps of ten
+/// seconds, so it doesn't tick away at the edge of the eye.
+fn fetched_ago(elapsed: Duration) -> String {
+    match elapsed.as_secs() {
+        0..10 => "fetched just now".to_string(),
+        seconds @ 10..60 => format!("fetched {}s ago", seconds / 10 * 10),
+        seconds @ 60..3600 => format!("fetched {}m ago", seconds / 60),
+        seconds => format!("fetched {}h ago", seconds / 3600),
+    }
+}
+
 /// The first word on the clipboard, which is all a ref could be. None if it
 /// holds no text.
 fn read_clipboard() -> Result<Option<String>> {
@@ -1702,6 +1795,17 @@ mod tests {
 
     fn press(app: &mut App, code: KeyCode) {
         app.handle_key(KeyEvent::from(code));
+    }
+
+    #[test]
+    fn the_fetch_note_says_how_long_ago() {
+        let minutes = |m: u64| fetched_ago(Duration::from_secs(m * 60));
+        assert_eq!(fetched_ago(Duration::from_secs(9)), "fetched just now");
+        assert_eq!(fetched_ago(Duration::from_secs(10)), "fetched 10s ago");
+        assert_eq!(fetched_ago(Duration::from_secs(59)), "fetched 50s ago");
+        assert_eq!(minutes(3), "fetched 3m ago");
+        assert_eq!(minutes(59), "fetched 59m ago");
+        assert_eq!(minutes(130), "fetched 2h ago");
     }
 
     #[test]
