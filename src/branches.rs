@@ -204,8 +204,13 @@ impl BranchesPanel {
         (self.list_lines(true).0.len().max(1) + search) as u16
     }
 
-    pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
-        let block = ui::panel(TITLE.to_string(), focused);
+    /// `note` goes at the right of the title: when the remotes were fetched.
+    pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool, note: Option<&str>) {
+        let mut block = ui::panel(TITLE.to_string(), focused);
+        if let Some(note) = note {
+            let note = Line::styled(format!(" {note} "), Style::default().fg(ui::DIM));
+            block = block.title(note.right_aligned());
+        }
         let mut list = block.inner(area);
         frame.render_widget(block, area);
 

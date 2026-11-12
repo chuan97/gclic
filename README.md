@@ -3,7 +3,7 @@
 **gclic**, pronounced *g-click*, is a TUI intended to complement git's CLI for operations that are best done visually.
 
 If you are looking for a mature and feature complete git TUI check out [lazygit](https://github.com/jesseduffield/lazygit).
-gclic is heavily inspired by the features I like and have grown accustomed to in [VS Code's git client](https://code.visualstudio.com/docs/sourcecontrol/overview) and the [GitLens](https://marketplace.visualstudio.com/items?itemName=eamodio.GitLens) extension and that I miss in [Zed](https://zed.dev). gclic intentionally leaves out operations that in my opinion gain little from being visual, such as pushing, pulling and fetching, merging and rebasing, or creating branches, which it leaves to git's CLI. Others, like resolving conflicts, certainly benefit from being visual, but belong in a full-fledged editor, which gclic does not aspire to be: it shows the conflict, and opens it in your editor.
+gclic is heavily inspired by the features I like and have grown accustomed to in [VS Code's git client](https://code.visualstudio.com/docs/sourcecontrol/overview) and the [GitLens](https://marketplace.visualstudio.com/items?itemName=eamodio.GitLens) extension and that I miss in [Zed](https://zed.dev). gclic intentionally leaves out operations that in my opinion gain little from being visual, such as pushing, pulling and fetching, merging and rebasing, or creating branches, which it leaves to git's CLI, or to running git from gclic itself. The one exception is a fetch in the background, so what it shows of the remotes stays current. Others, like resolving conflicts, certainly benefit from being visual, but belong in a full-fledged editor, which gclic does not aspire to be: it shows the conflict, and opens it in your editor.
 
 ## Features
 
@@ -13,6 +13,8 @@ gclic is heavily inspired by the features I like and have grown accustomed to in
 - **[Diffs](#diffs):** read any file's changes side by side or unified, with syntax highlighting, the changed words marked, and a minimap of the whole file.
 - **[Compare](#compare):** pick any two refs to see how far they have diverged and which files differ.
 - **[Merge conflicts](#merge-conflicts):** see each conflict as your side against theirs, and open it in your editor to resolve it.
+- **[Running commands](#running-commands):** run git, or anything else, from gclic, in the repo it shows.
+- **[Switching repos](#switching-repos):** fuzzy find any repo near the one you're in, and switch to it without leaving gclic.
 - **[Keyboard driven](#keyboard-driven):** with Vim-style keybindings, and the keys that apply always shown at the bottom.
 
 ## Installation
@@ -56,7 +58,7 @@ The graph shows the checked-out branch and its upstream by default, or any branc
 
 ## Branches
 
-The Branches pane shows the checked-out branch, and when focused, every branch. Each one shows how far it is ahead (↑) or behind (↓) its upstream. `enter` checks a branch out, `i` searches, `space` lists a branch's remotes, and `c` compares it with the checked-out branch.
+The Branches pane shows the checked-out branch, and when focused, every branch. Each one shows how far it is ahead (↑) or behind (↓) its upstream. To keep that current, gclic fetches the remotes your branches track every minute, in the background, and its title says how long ago it last did. It never asks for a password or passphrase, so it works where you've already signed in, as with an SSH agent or stored credentials, and says `fetch failed` otherwise. `:fetch` fetches now, and `:fetch off` stops it for the session. `enter` checks a branch out, `i` searches, `space` lists a branch's remotes, and `c` compares it with the checked-out branch.
 
 ![The Branches pane with a branch's remotes open](docs/images/branches.svg)
 
@@ -79,6 +81,16 @@ The Compare tab, reached with `tab`, shows how two refs differ, going *from* one
 While a merge, rebase or cherry-pick is stopped on conflicts, the Changes pane says so, and lists the conflicted files in a section of their own, above the staged ones. A conflicted file's preview shows each conflict as your side (green) against theirs (blue). Resolve them in your editor with `o`, which opens the file at the conflict, then mark the file resolved with `space`, which stages it.
 
 ![A merge conflict, yours against theirs](docs/images/conflict.svg)
+
+## Running commands
+
+`:git …` runs a git command in the background, in the repo gclic shows, which refreshes once it ends. A line of output goes to the message line, and more to a popup, red if it failed. `ctrl-c` stops it. It has no terminal to ask anything on, so a command that would open an editor or ask for a password fails at once, and says to run it with `:!` instead. Keys in an SSH agent still work.
+
+`:!…` runs any command in your shell, with the terminal to itself, gclic stepping aside meanwhile: an editor, `git add -p`, `git rebase -i`, or `gclic` itself. If it printed something, gclic waits for enter so you can read it, and otherwise, as when quitting vim, comes straight back.
+
+## Switching repos
+
+`:` opens a command line at the bottom, for things done now and then rather than all the time. `:cd` lists the git repos in the folder holding the current one, to fuzzy find one and switch to it, with `..` first to search a folder up. `:cd name` switches straight to the repo `name` can only mean, its folder's name or the only one it matches, and otherwise starts the search with `name` typed in. `:cd ..` searches a folder up. Started outside a repo, say in `~/Code`, gclic lists the repos under it to open one, and `:cd` keeps searching there.
 
 ## Keyboard driven
 

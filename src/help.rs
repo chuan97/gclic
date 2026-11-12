@@ -28,8 +28,9 @@ const LEFT: &[Section] = &[
             ("o", "open the file in Zed"),
             ("z", "zoom the diff or details"),
             ("tab", "switch between Repo and Compare"),
+            (":", "commands: :cd, :git, :fetch [on|off], :!"),
             ("?", "this help"),
-            ("q", "quit, or ctrl-c at once"),
+            ("q ctrl-c", "quit, after asking; ctrl-c stops a :git first"),
         ],
     },
     Section {
