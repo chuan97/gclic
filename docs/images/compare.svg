@@ -8,6 +8,8 @@
 <text x="188.6" y="12.6" fill="#8abeb7" font-weight="bold" textLength="32.8" lengthAdjust="spacingAndGlyphs">main</text>
 <text x="229.6" y="12.6" fill="#8abeb7" font-weight="bold" textLength="8.2" lengthAdjust="spacingAndGlyphs">→</text>
 <text x="246.0" y="12.6" fill="#8abeb7" font-weight="bold" textLength="49.2" lengthAdjust="spacingAndGlyphs">hourly</text>
+<text x="902.0" y="12.6" fill="#666666" textLength="16.4" lengthAdjust="spacingAndGlyphs">~/</text>
+<text x="918.4" y="12.6" fill="#8abeb7" font-weight="bold" textLength="57.4" lengthAdjust="spacingAndGlyphs">skycast</text>
 <path d="M4.1,34.0 Q4.1,25.5 8.2,25.5" fill="none" stroke="#8abeb7" stroke-width="1.2"/>
 <text x="16.4" y="29.6" fill="#8abeb7" textLength="57.4" lengthAdjust="spacingAndGlyphs">Compare</text>
 <text x="82.0" y="29.6" fill="#8abeb7" textLength="32.8" lengthAdjust="spacingAndGlyphs">main</text>

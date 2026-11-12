@@ -238,7 +238,9 @@ def capture(pyte, repo, keys, settle=1.2):
     pid, fd = pty.fork()
     if pid == 0:
         os.chdir(repo)
-        os.execve(str(GCLIC), [str(GCLIC)], GIT_ENV)
+        # The demo's folder as home, so the tab bar shows ~/skycast rather
+        # than wherever this checkout happens to be.
+        os.execve(str(GCLIC), [str(GCLIC)], {**GIT_ENV, "HOME": str(Path(repo).parent)})
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", ROWS, COLS, 0, 0))
     screen = pyte.Screen(COLS, ROWS)
     stream = pyte.ByteStream(screen)
