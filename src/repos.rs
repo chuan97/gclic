@@ -159,7 +159,10 @@ mod tests {
     fn repos_are_labelled_by_their_path_from_the_search_folder() {
         let root = scratch("label");
         repo(&root.join("group/b"), "ref: refs/heads/dev\n");
-        assert_eq!(label(&root, &root.join("group/b")), Path::new("group").join("b").display().to_string());
+        // Joined a part at a time, as a search finds it, so Windows has its own
+        // separator in it.
+        let found = root.join("group").join("b");
+        assert_eq!(label(&root, &found), Path::new("group").join("b").display().to_string());
         assert_eq!(label(&root, &root), root.file_name().unwrap().to_string_lossy());
         let _ = fs::remove_dir_all(&root);
     }
