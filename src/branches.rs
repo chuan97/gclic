@@ -207,7 +207,7 @@ impl BranchesPanel {
     /// `note` goes at the right of the title: when the remotes were fetched.
     pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool, note: Option<&str>) {
         let mut block = ui::panel(TITLE.to_string(), focused);
-        if let Some(note) = note {
+        if let Some(note) = note.filter(|note| note_fits(note, area.width)) {
             let note = Line::styled(format!(" {note} "), Style::default().fg(ui::DIM));
             block = block.title(note.right_aligned());
         }
@@ -326,9 +326,23 @@ fn remote_line(remote: &RemoteRow) -> Line<'static> {
     Line::from(spans)
 }
 
+/// Whether the note fits on the top border, to the right of the title and of
+/// the `[h]` or `[l]` the app marks after it, rather than running into them.
+fn note_fits(note: &str, width: u16) -> bool {
+    // The corners, the title, its mark, and the note with a space each side.
+    let taken = 2 + TITLE.chars().count() + "[h] ".len() + note.chars().count() + 2;
+    taken < width as usize
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_fetch_note_only_shows_where_it_fits() {
+        assert!(note_fits("fetched just now", 60));
+        assert!(!note_fits("fetched just now", 30));
+    }
 
     fn local(name: &str, upstream: Option<&str>) -> Branch {
         Branch {
