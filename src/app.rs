@@ -1,6 +1,7 @@
 //! Owns all state, lays out the screen and routes keys. Panels never touch
 //! each other: they return an `Action` and `apply` carries it out here.
 
+use crate::accent::{self, Accent};
 use crate::branches::BranchesPanel;
 use crate::compare::ComparePanel;
 use crate::commands::{self, OutputPopup, Running};
@@ -220,6 +221,8 @@ pub struct App {
     /// Where the repo is, for the tab bar: the folder it's in, with `~` for
     /// home, and its own name.
     project: (String, String),
+    /// The repo's colour, for the bar at the top.
+    accent: Accent,
     /// Counts the refreshes, which follow every change gclic makes. A poll
     /// asked for before the latest one may have read the repo before a
     /// change, so its result is dropped.
@@ -266,6 +269,7 @@ impl App {
             worker: Worker::start(),
             colors: ColorCache::default(),
             project: project_location(),
+            accent: Accent::current(),
             generation: 0,
         };
         app.refresh();
@@ -672,7 +676,40 @@ impl App {
             "git" => self.run_git(rest),
             "fetch" => self.fetch_command(rest.trim()),
             "stash" => self.open_stash_picker(),
-            _ => self.message = format!("Unknown command :{name}. Try :cd, :git, :stash, :fetch or :!"),
+            "color" | "colour" => self.color_command(rest.trim()),
+            _ => self.message = format!("Unknown command :{name}. Try :cd, :git, :stash, :fetch, :color or :!"),
+        }
+    }
+
+    /// `:color`: says the repo's colour. `:color #rrggbb` sets it, in the
+    /// repo's local git config, and `:color reset` goes back to the one from
+    /// the repo's name.
+    fn color_command(&mut self, arg: &str) {
+        let value = match arg {
+            "" => {
+                let from = if self.accent.custom { "set with :color" } else { "from the repo's name" };
+                self.message = format!("This repo's colour is {}, {from}. :color #rrggbb sets another", self.accent.hex());
+                return;
+            }
+            "reset" => None,
+            hex => match accent::parse_hex(hex) {
+                Some(_) => Some(hex.trim_start_matches('#').to_lowercase()),
+                None => {
+                    self.message = format!("{hex} isn't a colour. Try :color #rrggbb, as in :color #e0a040, or :color reset");
+                    return;
+                }
+            },
+        };
+        let value = value.map(|hex| format!("#{hex}"));
+        match git::set_local_config(accent::CONFIG_KEY, value.as_deref()) {
+            Ok(()) => {
+                self.accent = Accent::current();
+                self.message = match value {
+                    Some(_) => format!("This repo's colour is now {}", self.accent.hex()),
+                    None => format!("This repo's colour is back to {}, from its name", self.accent.hex()),
+                };
+            }
+            Err(error) => self.message = format!("Couldn't save the colour: {error}"),
         }
     }
 
@@ -1299,12 +1336,14 @@ impl App {
     // ------------------------------------------------------------- drawing
 
     pub fn render(&mut self, frame: &mut Frame) {
-        let [tabs, main, status] = Layout::vertical([
+        let [bar, tabs, main, status] = Layout::vertical([
+            Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Min(0),
             Constraint::Length(1),
         ])
         .areas(frame.area());
+        self.render_accent_bar(frame, bar);
         self.render_tabs(frame, tabs);
 
         match (self.has_preview(), self.zoomed) {
@@ -1322,6 +1361,14 @@ impl App {
         }
         self.render_status_line(frame, status);
         self.render_modal(frame);
+    }
+
+    /// A bar in the repo's colour across the top, with gclic's name in the
+    /// middle, to tell apart repos open side by side.
+    fn render_accent_bar(&self, frame: &mut Frame, area: Rect) {
+        let style = Style::default().bg(self.accent.color()).fg(self.accent.text());
+        let name = Line::styled("gclic", style.add_modifier(Modifier::BOLD)).centered();
+        frame.render_widget(Paragraph::new(name).style(style), area);
     }
 
     /// The tab bar: both tabs, the showing one highlighted, the comparison's

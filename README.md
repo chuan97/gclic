@@ -97,6 +97,10 @@ While a merge, rebase or cherry-pick is stopped on conflicts, the Changes pane s
 
 `:` opens a command line at the bottom, for things done now and then rather than all the time. `:cd` lists the git repos in the folder holding the current one, to fuzzy find one and switch to it, with `..` first to search a folder up. `:cd name` switches straight to the repo `name` can only mean, its folder's name or the only one it matches, and otherwise starts the search with `name` typed in. `:cd ..` searches a folder up. Started outside a repo, say in `~/Code`, gclic lists the repos under it to open one, and `:cd` keeps searching there.
 
+## A colour for each repo
+
+A bar across the top is in the repo's own colour, so several repos open side by side are easy to tell apart. The colour comes from the repo's name, the last part of `origin`'s URL, or its folder's name without one, so everyone with a clone sees the same colour, and so does a worktree. `:color #e0a040` picks another, kept in the repo's `.git/config`, which isn't committed, `:color reset` goes back to the one from its name, and `:color` says which it is. It needs a terminal that shows 24-bit colour, as most do.
+
 ## Keyboard driven
 
 Every action has a key, mostly Vim-style. `h`/`l` move between panes, marked `[h]` and `[l]` on their borders. The bar at the bottom lists the keys that apply right now, and `?` shows them all.

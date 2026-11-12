@@ -1,3 +1,4 @@
+mod accent;
 mod app;
 mod branches;
 mod commands;

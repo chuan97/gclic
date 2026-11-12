@@ -124,6 +124,24 @@ fn try_run(args: &[&str]) -> Option<String> {
     run(args).ok().map(|text| text.trim().to_string())
 }
 
+/// A setting from the repo's own git config, `.git/config`, ignoring the
+/// user's and the system's.
+pub fn local_config(key: &str) -> Option<String> {
+    try_run(&["config", "--local", "--get", key]).filter(|value| !value.is_empty())
+}
+
+/// Sets a setting in `.git/config`, or with None, removes it.
+pub fn set_local_config(key: &str, value: Option<&str>) -> Result<()> {
+    match value {
+        Some(value) => run(&["config", "--local", key, value]).map(|_| ()),
+        // Removing one that isn't there fails, which is fine.
+        None => {
+            let _ = git(&["config", "--local", "--unset", key]);
+            Ok(())
+        }
+    }
+}
+
 /// A git command the user typed on gclic's command line, set up to run
 /// without a terminal: the TUI is drawing on it. Anything that would ask for
 /// something fails at once instead of waiting forever: the editor, passwords,
