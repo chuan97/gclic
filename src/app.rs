@@ -223,6 +223,8 @@ pub struct App {
     project: (String, String),
     /// The repo's colour, for the bar at the top.
     accent: Accent,
+    /// Whether that bar shows, which `:color off` turns off for every repo.
+    accent_bar: bool,
     /// Counts the refreshes, which follow every change gclic makes. A poll
     /// asked for before the latest one may have read the repo before a
     /// change, so its result is dropped.
@@ -270,6 +272,7 @@ impl App {
             colors: ColorCache::default(),
             project: project_location(),
             accent: Accent::current(),
+            accent_bar: accent::bar_shown(),
             generation: 0,
         };
         app.refresh();
@@ -683,19 +686,45 @@ impl App {
 
     /// `:color`: says the repo's colour. `:color #rrggbb` sets it, in the
     /// repo's local git config, and `:color reset` goes back to the one from
-    /// the repo's name.
+    /// the repo's name. `:color off` hides the bar in every repo, in the
+    /// user's git config, and `:color on` shows it again.
     fn color_command(&mut self, arg: &str) {
         let value = match arg {
+            "" if !self.accent_bar => {
+                self.message = "The colour bar is off. :color on shows it".to_string();
+                return;
+            }
             "" => {
                 let from = if self.accent.custom { "set with :color" } else { "from the repo's name" };
-                self.message = format!("This repo's colour is {}, {from}. :color #rrggbb sets another", self.accent.hex());
+                self.message = format!(
+                    "This repo's colour is {}, {from}. :color #rrggbb sets another, :color off hides the bar",
+                    self.accent.hex()
+                );
+                return;
+            }
+            "off" | "on" => {
+                let off = arg == "off";
+                match git::set_global_config(accent::BAR_KEY, off.then_some("false")) {
+                    Ok(()) => {
+                        self.accent_bar = accent::bar_shown();
+                        self.message = match (off, self.accent_bar) {
+                            (true, false) => "The colour bar is off in every repo. :color on shows it again",
+                            (false, true) => "The colour bar is on",
+                            // A repo's own config can still say otherwise.
+                            _ => "This repo's git config overrides that, with gclic.colorBar",
+                        }
+                        .to_string();
+                    }
+                    Err(error) => self.message = format!("Couldn't save that: {error}"),
+                }
                 return;
             }
             "reset" => None,
             hex => match accent::parse_hex(hex) {
                 Some(_) => Some(hex.trim_start_matches('#').to_lowercase()),
                 None => {
-                    self.message = format!("{hex} isn't a colour. Try :color #rrggbb, as in :color #e0a040, or :color reset");
+                    self.message =
+                        format!("{hex} isn't a colour. Try :color #rrggbb, as in :color #e0a040, :color reset or :color off");
                     return;
                 }
             },
@@ -704,10 +733,12 @@ impl App {
         match git::set_local_config(accent::CONFIG_KEY, value.as_deref()) {
             Ok(()) => {
                 self.accent = Accent::current();
-                self.message = match value {
+                let colour = match value {
                     Some(_) => format!("This repo's colour is now {}", self.accent.hex()),
                     None => format!("This repo's colour is back to {}, from its name", self.accent.hex()),
                 };
+                let hidden = if self.accent_bar { "" } else { ". The bar is off: :color on shows it" };
+                self.message = format!("{colour}{hidden}");
             }
             Err(error) => self.message = format!("Couldn't save the colour: {error}"),
         }
@@ -1337,7 +1368,7 @@ impl App {
 
     pub fn render(&mut self, frame: &mut Frame) {
         let [bar, tabs, main, status] = Layout::vertical([
-            Constraint::Length(1),
+            Constraint::Length(u16::from(self.accent_bar)),
             Constraint::Length(1),
             Constraint::Min(0),
             Constraint::Length(1),

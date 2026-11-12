@@ -1,13 +1,22 @@
 //! Each repo's colour, for the bar at the top, so repos open side by side
 //! are told apart at a glance. By default it comes from the repo's name, so
 //! everyone with a clone sees the same one. `:color` sets another, kept in
-//! the repo's local git config, which isn't committed.
+//! the repo's local git config, which isn't committed, and `:color off`
+//! hides the bar in every repo.
 
 use crate::git;
 use ratatui::style::Color;
 
 /// Where a custom colour is kept, in `.git/config`.
 pub const CONFIG_KEY: &str = "gclic.color";
+/// Whether the bar shows, set to false by `:color off` in the user's git
+/// config, as someone who'd rather not have it wouldn't want it anywhere.
+pub const BAR_KEY: &str = "gclic.colorBar";
+
+/// Whether to show the bar: unless it's turned off.
+pub fn bar_shown() -> bool {
+    git::config_bool(BAR_KEY) != Some(false)
+}
 
 /// Lightness and chroma in OKLCH, the same for every repo, so each hue looks
 /// as strong as the others: light enough for black text, and not garish.

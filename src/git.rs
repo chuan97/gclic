@@ -130,13 +130,33 @@ pub fn local_config(key: &str) -> Option<String> {
     try_run(&["config", "--local", "--get", key]).filter(|value| !value.is_empty())
 }
 
+/// A true or false setting, from wherever git finds it, the repo's own
+/// config first. None if it isn't set, or isn't a boolean.
+pub fn config_bool(key: &str) -> Option<bool> {
+    match try_run(&["config", "--get", "--type=bool", key])?.as_str() {
+        "true" => Some(true),
+        "false" => Some(false),
+        _ => None,
+    }
+}
+
 /// Sets a setting in `.git/config`, or with None, removes it.
 pub fn set_local_config(key: &str, value: Option<&str>) -> Result<()> {
+    set_config("--local", key, value)
+}
+
+/// Sets a setting in the user's own git config, for every repo, or with
+/// None, removes it.
+pub fn set_global_config(key: &str, value: Option<&str>) -> Result<()> {
+    set_config("--global", key, value)
+}
+
+fn set_config(scope: &str, key: &str, value: Option<&str>) -> Result<()> {
     match value {
-        Some(value) => run(&["config", "--local", key, value]).map(|_| ()),
+        Some(value) => run(&["config", scope, key, value]).map(|_| ()),
         // Removing one that isn't there fails, which is fine.
         None => {
-            let _ = git(&["config", "--local", "--unset", key]);
+            let _ = git(&["config", scope, "--unset", key]);
             Ok(())
         }
     }
