@@ -67,6 +67,9 @@ pub enum DiffSource {
     Conflict(String),
     Commit { sha: String, path: String },
     Refs { a: String, b: String, path: String },
+    /// A file in a stash: tracked changes against the commit it was made on,
+    /// or an untracked file, kept in a commit of its own.
+    Stash { sha: String, path: String, untracked: bool },
 }
 
 impl DiffSource {
@@ -85,7 +88,7 @@ impl DiffSource {
             | DiffSource::Staged(path)
             | DiffSource::Untracked(path)
             | DiffSource::Conflict(path) => path,
-            DiffSource::Commit { path, .. } | DiffSource::Refs { path, .. } => path,
+            DiffSource::Commit { path, .. } | DiffSource::Refs { path, .. } | DiffSource::Stash { path, .. } => path,
         }
     }
 }
@@ -329,6 +332,24 @@ pub fn diff_with(source: &DiffSource, whole: bool) -> Result<String> {
             path,
         ]),
         DiffSource::Refs { a, b, path } => run(&["diff", EXT, COLOR, context, a, b, "--", path]),
+        DiffSource::Stash { sha, path, untracked } => {
+            let (old, new) = stash_sides(sha, *untracked);
+            run(&["diff", EXT, COLOR, context, &old, &new, "--", path])
+        }
+    }
+}
+
+/// Git's empty tree, which an untracked file in a stash is new against.
+const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
+/// What a stashed file goes from and to: its tracked changes are against the
+/// stash's first parent, the commit it was made on, and its untracked files
+/// are in its third parent, against nothing.
+fn stash_sides(sha: &str, untracked: bool) -> (String, String) {
+    if untracked {
+        (EMPTY_TREE.to_string(), format!("{sha}^3"))
+    } else {
+        (format!("{sha}^1"), sha.to_string())
     }
 }
 
@@ -347,6 +368,8 @@ pub fn file_versions(source: &DiffSource) -> (Option<String>, Option<String>) {
         // The diff is against the first parent, which `^` names.
         DiffSource::Commit { sha, .. } => (Version::At(format!("{sha}^")), Version::At(sha.clone())),
         DiffSource::Refs { a, b, .. } => (Version::At(a.clone()), Version::At(b.clone())),
+        DiffSource::Stash { sha, untracked: true, .. } => (Version::Missing, Version::At(format!("{sha}^3"))),
+        DiffSource::Stash { sha, .. } => (Version::At(format!("{sha}^1")), Version::At(sha.clone())),
     };
     thread::scope(|scope| {
         let old = scope.spawn(|| old.read(path));
@@ -565,6 +588,83 @@ pub fn commit_files(sha: &str) -> Result<Vec<FileEntry>> {
     Ok(parse_name_status(&text))
 }
 
+// ----------------------------------------------------------------- stashes
+
+/// Work put aside with `git stash`. Under the hood, a commit whose first
+/// parent is the commit it was made on, with the untracked files, if any, in
+/// a third parent.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Stash {
+    pub sha: String,
+    /// The commit it was made on, which its changes are against.
+    pub base: String,
+    pub has_untracked: bool,
+    /// As git names it now: `stash@{0}` is the newest, and the numbers shift
+    /// as stashes come and go, so actions find it again by its sha.
+    pub name: String,
+    /// "WIP on main: …", or "On main: " and the message it was given.
+    pub message: String,
+    /// "2 hours ago".
+    pub age: String,
+}
+
+/// The stashes, newest first.
+pub fn stashes() -> Result<Vec<Stash>> {
+    Ok(parse_stashes(&run(&["stash", "list", "--format=%H%x00%P%x00%gd%x00%gs%x00%cr"])?))
+}
+
+fn parse_stashes(text: &str) -> Vec<Stash> {
+    text.lines()
+        .filter_map(|line| {
+            let mut fields = line.splitn(5, '\0');
+            let sha = fields.next()?.to_string();
+            let parents: Vec<&str> = fields.next()?.split_whitespace().collect();
+            Some(Stash {
+                sha,
+                base: parents.first()?.to_string(),
+                has_untracked: parents.len() > 2,
+                name: fields.next()?.to_string(),
+                message: fields.next()?.to_string(),
+                age: fields.next()?.to_string(),
+            })
+        })
+        .collect()
+}
+
+/// A stash's files: the tracked ones it changes, and its untracked ones,
+/// marked `?` as the Changes pane marks them.
+pub fn stash_files(stash: &Stash) -> Result<Vec<FileEntry>> {
+    // A stash is a merge, which commit_files shows against its first parent.
+    let mut files = commit_files(&stash.sha)?;
+    if stash.has_untracked {
+        let untracked = run(&["ls-tree", "-r", "--name-only", "-z", &format!("{}^3", stash.sha)])?;
+        let untracked = untracked.split('\0').filter(|path| !path.is_empty());
+        files.extend(untracked.map(|path| FileEntry { status: '?', path: path.to_string() }));
+    }
+    Ok(files)
+}
+
+/// Puts a stash's changes back, all unstaged, keeping the stash.
+pub fn stash_apply(stash: &Stash) -> Result<()> {
+    run(&["stash", "apply", &stash_name(stash)?]).map(|_| ())
+}
+
+/// Applies a stash and, if that worked, drops it. On a conflict, git keeps it.
+pub fn stash_pop(stash: &Stash) -> Result<()> {
+    run(&["stash", "pop", &stash_name(stash)?]).map(|_| ())
+}
+
+pub fn stash_drop(stash: &Stash) -> Result<()> {
+    run(&["stash", "drop", &stash_name(stash)?]).map(|_| ())
+}
+
+/// The stash's name now, which pop and drop need, as a sha won't do for them.
+/// Found by its sha, as names shift when another stash comes or goes.
+fn stash_name(stash: &Stash) -> Result<String> {
+    let now = stashes()?.into_iter().find(|now| now.sha == stash.sha);
+    now.map(|now| now.name).ok_or_else(|| anyhow!("{} is gone: it was dropped or popped", stash.name))
+}
+
 // --------------------------------------------------------------- branches
 
 /// Local branches first, then remote ones.
@@ -697,6 +797,18 @@ mod tests {
     fn tracked_remotes_come_once_each_and_only_remotes() {
         let text = "origin\n\norigin\nupstream\n.\n";
         assert_eq!(parse_tracked_remotes(text), ["origin", "upstream"]);
+    }
+
+    #[test]
+    fn stashes_read_their_base_and_whether_they_hold_untracked_files() {
+        let text = "s1\0base1 index1 untracked1\0stash@{0}\0WIP on main: abc fix\x002 hours ago\n\
+                    s2\0base2 index2\0stash@{1}\0On dev: try this\x003 days ago\n";
+        let stashes = parse_stashes(text);
+        assert_eq!(stashes.len(), 2);
+        assert_eq!((stashes[0].base.as_str(), stashes[0].has_untracked), ("base1", true));
+        assert_eq!((stashes[1].name.as_str(), stashes[1].has_untracked), ("stash@{1}", false));
+        assert_eq!(stashes[1].message, "On dev: try this");
+        assert_eq!(stashes[0].age, "2 hours ago");
     }
 
     #[test]

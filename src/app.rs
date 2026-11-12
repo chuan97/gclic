@@ -7,7 +7,7 @@ use crate::commands::{self, OutputPopup, Running};
 use crate::details::DetailsPane;
 use crate::repos;
 use crate::diff::{ColorCache, Colored, DiffPane, DiffView};
-use crate::git::{self, CommitDetails, DiffSource};
+use crate::git::{self, Stash, CommitDetails, DiffSource};
 use crate::graph::GraphPanel;
 use crate::help::HelpPopup;
 use crate::picker::{Outcome, Picker};
@@ -35,6 +35,8 @@ const FETCH_EVERY: Duration = Duration::from_secs(60);
 const KEY_WAIT: Duration = Duration::from_millis(30);
 const GLOBAL_HINTS: &str = ": command · ? help · q quit";
 /// The keys shown on the pickers that choose refs to compare.
+const STASH_PICKER_KEYS: [(&str, &str); 6] =
+    [("enter", "files"), ("a", "apply"), ("p", "pop"), ("d", "drop"), ("i", "search"), ("esc", "close")];
 const REPO_PICKER_KEYS: [(&str, &str); 3] = [("i", "type"), ("enter", "open"), ("esc", "close")];
 const COMPARE_PICKER_KEYS: [(&str, &str); 4] =
     [("i", "type"), ("p", "paste"), ("enter", "choose"), ("esc", "close")];
@@ -69,6 +71,21 @@ pub enum Action {
     /// Show these commit details on the right. If they're already showing,
     /// move into them.
     OpenDetails(CommitDetails),
+    /// Do this with a stash, from the stash view or the graph.
+    Stash(StashAction, Stash),
+    /// Leave the stash view, back to the list of stashes.
+    CloseStash,
+}
+
+/// What can be done with a stash. Making one is left to `:git stash`, which
+/// has the options for what to put in it.
+#[derive(Clone, Copy, PartialEq)]
+pub enum StashAction {
+    /// Its changes back, all unstaged, keeping it.
+    Apply,
+    /// Apply, then drop it, unless applying conflicted.
+    Pop,
+    Drop,
 }
 
 impl Action {
@@ -88,6 +105,7 @@ pub enum Confirm {
     /// Closing loses refs the user may have taken a while to pick, and tab
     /// already leaves the comparison without losing it.
     CloseCompare,
+    DropStash(Stash),
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -124,6 +142,8 @@ enum PickerUse {
     CompareB { a: String },
     /// `:cd`: each repo's label, and where it is.
     Repo(Vec<(String, PathBuf)>),
+    /// `:stash`: each stash's label, and the stash.
+    Stash(Vec<(String, Stash)>),
 }
 
 /// The popup currently on top of everything, which gets all the keys.
@@ -637,7 +657,8 @@ impl App {
             "cd" => self.change_repo(rest.trim()),
             "git" => self.run_git(rest),
             "fetch" => self.fetch_command(rest.trim()),
-            _ => self.message = format!("Unknown command :{name}. Try :cd, :git, :fetch or :!"),
+            "stash" => self.open_stash_picker(),
+            _ => self.message = format!("Unknown command :{name}. Try :cd, :git, :stash, :fetch or :!"),
         }
     }
 
@@ -663,6 +684,67 @@ impl App {
         match Running::start(label, git::user_command(&args)) {
             Ok(running) => self.running = Some(running),
             Err(error) => self.modal = Modal::Error(format!("Couldn't run git: {error}")),
+        }
+    }
+
+    /// `:stash`: the stashes, to open one's files, or apply, pop or drop it.
+    fn open_stash_picker(&mut self) {
+        let stashes = match git::stashes() {
+            Ok(stashes) => stashes,
+            Err(error) => {
+                self.modal = Modal::Error(error.to_string());
+                return;
+            }
+        };
+        if stashes.is_empty() {
+            self.message = "No stashes. :git stash puts your changes aside".to_string();
+            return;
+        }
+        let stashes: Vec<(String, Stash)> = stashes
+            .into_iter()
+            .map(|stash| (format!("{}  {}  {}", stash.name, stash.message, stash.age), stash))
+            .collect();
+        let labels = stashes.iter().map(|(label, _)| label.clone()).collect();
+        let picker = Picker::single("Stashes", labels).with_hints(&STASH_PICKER_KEYS);
+        self.modal = Modal::Picker(picker, PickerUse::Stash(stashes));
+    }
+
+    /// Shows a stash's files, and their diffs, where comparisons show theirs.
+    fn open_stash(&mut self, stash: Stash) {
+        match ComparePanel::stash(stash) {
+            Ok(view) => self.show_compare(view),
+            Err(error) => self.modal = Modal::Error(error.to_string()),
+        }
+    }
+
+    /// Applies, pops or drops a stash, dropping only after asking. The stash
+    /// view closes on a stash that's gone, back to the others.
+    fn act_on_stash(&mut self, action: StashAction, stash: Stash) {
+        let result = match action {
+            StashAction::Drop => {
+                self.modal = Modal::Confirm(Confirm::DropStash(stash));
+                return;
+            }
+            StashAction::Apply => git::stash_apply(&stash),
+            StashAction::Pop => git::stash_pop(&stash),
+        };
+        self.after_stash(action, &stash, result);
+    }
+
+    fn after_stash(&mut self, action: StashAction, stash: &Stash, result: Result<()>) {
+        let done = result.is_ok();
+        self.apply(Action::after_change(result));
+        if !done {
+            return;
+        }
+        self.message = match action {
+            StashAction::Apply => format!("Applied {}", stash.name),
+            StashAction::Pop => format!("Popped {}", stash.name),
+            StashAction::Drop => format!("Dropped {}", stash.name),
+        };
+        let shown = self.compare.as_ref().and_then(|compare| compare.stash_shown());
+        if action != StashAction::Apply && shown.is_some_and(|shown| shown.sha == stash.sha) {
+            self.close_compare();
         }
     }
 
@@ -891,6 +973,11 @@ impl App {
             }
             // Closing a comparison goes back to the Repo tab, as esc does.
             Action::CloseCompare => self.modal = Modal::Confirm(Confirm::CloseCompare),
+            Action::Stash(action, stash) => self.act_on_stash(action, stash),
+            Action::CloseStash => {
+                self.close_compare();
+                self.open_stash_picker();
+            }
             Action::Compare(a, b) => self.start_compare(a, b),
             Action::CompareWith(sha) => self.open_compare_b_picker(git::display_ref(&sha)),
             Action::Copy(sha) => match copy_to_clipboard(&sha) {
@@ -960,6 +1047,11 @@ impl App {
                         self.close_compare();
                         return;
                     }
+                    Confirm::DropStash(stash) => {
+                        let result = git::stash_drop(stash);
+                        self.after_stash(StashAction::Drop, stash, result);
+                        return;
+                    }
                 };
                 self.apply(Action::after_change(result));
             }
@@ -1015,6 +1107,23 @@ impl App {
             self.modal = Modal::Picker(picker, usage);
             return;
         }
+        // A stash's keys, outside the search, where they'd be letters.
+        if let PickerUse::Stash(stashes) = &usage
+            && !picker.is_typing()
+        {
+            let action = match key.code {
+                KeyCode::Char('a') => Some(StashAction::Apply),
+                KeyCode::Char('p') => Some(StashAction::Pop),
+                KeyCode::Char('d') => Some(StashAction::Drop),
+                _ => None,
+            };
+            let highlighted = picker.highlighted();
+            let stash = stashes.iter().find(|(label, _)| Some(label) == highlighted).map(|(_, stash)| stash.clone());
+            if let (Some(action), Some(stash)) = (action, stash) {
+                self.act_on_stash(action, stash);
+                return;
+            }
+        }
         match picker.handle_key(key) {
             Outcome::Open => self.modal = Modal::Picker(picker, usage),
             Outcome::Cancelled => {}
@@ -1027,6 +1136,12 @@ impl App {
         let first = picked.first().and_then(|item| item.split_whitespace().next());
         let first = first.unwrap_or_default().to_string();
         match usage {
+            PickerUse::Stash(stashes) => {
+                let picked = picked.first();
+                if let Some((_, stash)) = stashes.into_iter().find(|(label, _)| Some(label) == picked) {
+                    self.open_stash(stash);
+                }
+            }
             PickerUse::Repo(repos) => {
                 let picked = picked.first();
                 match repos.into_iter().find(|(label, _)| Some(label) == picked) {
@@ -1082,18 +1197,22 @@ impl App {
     /// comparison already there.
     fn start_compare(&mut self, a: String, b: String) {
         match ComparePanel::new(a, b) {
-            Ok(compare) => {
-                if self.tab == Tab::Repo {
-                    self.switch_tab();
-                }
-                // Whatever was open on the right belonged to the old comparison.
-                self.close_preview();
-                self.zoomed = false;
-                self.compare = Some(compare);
-                self.focus_left(Focus::Compare);
-            }
+            Ok(compare) => self.show_compare(compare),
             Err(error) => self.modal = Modal::Error(error.to_string()),
         }
+    }
+
+    /// Puts a comparison, or a stash, on the Compare tab, replacing what was
+    /// there, and goes to it.
+    fn show_compare(&mut self, compare: ComparePanel) {
+        if self.tab == Tab::Repo {
+            self.switch_tab();
+        }
+        // Whatever was open on the right belonged to the old comparison.
+        self.close_preview();
+        self.zoomed = false;
+        self.compare = Some(compare);
+        self.focus_left(Focus::Compare);
     }
 
     /// Closing a comparison goes back to the Repo tab, as esc does elsewhere.
@@ -1196,7 +1315,7 @@ impl App {
     fn render_tabs(&self, frame: &mut Frame, area: Rect) {
         let area = Rect { x: area.x + 1, width: area.width.saturating_sub(2), ..area };
         let compare = match &self.compare {
-            Some(compare) => format!(" Compare {} ", compare.refs()),
+            Some(compare) => format!(" {} ", compare.title()),
             None => " Compare ".to_string(),
         };
         let mut spans = Vec::new();
@@ -1374,6 +1493,9 @@ impl App {
             Focus::Graph => {
                 let expanded = self.graph.is_selected_expanded();
                 hints.push(if expanded { "enter collapse" } else { "enter expand" });
+                if self.graph.is_on_stash() {
+                    hints.extend(["a apply", "p pop", "d drop"]);
+                }
                 hints.extend([self.details_hint(), "c compare", "y copy sha", "b choose branches"]);
                 // Only worth it when open commits' files are in the way.
                 if self.graph.has_expanded() && self.diff.is_none() {
@@ -1392,8 +1514,13 @@ impl App {
             Focus::Compare => {
                 let source = self.compare.as_ref().and_then(|compare| compare.selected_source());
                 hints.extend(self.enter_diff_hint(source));
-                hints.extend(["h/l fold", "r swap from and to", "c new comparison"]);
-                esc = Some("esc close compare");
+                if self.compare.as_ref().is_some_and(|compare| compare.stash_shown().is_some()) {
+                    hints.extend(["h/l fold", "a apply", "p pop", "d drop"]);
+                    esc = Some("esc back to stashes");
+                } else {
+                    hints.extend(["h/l fold", "r swap from and to", "c new comparison"]);
+                    esc = Some("esc close compare");
+                }
             }
             Focus::Preview => {
                 if self.diff.is_some() {
@@ -1534,6 +1661,14 @@ impl App {
                             Span::raw("?"),
                         ])],
                         "discard",
+                    ),
+                    Confirm::DropStash(stash) => (
+                        " Drop stash ",
+                        vec![
+                            Line::from(vec![Span::raw("Drop "), Span::styled(stash.name.clone(), bold), Span::raw("?")]),
+                            Line::styled(stash.message.clone(), Style::default().fg(ui::DIM)),
+                        ],
+                        "drop",
                     ),
                     Confirm::DeleteUntracked(path) => (
                         " Delete file ",

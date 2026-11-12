@@ -28,7 +28,7 @@ const LEFT: &[Section] = &[
             ("o", "open the file in Zed"),
             ("z", "zoom the diff or details"),
             ("tab", "switch between Repo and Compare"),
-            (":", "commands: :cd, :git, :fetch [on|off], :!"),
+            (":", "commands: :cd, :git, :stash, :fetch, :!"),
             ("?", "this help"),
             ("q ctrl-c", "quit, after asking; ctrl-c stops a :git first"),
         ],
@@ -62,6 +62,7 @@ const LEFT: &[Section] = &[
             ("c", "compare the commit with a ref"),
             ("y", "copy the commit's sha"),
             ("b", "choose which branches to show"),
+            ("a p d", "on a stash: apply, pop, drop"),
             ("esc", "collapse"),
         ],
     },
@@ -77,6 +78,16 @@ const RIGHT: &[Section] = &[
             ("c", "new comparison: choose two refs"),
             ("r", "swap from and to"),
             ("esc", "close it after confirming, back to Repo"),
+        ],
+    },
+    Section {
+        title: "Stashes",
+        keys: &[
+            (":stash", "list them; :git stash makes one"),
+            ("enter", "a stash's files and their diffs"),
+            ("a p", "apply it, or apply and drop it"),
+            ("d", "drop it, after asking"),
+            ("esc", "from its files, back to the list"),
         ],
     },
     Section {

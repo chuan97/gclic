@@ -13,6 +13,7 @@ gclic is heavily inspired by the features I like and have grown accustomed to in
 - **[Diffs](#diffs):** read any file's changes side by side or unified, with syntax highlighting, the changed words marked, and a minimap of the whole file.
 - **[Compare](#compare):** pick any two refs to see how far they have diverged and which files differ.
 - **[Merge conflicts](#merge-conflicts):** see each conflict as your side against theirs, and open it in your editor to resolve it.
+- **[Stashes](#stashes):** see what's in each stash, and apply, pop or drop it.
 - **[Running commands](#running-commands):** run git, or anything else, from gclic, in the repo it shows.
 - **[Switching repos](#switching-repos):** fuzzy find any repo near the one you're in, and switch to it without leaving gclic.
 - **[Keyboard driven](#keyboard-driven):** with Vim-style keybindings, and the keys that apply always shown at the bottom.
@@ -81,6 +82,10 @@ The Compare tab, reached with `tab`, shows how two refs differ, going *from* one
 While a merge, rebase or cherry-pick is stopped on conflicts, the Changes pane says so, and lists the conflicted files in a section of their own, above the staged ones. A conflicted file's preview shows each conflict as your side (green) against theirs (blue). Resolve them in your editor with `o`, which opens the file at the conflict, then mark the file resolved with `space`, which stages it.
 
 ![A merge conflict, yours against theirs](docs/images/conflict.svg)
+
+## Stashes
+
+`:stash` lists your stashes. `enter` shows a stash's files, untracked ones included, each with its diff, as a comparison does. `a` applies it, with every change back unstaged, `p` pops it, and `d` drops it after asking. The graph shows each stash too, hanging off the commit it was made on, with the same keys. Making one is left to `:git stash`, which has the options for what goes in it.
 
 ## Running commands
 
