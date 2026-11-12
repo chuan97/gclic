@@ -199,6 +199,10 @@ pub struct App {
     colors: ColorCache,
     /// A `:git` command running in the background.
     running: Option<Running>,
+    /// The command to run next, after one that failed: what git suggested,
+    /// or the same one in the terminal. The command line offers it, and tab
+    /// takes it. Gone once any command runs.
+    suggestion: Option<String>,
     /// Whether the remotes are fetched every minute. On unless `:fetch off`.
     auto_fetch: bool,
     /// A fetch under way, on its own thread, as it can take seconds.
@@ -227,6 +231,7 @@ impl App {
         let mut app = App {
             search_root,
             running: None,
+            suggestion: None,
             auto_fetch: true,
             fetching: None,
             fetch_started: None,
@@ -630,6 +635,12 @@ impl App {
         match key.code {
             KeyCode::Enter => self.run_command(&line),
             KeyCode::Esc => {}
+            KeyCode::Tab => {
+                if let Some(suggestion) = self.suggestion.as_ref().filter(|suggestion| suggestion.starts_with(&line)) {
+                    line = suggestion.clone();
+                }
+                self.modal = Modal::Command(line);
+            }
             KeyCode::Backspace if line.is_empty() => {}
             KeyCode::Backspace => {
                 line.pop();
@@ -647,6 +658,7 @@ impl App {
     /// are its arguments, except after `!`, which takes the whole line.
     fn run_command(&mut self, line: &str) {
         let line = line.trim();
+        self.suggestion = None;
         if let Some(shell_line) = line.strip_prefix('!') {
             if !shell_line.trim().is_empty() {
                 self.shell_line = Some(shell_line.trim().to_string());
@@ -831,7 +843,9 @@ impl App {
             let line = finished.lines.first().map(|line| commands::strip_ansi(line));
             self.message = line.unwrap_or_else(|| format!("{label}: done"));
         } else if matches!(self.modal, Modal::None) {
-            self.modal = Modal::Output(OutputPopup::new(&label, finished));
+            let output = OutputPopup::new(&label, finished);
+            self.suggestion = output.suggestion();
+            self.modal = Modal::Output(output);
         } else {
             let outcome = if finished.succeeded() { "finished" } else { "failed" };
             self.message = format!("{label} {outcome}");
@@ -1412,8 +1426,15 @@ impl App {
         // The command line takes the place of the hints, as in vim.
         if let Modal::Command(line) = &self.modal {
             let cyan = Style::default().fg(Color::Cyan);
+            let dim = Style::default().fg(ui::DIM);
             let mut spans = vec![Span::styled(":", cyan), Span::raw(line.as_str()), Span::styled("▏", cyan)];
-            if line.is_empty() {
+            // The rest of a suggested command, after what's typed, as fish
+            // shows its suggestions.
+            let rest = self.suggestion.as_deref().and_then(|suggestion| suggestion.strip_prefix(line.as_str()));
+            if let Some(rest) = rest.filter(|rest| !rest.is_empty()) {
+                spans.push(Span::styled(rest, dim));
+                spans.push(Span::styled("   tab use it · esc cancel", dim));
+            } else if line.is_empty() {
                 // Just the names, so they fit a narrow window. The help has the rest.
                 let help = "cd · git … · !… · stash · fetch · enter run · esc cancel";
                 spans.push(Span::styled(help, Style::default().fg(ui::DIM)));
