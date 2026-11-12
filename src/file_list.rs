@@ -11,9 +11,16 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use std::collections::{BTreeMap, HashSet};
 
+/// What the files' diffs come from.
+enum Diffs {
+    /// Two refs, from one to the other.
+    Refs { a: String, b: String },
+    /// A stash, given by its sha.
+    Stash(String),
+}
+
 pub struct FileList {
-    a: String,
-    b: String,
+    diffs: Diffs,
     /// In the order the tree shows them, so moving through them goes down.
     files: Vec<FileEntry>,
     /// Every row of the tree, folded or not.
@@ -27,9 +34,17 @@ pub struct FileList {
 
 impl FileList {
     pub fn new(a: String, b: String, files: Vec<FileEntry>) -> FileList {
+        FileList::with_diffs(Diffs::Refs { a, b }, files)
+    }
+
+    /// A stash's files, untracked ones marked `?`.
+    pub fn stash(sha: String, files: Vec<FileEntry>) -> FileList {
+        FileList::with_diffs(Diffs::Stash(sha), files)
+    }
+
+    fn with_diffs(diffs: Diffs, files: Vec<FileEntry>) -> FileList {
         let mut list = FileList {
-            a,
-            b,
+            diffs,
             files: Vec::new(),
             rows: Vec::new(),
             collapsed: HashSet::new(),
@@ -59,7 +74,10 @@ impl FileList {
 
     /// Going the other way, an added file is a deleted one and the reverse.
     pub fn swap_refs(&mut self) {
-        std::mem::swap(&mut self.a, &mut self.b);
+        let Diffs::Refs { a, b } = &mut self.diffs else {
+            return;
+        };
+        std::mem::swap(a, b);
         for file in &mut self.files {
             file.status = match file.status {
                 'A' => 'D',
@@ -126,8 +144,12 @@ impl FileList {
     }
 
     fn source_at(&self, index: usize) -> Option<DiffSource> {
-        let path = self.files.get(index)?.path.clone();
-        Some(DiffSource::Refs { a: self.a.clone(), b: self.b.clone(), path })
+        let file = self.files.get(index)?;
+        let path = file.path.clone();
+        Some(match &self.diffs {
+            Diffs::Refs { a, b } => DiffSource::Refs { a: a.clone(), b: b.clone(), path },
+            Diffs::Stash(sha) => DiffSource::Stash { sha: sha.clone(), path, untracked: file.status == '?' },
+        })
     }
 
     /// Moves over files and folders. `h` folds a folder, or goes up to the

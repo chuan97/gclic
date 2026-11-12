@@ -232,6 +232,19 @@ pub fn needed_terminal(lines: &[String]) -> bool {
     lines.iter().map(|line| strip_ansi(line)).any(|line| SIGNS.iter().any(|sign| line.contains(sign)))
 }
 
+/// A command git suggests in its output, to run as it is: one on a line of its
+/// own, indented, as in "To push the current branch … use" followed by
+/// `    git push --set-upstream origin main`. Ones with placeholders, such as
+/// `<branch>`, are left out, as they'd need filling in.
+pub fn suggested_command(lines: &[String]) -> Option<String> {
+    lines.iter().map(|line| strip_ansi(line)).find_map(|line| {
+        let indented = line.starts_with(char::is_whitespace);
+        let command = line.trim();
+        let runnable = command.starts_with("git ") && !command.contains(['<', '>']) && !command.contains("...");
+        (indented && runnable).then(|| command.to_string())
+    })
+}
+
 /// What a command left when it ended.
 pub struct Finished {
     pub status: Option<ExitStatus>,
@@ -453,13 +466,21 @@ impl Drop for LeaveInterrupts {
 
 /// What a `:git` command printed, in a popup to scroll through. Red when the
 /// command failed.
+/// A command to run next, after one that failed, as typed after `:`.
+enum Advice {
+    /// The same command, in the terminal, as it asked for something.
+    Terminal(String),
+    /// What git suggested.
+    Git(String),
+}
+
 pub struct OutputPopup {
     title: String,
     lines: Vec<String>,
     failed: bool,
     /// gclic's own advice, after the command's output, which is then dimmed
-    /// to set the two apart: the command to run instead, in the terminal.
-    instead: Option<String>,
+    /// to set the two apart.
+    advice: Option<Advice>,
     scroll: usize,
     page: usize,
     max_scroll: usize,
@@ -472,8 +493,23 @@ impl OutputPopup {
         if lines.is_empty() {
             lines.push("(no output)".to_string());
         }
-        let instead = (failed && needed_terminal(&lines)).then(|| format!(":!{label}"));
-        OutputPopup { title: format!(" {label} "), lines, failed, instead, scroll: 0, page: 0, max_scroll: 0 }
+        let advice = if !failed {
+            None
+        } else if needed_terminal(&lines) {
+            Some(Advice::Terminal(format!("!{label}")))
+        } else {
+            suggested_command(&lines).map(Advice::Git)
+        };
+        OutputPopup { title: format!(" {label} "), lines, failed, advice, scroll: 0, page: 0, max_scroll: 0 }
+    }
+
+    /// The command its advice is to run, without the `:`, which the command
+    /// line offers next.
+    pub fn suggestion(&self) -> Option<String> {
+        match &self.advice {
+            Some(Advice::Terminal(command) | Advice::Git(command)) => Some(command.clone()),
+            None => None,
+        }
     }
 
     /// Scrolls with the usual keys. Any other key closes the popup, which
@@ -495,16 +531,21 @@ impl OutputPopup {
 
     /// The lines to show: the output, and after it any advice.
     fn shown_lines(&self) -> Vec<Line<'static>> {
-        let Some(instead) = &self.instead else {
+        let Some(advice) = &self.advice else {
             return self.lines.iter().map(|line| ansi_line(line)).collect();
         };
         // Dimmed, its own colours too, to set it apart from the advice.
         let dim = Style::default().fg(ui::DIM);
         let mut lines: Vec<Line> = self.lines.iter().map(|line| Line::styled(strip_ansi(line), dim)).collect();
+        let (lead, command) = match advice {
+            Advice::Terminal(command) => ("It needs a terminal: run it as ", command),
+            Advice::Git(command) => ("Git suggests ", command),
+        };
         lines.push(Line::default());
         lines.push(Line::from(vec![
-            Span::raw("It needs a terminal: run it as "),
-            Span::styled(instead.clone(), Style::default().fg(ui::KEY)),
+            Span::raw(lead),
+            Span::styled(format!(":{command}"), Style::default().fg(ui::KEY)),
+            Span::styled("  (: then tab)", dim),
         ]));
         lines
     }
@@ -595,7 +636,27 @@ mod tests {
         let shown = popup.shown_lines();
         assert_eq!(shown[0].style.fg, Some(ui::DIM));
         let advice: String = shown[2].spans.iter().map(|span| span.content.as_ref()).collect();
-        assert_eq!(advice, "It needs a terminal: run it as :!git commit");
+        assert_eq!(advice, "It needs a terminal: run it as :!git commit  (: then tab)");
+        assert_eq!(popup.suggestion().as_deref(), Some("!git commit"));
+    }
+
+    #[test]
+    fn git_s_own_suggestions_are_offered_when_they_can_run_as_they_are() {
+        let push = [
+            "fatal: The current branch stashes has no upstream branch.",
+            "To push the current branch and set the remote as upstream, use",
+            "",
+            "    git push --set-upstream origin stashes",
+        ];
+        let lines: Vec<String> = push.iter().map(|line| line.to_string()).collect();
+        assert_eq!(suggested_command(&lines).as_deref(), Some("git push --set-upstream origin stashes"));
+        let placeholder = vec!["    git branch --set-upstream-to=origin/<branch> main".to_string()];
+        assert_eq!(suggested_command(&placeholder), None);
+        // Mentioned in passing, not on a line of its own.
+        let prose = vec!["hint: use git pull to integrate them".to_string()];
+        assert_eq!(suggested_command(&prose), None);
+        let popup = OutputPopup::new("git push", Finished { status: None, lines });
+        assert_eq!(popup.suggestion().as_deref(), Some("git push --set-upstream origin stashes"));
     }
 
     #[test]

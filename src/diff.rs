@@ -814,6 +814,8 @@ impl DiffPane {
             DiffSource::Staged(path) => format!(" {path} (staged) "),
             DiffSource::Commit { sha, path } => format!(" {path} @ {} ", &sha[..sha.len().min(7)]),
             DiffSource::Refs { a, b, path } => format!(" {path}: {a} → {b} "),
+            DiffSource::Stash { path, untracked: false, .. } => format!(" {path} (stashed) "),
+            DiffSource::Stash { path, .. } => format!(" {path} (stashed, untracked) "),
         };
         // A new file or a conflict shows whole anyway.
         let whole = git::whole_files()

@@ -3,7 +3,8 @@
 
 use crate::app::Action;
 use crate::file_list::file_line;
-use crate::git::{self, Branch, Commit, DiffSource, FileEntry};
+use crate::app::StashAction;
+use crate::git::{self, Branch, Commit, DiffSource, FileEntry, Stash};
 use crate::ui;
 use anyhow::Result;
 use ratatui::Frame;
@@ -28,6 +29,33 @@ const PALETTE: [Color; 6] = [
     Color::Cyan,
     Color::Red,
 ];
+/// Stashes hang off the history rather than belong to a branch, so they get
+/// a muted colour of their own, apart from the branches' palette.
+const STASH_COLOR: Color = Color::Indexed(245);
+
+/// Puts each stash just above the commit it was made on, as a commit with that
+/// one parent, so it hangs off it like a short branch. Stashes made on commits
+/// not shown are left out. They come newest first, and a newer one goes above
+/// an older one on the same commit. Returns the commits and the stashes shown.
+fn with_stashes(mut commits: Vec<Commit>, stashes: Vec<Stash>) -> (Vec<Commit>, Vec<Stash>) {
+    let mut shown = Vec::new();
+    for stash in stashes {
+        let Some(base) = commits.iter().position(|commit| commit.sha == stash.base) else {
+            continue;
+        };
+        let commit = Commit {
+            sha: stash.sha.clone(),
+            parents: vec![stash.base.clone()],
+            // Its age where a commit's author goes.
+            author: stash.age.clone(),
+            subject: stash.message.clone(),
+        };
+        commits.insert(base, commit);
+        shown.push(stash);
+    }
+    (commits, shown)
+}
+
 /// One character of the drawing. `commit` is the commit it leads to, whose
 /// color it takes, so a line changes color where the history changes owner.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -344,6 +372,8 @@ pub struct GraphPanel {
     /// The file under the cursor, in the selected commit. None while the
     /// cursor is on the commit itself.
     selected_file: Option<usize>,
+    /// The stashes among `commits`.
+    stashes: Vec<Stash>,
 }
 
 impl GraphPanel {
@@ -360,7 +390,18 @@ impl GraphPanel {
             scroll: 0,
             expanded: Vec::new(),
             selected_file: None,
+            stashes: Vec::new(),
         }
+    }
+
+    /// The stash at this row, if it is one.
+    fn stash_at(&self, index: usize) -> Option<&Stash> {
+        let sha = &self.commits.get(index)?.sha;
+        self.stashes.iter().find(|stash| stash.sha == *sha)
+    }
+
+    pub fn is_on_stash(&self) -> bool {
+        self.stash_at(self.selected).is_some()
     }
 
     /// The refs on screen, whether picked or the default view's.
@@ -423,18 +464,21 @@ impl GraphPanel {
             .collect();
 
         let names: Vec<String> = self.tips.iter().map(|tip| tip.name.clone()).collect();
-        let (commits, unpushed) = if names.is_empty() {
-            (Vec::new(), HashSet::new())
+        let (commits, unpushed, stashes) = if names.is_empty() {
+            (Vec::new(), HashSet::new(), Vec::new())
         } else {
-            // Two separate git calls, so they run at once.
+            // Three separate git calls, so they run at once.
             thread::scope(|scope| {
                 let unpushed = scope.spawn(|| git::unpushed(&names));
+                // Without them the graph still shows the history.
+                let stashes = scope.spawn(|| git::stashes().unwrap_or_default());
                 let commits = git::log(&names, COMMIT_LIMIT);
                 let unpushed = unpushed.join().unwrap_or_else(|_| Err(anyhow::anyhow!("git crashed")));
-                Ok::<_, anyhow::Error>((commits?, unpushed?))
+                let stashes = stashes.join().unwrap_or_default();
+                Ok::<_, anyhow::Error>((commits?, unpushed?, stashes))
             })?
         };
-        self.commits = commits;
+        (self.commits, self.stashes) = with_stashes(commits, stashes);
         self.rows = layout(&self.commits);
         self.unpushed = self.commits.iter().map(|commit| unpushed.contains(&commit.sha)).collect();
 
@@ -442,7 +486,10 @@ impl GraphPanel {
         self.expanded
             .retain(|expanded| commits.iter().any(|commit| commit.sha == expanded.sha));
 
-        if !follow_tip {
+        if follow_tip {
+            // The tip, below any stashes made on it.
+            self.selected = (0..self.commits.len()).find(|&index| self.stash_at(index).is_none()).unwrap_or(0);
+        } else {
             let same_commit = selected_sha
                 .and_then(|sha| self.commits.iter().position(|commit| commit.sha == sha));
             self.selected = same_commit
@@ -470,6 +517,11 @@ impl GraphPanel {
         self.colors = ref_colors(&color_keys);
         let shas: Vec<String> = self.tips.iter().map(|tip| tip.sha.clone()).collect();
         self.commit_colors = commit_colors(&reach_masks(&self.commits, &shas), &self.colors);
+        for index in 0..self.commits.len() {
+            if self.stash_at(index).is_some() {
+                self.commit_colors[index] = STASH_COLOR;
+            }
+        }
     }
 
     /// The first ref on screen pointing at this commit, in the order they were
@@ -487,6 +539,17 @@ impl GraphPanel {
         let Some(sha) = self.commits.get(self.selected).map(|c| c.sha.clone()) else {
             return Action::None;
         };
+        if let Some(stash) = self.stash_at(self.selected) {
+            let action = match key.code {
+                KeyCode::Char('a') => Some(StashAction::Apply),
+                KeyCode::Char('p') => Some(StashAction::Pop),
+                KeyCode::Char('d') => Some(StashAction::Drop),
+                _ => None,
+            };
+            if let Some(action) = action {
+                return Action::Stash(action, stash.clone());
+            }
+        }
         match key.code {
             KeyCode::Char('y') => return Action::Copy(sha),
             KeyCode::Char('c') => return Action::CompareWith(self.name_for(sha)),
@@ -613,14 +676,16 @@ impl GraphPanel {
 
     fn file_source(&self, commit: usize, file: usize) -> Option<DiffSource> {
         let expanded = self.expanded_at(commit)?;
-        let path = expanded.files.get(file)?.path.clone();
-        Some(DiffSource::Commit { sha: expanded.sha.clone(), path })
+        let entry = expanded.files.get(file)?;
+        let (sha, path) = (expanded.sha.clone(), entry.path.clone());
+        Some(match self.stash_at(commit) {
+            Some(_) => DiffSource::Stash { sha, path, untracked: entry.status == '?' },
+            None => DiffSource::Commit { sha, path },
+        })
     }
 
     pub fn selected_file_source(&self) -> Option<DiffSource> {
-        let expanded = self.expanded_at(self.selected)?;
-        let file = expanded.files.get(self.selected_file?)?;
-        Some(DiffSource::Commit { sha: expanded.sha.clone(), path: file.path.clone() })
+        self.file_source(self.selected, self.selected_file?)
     }
 
     /// Enter: on a file opens its diff, on a commit toggles its drop-down.
@@ -632,7 +697,11 @@ impl GraphPanel {
             self.remove_selected_drop_down();
             return Action::None;
         }
-        match git::commit_files(&sha) {
+        let files = match self.stash_at(self.selected) {
+            Some(stash) => git::stash_files(stash),
+            None => git::commit_files(&sha),
+        };
+        match files {
             Ok(files) if files.is_empty() => {
                 Action::Message("No files changed in this commit".to_string())
             }
@@ -735,6 +804,11 @@ impl GraphPanel {
         let subject = if selected && focused { Color::White } else { Color::Gray };
         spans.push(Span::styled(commit.subject.as_str(), Style::default().fg(subject)));
         spans.push(Span::styled(format!("  {}", commit.author), Style::default().fg(ui::DIM)));
+        if let Some(stash) = self.stash_at(index) {
+            let style = Style::default().fg(STASH_COLOR).add_modifier(Modifier::BOLD);
+            spans.push(Span::raw("  "));
+            spans.push(Span::styled(stash.name.as_str(), style));
+        }
         for (tip, color) in self.tips.iter().zip(&self.colors) {
             if tip.sha == commit.sha {
                 let style = Style::default().fg(*color).add_modifier(Modifier::BOLD);
@@ -802,6 +876,28 @@ mod tests {
                 text.trim_end().to_string()
             })
             .collect()
+    }
+
+    fn stash(sha: &str, base: &str) -> Stash {
+        Stash {
+            sha: sha.to_string(),
+            base: base.to_string(),
+            has_untracked: false,
+            name: format!("stash@{{{sha}}}"),
+            message: String::new(),
+            age: String::new(),
+        }
+    }
+
+    #[test]
+    fn stashes_hang_above_their_base_newest_first_and_only_if_it_shows() {
+        let commits = vec![commit("c", &["b"]), commit("b", &["a"]), commit("a", &[])];
+        let stashes = vec![stash("s0", "b"), stash("s1", "b"), stash("s2", "elsewhere")];
+        let (commits, shown) = with_stashes(commits, stashes);
+        let order: Vec<&str> = commits.iter().map(|commit| commit.sha.as_str()).collect();
+        assert_eq!(order, ["c", "s0", "s1", "b", "a"]);
+        assert_eq!(commits[1].parents, ["b"]);
+        assert_eq!(shown.len(), 2);
     }
 
     #[test]
