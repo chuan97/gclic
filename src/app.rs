@@ -1394,23 +1394,17 @@ impl App {
         self.render_modal(frame);
     }
 
-    /// A line in the repo's colour across the top, broken in the middle by
-    /// gclic's name, to tell apart repos open side by side.
+    /// A line in the repo's colour across the top, to tell apart repos open
+    /// side by side.
     fn render_accent_bar(&self, frame: &mut Frame, area: Rect) {
-        let style = Style::default().fg(self.accent.color());
-        let (left, right) = accent_line(area.width as usize);
-        let line = Line::from(vec![
-            Span::styled(left, style),
-            Span::styled(ACCENT_NAME, style.add_modifier(Modifier::BOLD)),
-            Span::styled(right, style),
-        ]);
-        frame.render_widget(line, area);
+        let line = accent_line(area.width as usize);
+        frame.render_widget(Span::styled(line, Style::default().fg(self.accent.color())), area);
     }
 
     /// The tab bar: both tabs, the showing one highlighted, the comparison's
     /// refs on its tab so it's visible from the Repo tab too. The other tab is
     /// marked with the key that leads to it, like the panes' [h] and [l]. The
-    /// project goes on the right: its folder dimmed, and its name in the accent
+    /// project goes on the right: its folder dimmed, and its name in the repo's
     /// colour, shortened to fit.
     fn render_tabs(&self, frame: &mut Frame, area: Rect) {
         let area = Rect { x: area.x + 1, width: area.width.saturating_sub(2), ..area };
@@ -1430,13 +1424,14 @@ impl App {
             spans.push(Span::raw("  "));
         }
         let tabs = Line::from(spans);
+        let name_color = if self.accent_bar { self.accent.color() } else { Color::Cyan };
         // Two columns at least between the tabs and the project.
         let room = (area.width as usize).saturating_sub(tabs.width() + 2);
         let (folder, name) = &self.project;
         if let Some(folder) = fit_folder(folder, name, room) {
             let project = Line::from(vec![
                 Span::styled(folder, Style::default().fg(ui::DIM)),
-                Span::styled(name.as_str(), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(name.as_str(), Style::default().fg(name_color).add_modifier(Modifier::BOLD)),
             ]);
             frame.render_widget(project.right_aligned(), area);
         }
@@ -1952,15 +1947,10 @@ fn compare_items(recent_yanks: &[String]) -> Result<Vec<String>> {
     Ok(items)
 }
 
-/// The name in the middle of the line at the top, with a space either side.
-const ACCENT_NAME: &str = " gclic ";
-
-/// The line either side of the name, to fill `width` columns with the name
-/// centred. The right side takes the odd column.
-fn accent_line(width: usize) -> (String, String) {
-    let line = width.saturating_sub(ACCENT_NAME.len());
-    let left = line / 2;
-    ("━".repeat(left), "━".repeat(line - left))
+/// The line at the top, `width` wide, with a column of margin either side,
+/// as the tab bar has.
+fn accent_line(width: usize) -> String {
+    format!(" {} ", "━".repeat(width.saturating_sub(2)))
 }
 
 /// The folder holding the repo, ending in a separator and with `~` for the
@@ -2086,10 +2076,9 @@ mod tests {
     }
 
     #[test]
-    fn the_accent_line_centres_the_name() {
-        let (left, right) = accent_line(20);
-        assert_eq!(format!("{left}{ACCENT_NAME}{right}"), "━━━━━━ gclic ━━━━━━━");
-        assert_eq!(accent_line(3), (String::new(), String::new()));
+    fn the_accent_line_has_a_margin_either_side() {
+        assert_eq!(accent_line(6), " ━━━━ ");
+        assert_eq!(accent_line(1), "  ");
     }
 
     #[test]
