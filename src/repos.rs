@@ -47,13 +47,17 @@ fn search(folder: &Path, depth: usize, repos: &mut Vec<PathBuf>) {
 }
 
 /// How a repo is listed: its path from the search folder, or its name if it's
-/// the search folder itself.
+/// the search folder itself. Folders are separated by `/` on every platform,
+/// as git shows paths, so `:cd group/repo` works on Windows too.
 pub fn label(root: &Path, repo: &Path) -> String {
     match repo.strip_prefix(root) {
         Ok(relative) if relative.as_os_str().is_empty() => {
             repo.file_name().map_or_else(|| repo.display().to_string(), |name| name.to_string_lossy().into_owned())
         }
-        Ok(relative) => relative.display().to_string(),
+        Ok(relative) => {
+            let folders: Vec<_> = relative.components().map(|part| part.as_os_str().to_string_lossy()).collect();
+            folders.join("/")
+        }
         Err(_) => repo.display().to_string(),
     }
 }
@@ -79,6 +83,10 @@ pub enum Target {
 /// Which repo a name typed after `:cd` means: the one whose path or folder
 /// name it is exactly, or failing that the only one it fuzzy matches.
 pub fn target(name: &str, entries: &[(String, PathBuf)]) -> Target {
+    // On Windows, a typed \ means the same as the labels' /. Elsewhere it can
+    // be part of a folder's name.
+    let name = if cfg!(windows) { name.replace('\\', "/") } else { name.to_string() };
+    let name = name.as_str();
     let repos: Vec<&(String, PathBuf)> = entries.iter().filter(|(label, _)| label != UP).collect();
     let folder_name = |repo: &Path| repo.file_name().map(|name| name.to_string_lossy().into_owned());
     let exact = repos.iter().find(|(label, repo)| label == name || folder_name(repo).as_deref() == Some(name));
@@ -160,9 +168,9 @@ mod tests {
         let root = scratch("label");
         repo(&root.join("group/b"), "ref: refs/heads/dev\n");
         // Joined a part at a time, as a search finds it, so Windows has its own
-        // separator in it.
+        // separator in it, which the label doesn't.
         let found = root.join("group").join("b");
-        assert_eq!(label(&root, &found), Path::new("group").join("b").display().to_string());
+        assert_eq!(label(&root, &found), "group/b");
         assert_eq!(label(&root, &root), root.file_name().unwrap().to_string_lossy());
         let _ = fs::remove_dir_all(&root);
     }
@@ -195,6 +203,13 @@ mod tests {
         assert_eq!(target("conf", &entries), Target::Repo("/code/skycast-conflict".into()));
         assert_eq!(target("sky", &entries), Target::Choose);
         assert_eq!(target("zzz", &entries), Target::None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn on_windows_a_backslash_works_as_the_labels_slash() {
+        let entries = listed(&["group/b", "other"]);
+        assert_eq!(target(r"group\b", &entries), Target::Repo(Path::new("/code").join("group/b")));
     }
 
     #[test]
