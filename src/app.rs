@@ -882,7 +882,7 @@ impl App {
         let repos = repos::entries(&self.search_root);
         let labels = repos.iter().map(|(label, _)| label.clone()).collect();
         let title = format!("Switch repo, in {}", repos::tilde(&self.search_root));
-        let mut picker = Picker::single(&title, labels).with_hints(&REPO_PICKER_KEYS);
+        let mut picker = Picker::single(&title, labels).with_hints(&REPO_PICKER_KEYS).with_dimmed_folders();
         if !query.is_empty() {
             picker.set_query(query.to_string());
         }
