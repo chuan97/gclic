@@ -661,9 +661,12 @@ impl App {
         match key.code {
             KeyCode::Enter => self.run_command(&line),
             KeyCode::Esc => {}
+            // A suggestion from git first, or else the command being typed.
             KeyCode::Tab => {
                 if let Some(suggestion) = self.suggestion.as_ref().filter(|suggestion| suggestion.starts_with(&line)) {
                     line = suggestion.clone();
+                } else if let Some(completed) = commands::complete_command(&line) {
+                    line = completed;
                 }
                 self.modal = Modal::Command(line);
             }
@@ -699,7 +702,7 @@ impl App {
             "fetch" => self.fetch_command(rest.trim()),
             "stash" => self.open_stash_picker(),
             "color" | "colour" => self.color_command(rest.trim()),
-            _ => self.message = format!("Unknown command :{name}. Try :cd, :git, :stash, :fetch, :color or :!"),
+            _ => self.message = format!("Unknown command :{name}. Try {}", commands::command_list()),
         }
     }
 
@@ -1536,10 +1539,15 @@ impl App {
             if let Some(rest) = rest.filter(|rest| !rest.is_empty()) {
                 spans.push(Span::styled(rest, dim));
                 spans.push(Span::styled("   tab use it · esc cancel", dim));
-            } else if line.is_empty() {
-                // Just the names, so they fit a narrow window. The help has the rest.
-                let help = "cd · git … · !… · stash · fetch · enter run · esc cancel";
-                spans.push(Span::styled(help, Style::default().fg(ui::DIM)));
+            } else {
+                // What the commands are, or the one being typed takes, in the
+                // room left after the cursor.
+                let used = 2 + line.chars().count();
+                let (ghost, hint) = commands::command_hint(line, (area.width as usize).saturating_sub(used + 3));
+                if !hint.is_empty() || !ghost.is_empty() {
+                    spans.push(Span::styled(ghost, dim));
+                    spans.push(Span::styled(format!("  {hint}"), dim));
+                }
             }
             frame.render_widget(Line::from(spans), area);
             return;

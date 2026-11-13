@@ -25,6 +25,149 @@ use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 
+/// A command of gclic's command line, opened with `:`.
+pub struct CommandInfo {
+    /// As typed, with its colon: `:cd`.
+    pub key: &'static str,
+    /// What may follow it, if anything.
+    pub args: &'static str,
+    /// What it does, in a few words.
+    pub about: &'static str,
+}
+
+impl CommandInfo {
+    pub fn name(&self) -> &'static str {
+        &self.key[1..]
+    }
+}
+
+/// Every command, which the command line's hints, its completion, the help
+/// and the message for an unknown command are all made from. A new command
+/// goes here, besides doing something in `App::run_command`.
+pub const COMMANDS: [CommandInfo; 6] = [
+    CommandInfo { key: ":cd", args: "[name | ..]", about: "switch to another repo" },
+    CommandInfo { key: ":git", args: "<arguments>", about: "run git in the background" },
+    CommandInfo { key: ":!", args: "<command>", about: "run a command in your shell" },
+    CommandInfo { key: ":stash", args: "", about: "list the stashes" },
+    CommandInfo { key: ":fetch", args: "[on | off]", about: "fetch now, or every minute" },
+    CommandInfo { key: ":color", args: "[#rrggbb | reset | on | off]", about: "this repo's colour" },
+];
+
+/// The commands as the help lists them: each with what it does.
+pub const COMMAND_HELP: [(&str, &str); COMMANDS.len()] = {
+    let mut help = [("", ""); COMMANDS.len()];
+    let mut i = 0;
+    while i < COMMANDS.len() {
+        help[i] = (COMMANDS[i].key, COMMANDS[i].about);
+        i += 1;
+    }
+    help
+};
+
+/// `:cd, :git, …`, for the message about an unknown command.
+pub fn command_list() -> String {
+    COMMANDS.iter().map(|command| command.key).collect::<Vec<_>>().join(", ")
+}
+
+/// The commands whose names start with what's typed.
+fn matching(typed: &str) -> Vec<&'static CommandInfo> {
+    COMMANDS.iter().filter(|command| command.name().starts_with(typed)).collect()
+}
+
+/// Names, separated by dots, as many as fit in `width`, then `…`.
+fn fit_names(names: &[&str], width: usize) -> String {
+    let mut text = String::new();
+    for (i, name) in names.iter().enumerate() {
+        let next = if text.is_empty() { name.to_string() } else { format!("{text} · {name}") };
+        // Room for " · …" after it, unless it's the last.
+        let room = if i + 1 == names.len() { width } else { width.saturating_sub(4) };
+        if next.chars().count() > room {
+            return if text.is_empty() { "…".to_string() } else { format!("{text} · …") };
+        }
+        text = next;
+    }
+    text
+}
+
+/// What the command line shows after the cursor, in dim text, for what's
+/// typed so far: the rest of the only command it can be, which tab fills in,
+/// and a hint in `width` columns. With nothing typed, the commands' names;
+/// while typing a name, the ones it matches, or once only one does, its
+/// arguments and what it does, which stay until its arguments are typed.
+pub fn command_hint(line: &str, width: usize) -> (String, String) {
+    let names: Vec<&str> = COMMANDS.iter().map(CommandInfo::name).collect();
+    let about = |command: &CommandInfo| {
+        if command.args.is_empty() { command.about.to_string() } else { format!("{}   {}", command.args, command.about) }
+    };
+    if line.is_empty() {
+        let keys = "   tab completes · esc cancel";
+        let list = fit_names(&names, width);
+        return if list.chars().count() + keys.chars().count() <= width && !list.ends_with('…') {
+            (String::new(), format!("{list}{keys}"))
+        } else {
+            (String::new(), list)
+        };
+    }
+    // `!` takes the whole line, with no space after it.
+    if let Some(rest) = line.strip_prefix('!') {
+        let shell = COMMANDS.iter().find(|command| command.name() == "!");
+        let hint = match shell {
+            Some(command) if rest.is_empty() => about(command),
+            _ => String::new(),
+        };
+        return (String::new(), hint);
+    }
+    let (word, rest) = match line.split_once(' ') {
+        Some((word, rest)) => (word, Some(rest)),
+        None => (line, None),
+    };
+    let fits = |text: String| if text.chars().count() <= width { text } else { String::new() };
+    match rest {
+        // The arguments, until they're typed.
+        Some(rest) => match COMMANDS.iter().find(|command| command.name() == word) {
+            Some(command) if rest.trim().is_empty() => (String::new(), fits(about(command))),
+            _ => (String::new(), String::new()),
+        },
+        None => match matching(word).as_slice() {
+            [] => (String::new(), "no such command".to_string()),
+            [command] => {
+                let ghost = command.name()[word.len()..].to_string();
+                let keys = if ghost.is_empty() { "" } else { "   tab completes" };
+                let hint = fits(format!("  {}{keys}", about(command)));
+                (ghost, hint.trim_start().to_string())
+            }
+            several => {
+                let names: Vec<&str> = several.iter().map(|command| command.name()).collect();
+                (String::new(), fit_names(&names, width))
+            }
+        },
+    }
+}
+
+/// What tab makes of a partly typed command name: the name, with a space if
+/// it takes arguments, once only one command matches, or the part all the
+/// matching ones share. None when there's nothing to add.
+pub fn complete_command(line: &str) -> Option<String> {
+    if line.contains(' ') || line.starts_with('!') {
+        return None;
+    }
+    let found = matching(line);
+    let completed = match found.as_slice() {
+        [] => return None,
+        [command] if command.args.is_empty() => command.name().to_string(),
+        [command] => format!("{} ", command.name()),
+        several => {
+            let first = several[0].name();
+            let shared = (line.len()..=first.len())
+                .rev()
+                .find(|&end| several.iter().all(|command| command.name().starts_with(&first[..end])))
+                .unwrap_or(line.len());
+            first[..shared].to_string()
+        }
+    };
+    (completed != line).then_some(completed)
+}
+
 /// Splits a command line into arguments, as a shell would for simple cases:
 /// spaces separate them, and quotes keep spaces in. Inside double quotes, and
 /// outside quotes, a backslash only escapes a quote, a space or another
@@ -633,6 +776,48 @@ mod tests {
         assert_eq!(line.spans[1].style.bg, Some(Color::Rgb(1, 2, 3)));
         assert_eq!(strip_ansi("remote: done\x1b[K"), "remote: done");
         assert_eq!(strip_ansi("\x1b[1mcut\x1b["), "cut");
+    }
+
+    #[test]
+    fn with_nothing_typed_the_hint_lists_the_commands_as_far_as_they_fit() {
+        let (_, wide) = command_hint("", 100);
+        assert_eq!(wide, "cd · git · ! · stash · fetch · color   tab completes · esc cancel");
+        let (_, narrow) = command_hint("", 20);
+        assert_eq!(narrow, "cd · git · ! · …");
+        assert!(narrow.chars().count() <= 20);
+    }
+
+    #[test]
+    fn typing_a_name_narrows_the_hint_down_to_one_command() {
+        assert_eq!(command_hint("c", 100), (String::new(), "cd · color".to_string()));
+        let (ghost, hint) = command_hint("co", 100);
+        assert_eq!(ghost, "lor");
+        assert_eq!(hint, "[#rrggbb | reset | on | off]   this repo's colour   tab completes");
+        assert_eq!(command_hint("zz", 100).1, "no such command");
+    }
+
+    #[test]
+    fn arguments_are_shown_until_they_are_typed() {
+        assert_eq!(command_hint("fetch ", 100).1, "[on | off]   fetch now, or every minute");
+        assert_eq!(command_hint("fetch o", 100).1, "");
+        assert_eq!(command_hint("stash", 100).1, "list the stashes");
+        assert_eq!(command_hint("!", 100).1, "<command>   run a command in your shell");
+        assert_eq!(command_hint("!ls", 100).1, "");
+    }
+
+    #[test]
+    fn tab_completes_a_command_name() {
+        assert_eq!(complete_command("co").as_deref(), Some("color "));
+        assert_eq!(complete_command("st").as_deref(), Some("stash"));
+        // Only as far as the names share.
+        assert_eq!(complete_command("c"), None);
+        assert_eq!(complete_command("color "), None);
+    }
+
+    #[test]
+    fn every_command_is_in_the_help_and_the_unknown_command_message() {
+        assert_eq!(COMMAND_HELP.len(), COMMANDS.len());
+        assert_eq!(command_list(), ":cd, :git, :!, :stash, :fetch, :color");
     }
 
     #[test]
