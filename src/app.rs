@@ -6,6 +6,7 @@ use crate::branches::BranchesPanel;
 use crate::compare::ComparePanel;
 use crate::commands::{self, OutputPopup, Running};
 use crate::details::DetailsPane;
+use crate::editor::{self, Launch};
 use crate::repos;
 use crate::diff::{ColorCache, Colored, DiffPane, DiffView};
 use crate::git::{self, Stash, CommitDetails, DiffSource};
@@ -215,6 +216,11 @@ pub struct App {
     /// A `:!` command to run once the key that asked for it is handled, as
     /// it needs the terminal, which only the main loop has.
     shell_line: Option<String>,
+    /// A terminal editor to open, for the same reason: what to show as its
+    /// command, its name, and the command.
+    editor_in_terminal: Option<(String, String, Command)>,
+    /// "o open in nvim", naming the editor `o` opens.
+    editor_hint: String,
     /// Where `:cd` looks for repos. It stays put as the repo changes, so the
     /// same repos are a few keys away.
     search_root: PathBuf,
@@ -242,6 +248,11 @@ impl App {
             fetch_started: None,
             fetched: None,
             shell_line: None,
+            editor_in_terminal: None,
+            editor_hint: match editor::parent_nvim() {
+                Some(_) => "o open in nvim".to_string(),
+                None => format!("o open in {}", editor::name(&editor::setting())),
+            },
             tab: Tab::Repo,
             other_tab: TabState {
                 focus: Focus::Compare,
@@ -292,6 +303,14 @@ impl App {
                 self.handle_key(key);
                 if let Some(line) = self.shell_line.take() {
                     let note = commands::run_in_terminal(terminal, &line)?;
+                    self.refresh();
+                    if let Some(note) = note {
+                        self.message = note;
+                    }
+                }
+                if let Some((shown, name, command)) = self.editor_in_terminal.take() {
+                    let note = commands::hand_terminal(terminal, &shown, &name, vec![command])?;
+                    // The file may have changed.
                     self.refresh();
                     if let Some(note) = note {
                         self.message = note;
@@ -972,6 +991,11 @@ impl App {
             return;
         }
         let mut fresh = App::new(self.search_root.clone());
+        // Inside Neovim, its project follows, for its file finder, search and
+        // file tree.
+        if let Some(address) = editor::parent_nvim() {
+            fresh.start_in_background("nvim", editor::cd_nvim(&address, repo));
+        }
         fresh.split = self.split;
         fresh.auto_fetch = self.auto_fetch;
         // A command still running carries on, and its result shows here.
@@ -1644,7 +1668,7 @@ impl App {
             hints.extend(self.diff_view_hints());
         }
         if self.focused_file().is_some() {
-            hints.push("o open in zed");
+            hints.push(self.editor_hint.as_str());
         }
         if self.focus != Focus::Preview {
             if self.diff.is_some() {
@@ -1715,19 +1739,31 @@ impl App {
             self.message = format!("{} isn't in the working tree", source.path());
             return;
         }
-        let target = format!("{}:{}", path.display(), line.unwrap_or(1));
-        let command = Command::new("zed")
-            .arg(target)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn();
-        match command {
+        let line = line.unwrap_or(1);
+        // Inside Neovim, the file opens there rather than in a second editor.
+        if let Some(address) = editor::parent_nvim() {
+            return self.start_in_background("nvim", editor::open_in_nvim(&address, &path, line));
+        }
+        let setting = editor::setting();
+        match editor::launch(&setting, &path, line) {
+            Ok(Launch::Background(command)) => self.start_in_background(&editor::name(&setting), command),
+            Ok(Launch::Terminal(shown, command)) => {
+                self.editor_in_terminal = Some((shown, editor::name(&setting), command));
+            }
+            Err(error) => self.message = format!("The editor setting doesn't work: {error}"),
+        }
+    }
+
+    /// Starts an editor, or a message to one, leaving it running, to collect
+    /// once it ends.
+    fn start_in_background(&mut self, name: &str, mut command: Command) {
+        let started = command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
+        match started {
             Ok(child) => self.editor_commands.push(child),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                self.message = "Zed's zed command isn't installed, or isn't on the PATH".to_string();
+                self.message = format!("{name} isn't installed, or isn't on the PATH");
             }
-            Err(error) => self.modal = Modal::Error(format!("Couldn't run zed: {error}")),
+            Err(error) => self.modal = Modal::Error(format!("Couldn't run {name}: {error}")),
         }
     }
 

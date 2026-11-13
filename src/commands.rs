@@ -382,13 +382,25 @@ fn shell(line: &str) -> Vec<Command> {
 /// cursor back to where it was. Returns a note for the message line, when
 /// gclic came straight back from a command that failed.
 pub fn run_in_terminal(terminal: &mut DefaultTerminal, line: &str) -> Result<Option<String>> {
+    hand_terminal(terminal, line, &format!("!{line}"), shell(line))
+}
+
+/// Gives the terminal to a command, as `run_in_terminal` does, showing what
+/// runs as `shown`, and naming it `label` in a note. The first of `commands`
+/// that exists runs, as a shell may not be installed under its first name.
+pub fn hand_terminal(
+    terminal: &mut DefaultTerminal,
+    shown: &str,
+    label: &str,
+    commands: Vec<Command>,
+) -> Result<Option<String>> {
     plain_keys();
     ratatui::restore();
     let _ = execute!(std::io::stdout(), Show, ClearScreen(ClearType::All), MoveTo(0, 0));
-    println!("$ {line}");
+    println!("$ {shown}");
     let before = position().ok();
     let mut result = Err(std::io::Error::from(std::io::ErrorKind::NotFound));
-    for mut command in shell(line) {
+    for mut command in commands {
         result = command.spawn().and_then(|mut child| {
             let _leave_interrupts = LeaveInterrupts::start();
             child.wait()
@@ -412,7 +424,7 @@ pub fn run_in_terminal(terminal: &mut DefaultTerminal, line: &str) -> Result<Opt
         let _ = std::io::stdin().lock().read_line(&mut String::new());
         None
     } else {
-        outcome.map(|outcome| format!("!{line}: {}", outcome.to_lowercase()))
+        outcome.map(|outcome| format!("{label}: {}", outcome.to_lowercase()))
     };
 
     enable_raw_mode()?;

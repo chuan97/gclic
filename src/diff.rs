@@ -18,6 +18,11 @@ const ADDED_BG: Color = Color::Rgb(28, 52, 38);
 const REMOVED_WORD_BG: Color = Color::Rgb(112, 48, 54);
 const ADDED_WORD_BG: Color = Color::Rgb(46, 96, 62);
 const FILLER_BG: Color = Color::Indexed(235);
+/// VS Code Dark Modern's editor background and text, behind and on the code,
+/// whatever the terminal's theme: the syntax colours and tints are made for
+/// them, and would be hard to read on a light background.
+const EDITOR_BG: Color = Color::Rgb(31, 31, 31);
+const EDITOR_FG: Color = Color::Rgb(204, 204, 204);
 // A conflict's two sides, as VS Code tints them: green for the current
 // change, which is yours, and blue for the incoming one.
 const CURRENT_BG: Color = Color::Rgb(26, 52, 46);
@@ -897,6 +902,9 @@ impl DiffPane {
         }
         let inner = block.inner(area);
         frame.render_widget(block, area);
+        // The code's own background, inside the border. What's drawn on it
+        // keeps it, unless it sets a background of its own.
+        frame.render_widget(ratatui::widgets::Block::new().style(Style::default().bg(EDITOR_BG).fg(EDITOR_FG)), inner);
         self.height = inner.height as usize;
 
         if self.rows.is_empty() {

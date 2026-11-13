@@ -5,6 +5,7 @@ mod commands;
 mod compare;
 mod details;
 mod diff;
+mod editor;
 mod file_list;
 mod git;
 mod graph;
