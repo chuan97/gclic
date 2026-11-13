@@ -906,9 +906,13 @@ mod tests {
             folder.canonicalize().unwrap()
         };
         let (a, b) = (make("a"), make("b"));
-        assert_eq!(git_dir_of(&a), Some(a.join(".git")));
-        assert_eq!(git_dir_of(&b), Some(b.join(".git")));
-        assert_eq!(git_dir_of(&a), Some(a.join(".git")));
+        // Compared canonically, as Windows writes the same folder two ways:
+        // `C:/…` from git, `\\?\C:\…` from canonicalize.
+        let found = |folder: &Path| git_dir_of(folder).and_then(|dir| dir.canonicalize().ok());
+        let expected = |folder: &Path| folder.join(".git").canonicalize().ok();
+        assert_eq!(found(&a), expected(&a));
+        assert_eq!(found(&b), expected(&b));
+        assert_eq!(found(&a), expected(&a));
         let _ = std::fs::remove_dir_all(&a);
         let _ = std::fs::remove_dir_all(&b);
     }
