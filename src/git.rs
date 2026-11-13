@@ -5,7 +5,7 @@ use anyhow::{Result, anyhow, bail};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::OnceLock;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
@@ -509,13 +509,34 @@ pub fn refs_fingerprint() -> String {
     format!("{}\n{}", refs.unwrap_or_default(), read_head().unwrap_or_default())
 }
 
-/// The repo's git directory, asked for once. Some questions are answered by
-/// reading its files, which is much quicker than starting git.
-fn git_dir() -> Option<&'static Path> {
-    static GIT_DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
-    GIT_DIR
-        .get_or_init(|| try_run(&["rev-parse", "--absolute-git-dir"]).map(PathBuf::from))
-        .as_deref()
+/// The repo's git directory. Some questions are answered by reading its
+/// files, which is much quicker than starting git.
+fn git_dir() -> Option<PathBuf> {
+    git_dir_of(&std::env::current_dir().ok()?)
+}
+
+/// The git directory of the repo `folder` is in, asked for once per folder:
+/// the answer is kept with the folder it's for, as `:cd` moves gclic to
+/// another repo, whose git directory is another.
+fn git_dir_of(folder: &Path) -> Option<PathBuf> {
+    type Known = Option<(PathBuf, Option<PathBuf>)>;
+    static KNOWN: Mutex<Known> = Mutex::new(None);
+    let mut known = KNOWN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some((asked_in, dir)) = known.as_ref()
+        && asked_in == folder
+    {
+        return dir.clone();
+    }
+    let output = Command::new("git")
+        .args(["rev-parse", "--absolute-git-dir"])
+        .current_dir(folder)
+        .stdin(Stdio::null())
+        .output()
+        .ok()
+        .filter(|output| output.status.success());
+    let dir = output.map(|output| PathBuf::from(String::from_utf8_lossy(&output.stdout).trim()));
+    *known = Some((folder.to_path_buf(), dir.clone()));
+    dir
 }
 
 /// What HEAD holds: `ref: refs/heads/main`, or a commit's sha when detached.
@@ -912,6 +933,27 @@ mod tests {
 
     // These run against gclic's own repo, comparing the quick answers with
     // what git itself says.
+
+    #[test]
+    fn the_git_directory_follows_the_folder_gclic_is_in() {
+        let make = |name: &str| {
+            let folder = std::env::temp_dir().join(format!("gclic-git-dir-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&folder);
+            std::fs::create_dir_all(&folder).unwrap();
+            Command::new("git").args(["init", "-q"]).current_dir(&folder).status().unwrap();
+            folder.canonicalize().unwrap()
+        };
+        let (a, b) = (make("a"), make("b"));
+        // Compared canonically, as Windows writes the same folder two ways:
+        // `C:/…` from git, `\\?\C:\…` from canonicalize.
+        let found = |folder: &Path| git_dir_of(folder).and_then(|dir| dir.canonicalize().ok());
+        let expected = |folder: &Path| folder.join(".git").canonicalize().ok();
+        assert_eq!(found(&a), expected(&a));
+        assert_eq!(found(&b), expected(&b));
+        assert_eq!(found(&a), expected(&a));
+        let _ = std::fs::remove_dir_all(&a);
+        let _ = std::fs::remove_dir_all(&b);
+    }
 
     #[test]
     fn current_branch_agrees_with_git() {
