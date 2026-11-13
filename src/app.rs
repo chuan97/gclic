@@ -1,6 +1,7 @@
 //! Owns all state, lays out the screen and routes keys. Panels never touch
 //! each other: they return an `Action` and `apply` carries it out here.
 
+use crate::accent::{self, Accent};
 use crate::branches::BranchesPanel;
 use crate::compare::ComparePanel;
 use crate::commands::{self, OutputPopup, Running};
@@ -220,6 +221,10 @@ pub struct App {
     /// Where the repo is, for the tab bar: the folder it's in, with `~` for
     /// home, and its own name.
     project: (String, String),
+    /// The repo's colour, for the bar at the top.
+    accent: Accent,
+    /// Whether that bar shows, which `:color off` turns off for every repo.
+    accent_bar: bool,
     /// Counts the refreshes, which follow every change gclic makes. A poll
     /// asked for before the latest one may have read the repo before a
     /// change, so its result is dropped.
@@ -266,6 +271,8 @@ impl App {
             worker: Worker::start(),
             colors: ColorCache::default(),
             project: project_location(),
+            accent: Accent::current(),
+            accent_bar: accent::bar_shown(),
             generation: 0,
         };
         app.refresh();
@@ -672,7 +679,68 @@ impl App {
             "git" => self.run_git(rest),
             "fetch" => self.fetch_command(rest.trim()),
             "stash" => self.open_stash_picker(),
-            _ => self.message = format!("Unknown command :{name}. Try :cd, :git, :stash, :fetch or :!"),
+            "color" | "colour" => self.color_command(rest.trim()),
+            _ => self.message = format!("Unknown command :{name}. Try :cd, :git, :stash, :fetch, :color or :!"),
+        }
+    }
+
+    /// `:color`: says the repo's colour. `:color #rrggbb` sets it, in the
+    /// repo's local git config, and `:color reset` goes back to the one from
+    /// the repo's name. `:color off` hides the bar in every repo, in the
+    /// user's git config, and `:color on` shows it again.
+    fn color_command(&mut self, arg: &str) {
+        let value = match arg {
+            "" if !self.accent_bar => {
+                self.message = "The colour bar is off. :color on shows it".to_string();
+                return;
+            }
+            "" => {
+                let from = if self.accent.custom { "set with :color" } else { "from the repo's name" };
+                self.message = format!(
+                    "This repo's colour is {}, {from}. :color #rrggbb sets another, :color off hides the bar",
+                    self.accent.hex()
+                );
+                return;
+            }
+            "off" | "on" => {
+                let off = arg == "off";
+                match git::set_global_config(accent::BAR_KEY, off.then_some("false")) {
+                    Ok(()) => {
+                        self.accent_bar = accent::bar_shown();
+                        self.message = match (off, self.accent_bar) {
+                            (true, false) => "The colour bar is off in every repo. :color on shows it again",
+                            (false, true) => "The colour bar is on",
+                            // A repo's own config can still say otherwise.
+                            _ => "This repo's git config overrides that, with gclic.colorBar",
+                        }
+                        .to_string();
+                    }
+                    Err(error) => self.message = format!("Couldn't save that: {error}"),
+                }
+                return;
+            }
+            "reset" => None,
+            hex => match accent::parse_hex(hex) {
+                Some(_) => Some(hex.trim_start_matches('#').to_lowercase()),
+                None => {
+                    self.message =
+                        format!("{hex} isn't a colour. Try :color #rrggbb, as in :color #e0a040, :color reset or :color off");
+                    return;
+                }
+            },
+        };
+        let value = value.map(|hex| format!("#{hex}"));
+        match git::set_local_config(accent::CONFIG_KEY, value.as_deref()) {
+            Ok(()) => {
+                self.accent = Accent::current();
+                let colour = match value {
+                    Some(_) => format!("This repo's colour is now {}", self.accent.hex()),
+                    None => format!("This repo's colour is back to {}, from its name", self.accent.hex()),
+                };
+                let hidden = if self.accent_bar { "" } else { ". The bar is off: :color on shows it" };
+                self.message = format!("{colour}{hidden}");
+            }
+            Err(error) => self.message = format!("Couldn't save the colour: {error}"),
         }
     }
 
@@ -1299,12 +1367,14 @@ impl App {
     // ------------------------------------------------------------- drawing
 
     pub fn render(&mut self, frame: &mut Frame) {
-        let [tabs, main, status] = Layout::vertical([
+        let [bar, tabs, main, status] = Layout::vertical([
+            Constraint::Length(u16::from(self.accent_bar)),
             Constraint::Length(1),
             Constraint::Min(0),
             Constraint::Length(1),
         ])
         .areas(frame.area());
+        self.render_accent_bar(frame, bar);
         self.render_tabs(frame, tabs);
 
         match (self.has_preview(), self.zoomed) {
@@ -1324,10 +1394,17 @@ impl App {
         self.render_modal(frame);
     }
 
+    /// A line in the repo's colour across the top, to tell apart repos open
+    /// side by side.
+    fn render_accent_bar(&self, frame: &mut Frame, area: Rect) {
+        let line = accent_line(area.width as usize);
+        frame.render_widget(Span::styled(line, Style::default().fg(self.accent.color())), area);
+    }
+
     /// The tab bar: both tabs, the showing one highlighted, the comparison's
     /// refs on its tab so it's visible from the Repo tab too. The other tab is
     /// marked with the key that leads to it, like the panes' [h] and [l]. The
-    /// project goes on the right: its folder dimmed, and its name in the accent
+    /// project goes on the right: its folder dimmed, and its name in the repo's
     /// colour, shortened to fit.
     fn render_tabs(&self, frame: &mut Frame, area: Rect) {
         let area = Rect { x: area.x + 1, width: area.width.saturating_sub(2), ..area };
@@ -1347,13 +1424,14 @@ impl App {
             spans.push(Span::raw("  "));
         }
         let tabs = Line::from(spans);
+        let name_color = if self.accent_bar { self.accent.color() } else { Color::Cyan };
         // Two columns at least between the tabs and the project.
         let room = (area.width as usize).saturating_sub(tabs.width() + 2);
         let (folder, name) = &self.project;
         if let Some(folder) = fit_folder(folder, name, room) {
             let project = Line::from(vec![
                 Span::styled(folder, Style::default().fg(ui::DIM)),
-                Span::styled(name.as_str(), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled(name.as_str(), Style::default().fg(name_color).add_modifier(Modifier::BOLD)),
             ]);
             frame.render_widget(project.right_aligned(), area);
         }
@@ -1869,6 +1947,12 @@ fn compare_items(recent_yanks: &[String]) -> Result<Vec<String>> {
     Ok(items)
 }
 
+/// The line at the top, `width` wide, with a column of margin either side,
+/// as the tab bar has.
+fn accent_line(width: usize) -> String {
+    format!(" {} ", "━".repeat(width.saturating_sub(2)))
+}
+
 /// The folder holding the repo, ending in a separator and with `~` for the
 /// home folder, and the repo's own folder name. gclic runs from the repo's
 /// root, which main moves to.
@@ -1989,6 +2073,12 @@ mod tests {
         assert_eq!(minutes(3), "fetched 3m ago");
         assert_eq!(minutes(59), "fetched 59m ago");
         assert_eq!(minutes(130), "fetched 2h ago");
+    }
+
+    #[test]
+    fn the_accent_line_has_a_margin_either_side() {
+        assert_eq!(accent_line(6), " ━━━━ ");
+        assert_eq!(accent_line(1), "  ");
     }
 
     #[test]

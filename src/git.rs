@@ -124,6 +124,44 @@ fn try_run(args: &[&str]) -> Option<String> {
     run(args).ok().map(|text| text.trim().to_string())
 }
 
+/// A setting from the repo's own git config, `.git/config`, ignoring the
+/// user's and the system's.
+pub fn local_config(key: &str) -> Option<String> {
+    try_run(&["config", "--local", "--get", key]).filter(|value| !value.is_empty())
+}
+
+/// A true or false setting, from wherever git finds it, the repo's own
+/// config first. None if it isn't set, or isn't a boolean.
+pub fn config_bool(key: &str) -> Option<bool> {
+    match try_run(&["config", "--get", "--type=bool", key])?.as_str() {
+        "true" => Some(true),
+        "false" => Some(false),
+        _ => None,
+    }
+}
+
+/// Sets a setting in `.git/config`, or with None, removes it.
+pub fn set_local_config(key: &str, value: Option<&str>) -> Result<()> {
+    set_config("--local", key, value)
+}
+
+/// Sets a setting in the user's own git config, for every repo, or with
+/// None, removes it.
+pub fn set_global_config(key: &str, value: Option<&str>) -> Result<()> {
+    set_config("--global", key, value)
+}
+
+fn set_config(scope: &str, key: &str, value: Option<&str>) -> Result<()> {
+    match value {
+        Some(value) => run(&["config", scope, key, value]).map(|_| ()),
+        // Removing one that isn't there fails, which is fine.
+        None => {
+            let _ = git(&["config", scope, "--unset", key]);
+            Ok(())
+        }
+    }
+}
+
 /// A git command the user typed on gclic's command line, set up to run
 /// without a terminal: the TUI is drawing on it. Anything that would ask for
 /// something fails at once instead of waiting forever: the editor, passwords,
