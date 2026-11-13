@@ -67,6 +67,8 @@ pub struct Picker {
     free_text: bool,
     /// Keys go to the query rather than navigating, like vim's insert mode.
     typing: bool,
+    /// Items are paths: the folders leading to the last name are dimmed.
+    dim_folders: bool,
 }
 
 impl Picker {
@@ -84,6 +86,7 @@ impl Picker {
             ticked: Vec::new(),
             free_text: false,
             typing: false,
+            dim_folders: false,
         }
     }
 
@@ -97,6 +100,11 @@ impl Picker {
 
     pub fn with_hints(self, hints: &[(&'static str, &'static str)]) -> Picker {
         Picker { hints: hints.to_vec(), ..self }
+    }
+
+    /// Shows items as paths, the last name in full and the folders before it dimmed.
+    pub fn with_dimmed_folders(self) -> Picker {
+        Picker { dim_folders: true, ..self }
     }
 
     pub fn accepts_free_text(&self) -> bool {
@@ -325,7 +333,14 @@ impl Picker {
             let mark = if self.ticked.iter().any(|t| t == item) { "◉ " } else { "○ " };
             spans.push(Span::styled(mark, Style::default().fg(Color::Green)));
         }
-        spans.push(Span::raw(item));
+        match item.rfind('/').filter(|_| self.dim_folders) {
+            Some(slash) => {
+                let (folders, name) = item.split_at(slash + 1);
+                spans.push(Span::styled(folders, Style::default().fg(ui::DIM)));
+                spans.push(Span::raw(name));
+            }
+            None => spans.push(Span::raw(item)),
+        }
         let line = Line::from(spans);
         if selected {
             line.style(Style::default().bg(ui::SELECTED_BG).add_modifier(Modifier::BOLD))
@@ -359,6 +374,17 @@ mod tests {
         assert_eq!(picker.shown_hints(), hints);
         picker.handle_key(KeyEvent::from(KeyCode::Char('i')));
         assert!(picker.shown_hints().is_empty()); // typing: "esc done" is in the box
+    }
+
+    #[test]
+    fn dimmed_folders_leave_the_last_name_in_full() {
+        let picker = Picker::single("t", Vec::new()).with_dimmed_folders();
+        let line = picker.item_line("group/sub/repo", false);
+        let parts: Vec<(&str, Option<Color>)> = line.spans.iter().map(|span| (span.content.as_ref(), span.style.fg)).collect();
+        assert_eq!(parts, [("group/sub/", Some(ui::DIM)), ("repo", None)]);
+
+        let plain = Picker::single("t", Vec::new()).item_line("feature/bar", false);
+        assert_eq!(plain.spans.len(), 1);
     }
 
     #[test]

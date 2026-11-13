@@ -102,6 +102,10 @@ While a merge, rebase or cherry-pick is stopped on conflicts, the Changes pane s
 
 To set it, add `export GCLIC_EDITOR=nvim` to your `~/.zshrc` or `~/.bashrc`, or on Windows run `[Environment]::SetEnvironmentVariable("GCLIC_EDITOR", "nvim", "User")` in PowerShell, and open a new terminal. The hint bar names the editor `o` will use.
 
+## A colour for each repo
+
+A line across the top is in the repo's own colour, as is the repo's name below it, so several repos open side by side are easy to tell apart. The colour comes from the repo's name, the last part of `origin`'s URL, or its folder's name without one, so everyone with a clone sees the same colour, and so does a worktree. `:color #e0a040` picks another, kept in the repo's `.git/config`, which isn't committed, `:color reset` goes back to the one from its name, and `:color` says which it is. `:color off` hides the line in every repo, as it's kept in your own git config, and `:color on` brings it back. It needs a terminal that shows 24-bit colour, as most do.
+
 ## Keyboard driven
 
 Every action has a key, mostly Vim-style. `h`/`l` move between panes, marked `[h]` and `[l]` on their borders. The bar at the bottom lists the keys that apply right now, and `?` shows them all.
