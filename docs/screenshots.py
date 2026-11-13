@@ -240,7 +240,11 @@ def capture(pyte, repo, keys, settle=1.2):
         os.chdir(repo)
         # The demo's folder as home, so the tab bar shows ~/skycast rather
         # than wherever this checkout happens to be.
-        os.execve(str(GCLIC), [str(GCLIC)], {**GIT_ENV, "HOME": str(Path(repo).parent)})
+        # The same editor in every screenshot, whoever makes them.
+        env = {**GIT_ENV, "HOME": str(Path(repo).parent), "EDITOR": "nvim"}
+        for name in ("GCLIC_EDITOR", "VISUAL", "NVIM"):
+            env.pop(name, None)
+        os.execve(str(GCLIC), [str(GCLIC)], env)
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", ROWS, COLS, 0, 0))
     screen = pyte.Screen(COLS, ROWS)
     stream = pyte.ByteStream(screen)
