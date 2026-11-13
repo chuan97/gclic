@@ -28,7 +28,7 @@ const LEFT: &[Section] = &[
             ("o", "open the file in your editor, at the line"),
             ("z", "zoom the diff or details"),
             ("tab", "switch between Repo and Compare"),
-            (":", "commands: :cd, :git, :stash, :fetch, :color, :!"),
+            (":", "a command; tab completes its name"),
             ("?", "this help"),
             ("q ctrl-c", "quit, after asking; ctrl-c stops a :git first"),
         ],
@@ -80,6 +80,10 @@ const RIGHT: &[Section] = &[
             ("r", "swap from and to"),
             ("esc", "close it after confirming, back to Repo"),
         ],
+    },
+    Section {
+        title: "Commands",
+        keys: &crate::commands::COMMAND_HELP,
     },
     Section {
         title: "Stashes",
