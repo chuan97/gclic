@@ -205,13 +205,12 @@
 <line x1="4.1" y1="178.5" x2="4.1" y2="170.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="178.5" x2="4.1" y2="187.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="178.5" x2="12.3" y2="170.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="12.3" y1="178.5" x2="12.3" y2="187.0" stroke="#8abeb7" stroke-width="1.2"/>
 <text x="49.2" y="182.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">:</text>
-<text x="147.6" y="182.6" fill="#ffffff" textLength="73.8" lengthAdjust="spacingAndGlyphs">commands:</text>
-<text x="229.6" y="182.6" fill="#ffffff" textLength="32.8" lengthAdjust="spacingAndGlyphs">:cd,</text>
-<text x="270.6" y="182.6" fill="#ffffff" textLength="41.0" lengthAdjust="spacingAndGlyphs">:git,</text>
-<text x="319.8" y="182.6" fill="#ffffff" textLength="57.4" lengthAdjust="spacingAndGlyphs">:stash,</text>
-<text x="385.4" y="182.6" fill="#ffffff" textLength="57.4" lengthAdjust="spacingAndGlyphs">:fetch,</text>
-<text x="451.0" y="182.6" fill="#ffffff" textLength="57.4" lengthAdjust="spacingAndGlyphs">:color,</text>
-<text x="516.6" y="182.6" fill="#ffffff" textLength="16.4" lengthAdjust="spacingAndGlyphs">:!</text>
+<text x="147.6" y="182.6" fill="#ffffff" textLength="8.2" lengthAdjust="spacingAndGlyphs">a</text>
+<text x="164.0" y="182.6" fill="#ffffff" textLength="65.6" lengthAdjust="spacingAndGlyphs">command;</text>
+<text x="237.8" y="182.6" fill="#ffffff" textLength="24.6" lengthAdjust="spacingAndGlyphs">tab</text>
+<text x="270.6" y="182.6" fill="#ffffff" textLength="73.8" lengthAdjust="spacingAndGlyphs">completes</text>
+<text x="352.6" y="182.6" fill="#ffffff" textLength="24.6" lengthAdjust="spacingAndGlyphs">its</text>
+<text x="385.4" y="182.6" fill="#ffffff" textLength="32.8" lengthAdjust="spacingAndGlyphs">name</text>
 <line x1="971.7" y1="178.5" x2="971.7" y2="170.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="971.7" y1="178.5" x2="971.7" y2="187.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="178.5" x2="979.9" y2="170.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="178.5" x2="979.9" y2="187.0" stroke="#666666" stroke-width="1.2"/>
 <path d="M4.1,187.0 Q4.1,195.5 8.2,195.5" fill="none" stroke="#666666" stroke-width="1.2"/>
