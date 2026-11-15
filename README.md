@@ -104,7 +104,7 @@ To set it, add `export GCLIC_EDITOR=nvim` to your `~/.zshrc` or `~/.bashrc`, or 
 
 ## A colour for each repo
 
-A line across the top is in the repo's own colour, as is the repo's name below it, so several repos open side by side are easy to tell apart. The colour comes from the repo's name, the last part of `origin`'s URL, or its folder's name without one, so everyone with a clone sees the same colour, and so does a worktree. `:color #e0a040` picks another, kept in the repo's `.git/config`, which isn't committed, `:color reset` goes back to the one from its name, and `:color` says which it is. `:color off` hides the line in every repo, as it's kept in your own git config, and `:color on` brings it back. It needs a terminal that shows 24-bit colour, as most do.
+A line across the top is in the repo's own colour, and ends in the repo's folder and name, the name in the same colour, so several repos open side by side are easy to tell apart. With the line off, the name shows at the end of the tab row instead. The colour comes from the repo's name, the last part of `origin`'s URL, or its folder's name without one, so everyone with a clone sees the same colour, and so does a worktree. `:color #e0a040` picks another, kept in the repo's `.git/config`, which isn't committed, `:color reset` goes back to the one from its name, and `:color` says which it is. `:color off` hides the line in every repo, as it's kept in your own git config, and `:color on` brings it back. It needs a terminal that shows 24-bit colour, as most do.
 
 ## Keyboard driven
 
