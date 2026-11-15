@@ -271,11 +271,47 @@ local function placement()
   }
 end
 
+--- Whether gclic's window covers the whole editor, as it does unless set
+--- smaller, for a pop-up.
+local function full_screen()
+  return M.config.width >= 1 and M.config.height >= 1
+end
+
+--- Full screen, Neovim's command line goes while gclic shows, as no window
+--- can cover it, and comes back when gclic is hidden. Messages still show
+--- when there are any.
+local function hide_command_line()
+  if full_screen() and state.cmdheight == nil then
+    state.cmdheight = vim.o.cmdheight
+    vim.o.cmdheight = 0
+  end
+end
+
+local function restore_command_line()
+  if state.cmdheight ~= nil then
+    vim.o.cmdheight = state.cmdheight
+    state.cmdheight = nil
+  end
+end
+
 local function show()
+  hide_command_line()
   local options = placement()
   options.style = "minimal"
   options.border = M.config.border
   state.win = vim.api.nvim_open_win(state.buf, true, options)
+  -- Never scrolled sideways: wrapping pins it to the first column, though
+  -- gclic's lines are as wide as the window anyway.
+  vim.wo[state.win].wrap = true
+  vim.api.nvim_win_call(state.win, function()
+    vim.fn.winrestview({ leftcol = 0 })
+  end)
+  -- However the window closes, :quit included, the command line comes back.
+  vim.api.nvim_create_autocmd("WinClosed", {
+    pattern = tostring(state.win),
+    once = true,
+    callback = restore_command_line,
+  })
   color_window()
   vim.cmd.startinsert()
 end
@@ -286,6 +322,7 @@ function M.hide()
     vim.api.nvim_win_hide(state.win)
   end
   state.win = nil
+  restore_command_line()
 end
 
 --- Starts gclic in the working folder, or shows it again where it was.
@@ -339,6 +376,35 @@ function M.show()
   if M.config.toggle_key then
     vim.keymap.set("t", M.config.toggle_key, M.hide, { buffer = state.buf, desc = "Hide gclic" })
   end
+  -- gclic doesn't use the mouse, so the mouse reaches Neovim, whose scrolling,
+  -- up, down or sideways, would leave terminal mode and scroll the window,
+  -- shifting gclic's screen and sending its keys to Neovim. A trackpad keeps
+  -- scrolling for a moment after a flick, into gclic if it opens meanwhile.
+  -- So in gclic's window, the mouse does nothing.
+  local keys = { buffer = state.buf }
+  local mouse = { "LeftMouse", "LeftDrag", "LeftRelease", "2-LeftMouse", "RightMouse", "MiddleMouse" }
+  for _, wheel in ipairs({ "ScrollWheelUp", "ScrollWheelDown", "ScrollWheelLeft", "ScrollWheelRight" }) do
+    for _, modifier in ipairs({ "", "S-", "C-", "M-" }) do
+      table.insert(mouse, modifier .. wheel)
+    end
+  end
+  for _, event in ipairs(mouse) do
+    vim.keymap.set({ "t", "n" }, "<" .. event .. ">", "<Nop>", keys)
+  end
+  -- The hide key works outside terminal mode too, so gclic can't get stuck.
+  if M.config.toggle_key then
+    vim.keymap.set("n", M.config.toggle_key, M.hide, { buffer = state.buf, desc = "Hide gclic" })
+  end
+  -- And should gclic's window leave terminal mode anyway, coming back to it
+  -- goes back into it, at the live screen.
+  vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter" }, {
+    buffer = state.buf,
+    callback = function()
+      if vim.api.nvim_get_mode().mode ~= "t" then
+        vim.cmd.startinsert()
+      end
+    end,
+  })
 end
 
 function M.toggle()
