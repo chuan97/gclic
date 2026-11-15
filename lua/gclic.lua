@@ -48,6 +48,10 @@ M.config = {
   accent = true,
 }
 
+-- The colours of the terminal Neovim runs in, as it answers when asked: its
+-- 16 colours by number, and its foreground and background.
+local terminal = { palette = {}, fg = nil, bg = nil }
+
 -- The repo the working folder is in, and gclic's colour for it: nil for each
 -- outside a repo, and for the colour while gclic's bar is turned off.
 local accent = { color = nil, root = nil, asked = 0 }
@@ -81,10 +85,13 @@ local function draw_accent()
     return
   end
   local normal = vim.api.nvim_get_hl(0, { name = "Normal", link = false })
-  local comment = vim.api.nvim_get_hl(0, { name = "Comment", link = false })
+  -- The folder in the grey gclic dims it in, the terminal's colour 8, or else
+  -- the line numbers', which colour schemes keep neutral.
+  local line_number = vim.api.nvim_get_hl(0, { name = "LineNr", link = false })
+  local folder = terminal.palette[8] or line_number.fg
   vim.api.nvim_set_hl(0, "GclicAccentBar", { fg = accent.color, bg = normal.bg })
   vim.api.nvim_set_hl(0, "GclicAccentName", { fg = accent.color, bg = normal.bg, bold = true })
-  vim.api.nvim_set_hl(0, "GclicAccentFolder", { fg = comment.fg, bg = normal.bg })
+  vim.api.nvim_set_hl(0, "GclicAccentFolder", { fg = folder, bg = normal.bg })
   vim.o.tabline = "%!v:lua.require'gclic'.tabline()"
   vim.o.showtabline = 2
 end
@@ -166,9 +173,6 @@ end
 
 local state = { buf = nil, win = nil }
 
--- The colours of the terminal Neovim runs in, as it answers when asked: its
--- 16 colours by number, and its foreground and background.
-local terminal = { palette = {}, fg = nil, bg = nil }
 
 --- A colour from a terminal's answer, `rgb:` and 1 to 4 hex digits a
 --- channel, as `#rrggbb`.
@@ -185,6 +189,10 @@ function M._take_answer(sequence)
   local n, r, g, b = sequence:match("^\027%]4;(%d+);rgb:(%x+)/(%x+)/(%x+)")
   if n then
     terminal.palette[tonumber(n)] = to_hex(r, g, b)
+    -- The bar's folder is in colour 8, which may come after it's drawn.
+    if tonumber(n) == 8 and accent.root then
+      vim.schedule(draw_accent)
+    end
     return
   end
   local which
