@@ -373,6 +373,9 @@ function M.show()
   else
     vim.fn.termopen({ M.config.cmd }, { env = env, on_exit = on_exit })
   end
+  -- A filetype of its own, for configs to tell gclic's window apart, say to
+  -- keep a status line or winbar out of it.
+  vim.bo[state.buf].filetype = "gclic"
   if M.config.toggle_key then
     vim.keymap.set("t", M.config.toggle_key, M.hide, { buffer = state.buf, desc = "Hide gclic" })
   end
