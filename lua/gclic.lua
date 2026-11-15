@@ -12,7 +12,8 @@
 --
 -- A bar across the top shows the repo in the colour gclic gives it, with its
 -- name, as gclic's own does, following the working folder. The plugin has to
--- load at startup for it, as with lazy.nvim's `event = "VeryLazy"`.
+-- load at startup for it, as with lazy.nvim's `event = "VeryLazy"`. gclic
+-- follows the working folder too: :cd in Neovim moves it to that repo.
 --
 -- With lazy.nvim:
 --
@@ -171,7 +172,9 @@ function M._editor_colors()
   return table.concat(pairs_, ";")
 end
 
-local state = { buf = nil, win = nil }
+-- gclic's buffer and window, and the file it reads Neovim's working folder
+-- from, to follow it to another repo.
+local state = { buf = nil, win = nil, follow = nil }
 
 
 --- A colour from a terminal's answer, `rgb:` and 1 to 4 hex digits a
@@ -304,9 +307,17 @@ function M.show()
       vim.b[state.buf]["terminal_color_" .. n] = color
     end
   end
+  -- Neovim's working folder, for gclic to follow, as `:cd` there changes it.
+  state.follow = vim.fn.tempname()
+  vim.fn.writefile({ vim.fn.getcwd() }, state.follow)
+  local follow = state.follow
   local on_exit = function()
-    -- gclic quit: its window and buffer go with it.
+    -- gclic quit: its window, buffer and file go with it.
     vim.schedule(function()
+      vim.fn.delete(follow)
+      if state.follow == follow then
+        state.follow = nil
+      end
       M.hide()
       if valid_buf() then
         vim.api.nvim_buf_delete(state.buf, { force = true })
@@ -316,9 +327,9 @@ function M.show()
   end
   -- The colour scheme's colours as gclic starts: a later change of colour
   -- scheme shows the next time it does.
-  local env = nil
+  local env = { GCLIC_FOLLOW = state.follow }
   if M.config.diff_colors == "editor" then
-    env = { GCLIC_EDITOR_COLORS = M._editor_colors() }
+    env.GCLIC_EDITOR_COLORS = M._editor_colors()
   end
   if vim.fn.has("nvim-0.11") == 1 then
     vim.fn.jobstart({ M.config.cmd }, { term = true, env = env, on_exit = on_exit })
@@ -353,6 +364,16 @@ function M.setup(opts)
   if M.config.colors == "terminal" and #vim.api.nvim_list_uis() > 0 then
     ask_terminal()
   end
+  -- A change of working folder, for gclic, if it's running, to follow. Not
+  -- one window's own, as with :lcd, as the rest of Neovim stays put.
+  vim.api.nvim_create_autocmd("DirChanged", {
+    group = vim.api.nvim_create_augroup("gclic_follow", { clear = true }),
+    callback = function()
+      if state.follow and vim.v.event.scope ~= "window" then
+        vim.fn.writefile({ vim.fn.getcwd() }, state.follow)
+      end
+    end,
+  })
   if M.config.accent then
     local group = vim.api.nvim_create_augroup("gclic_accent", { clear = true })
     vim.api.nvim_create_autocmd("DirChanged", { group = group, callback = M.refresh_accent })
