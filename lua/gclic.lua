@@ -6,6 +6,14 @@
 -- its `:cd` changes Neovim's working folder, so the file finder, search and
 -- file tree follow the repo picked in gclic.
 --
+-- ctrl-g hides gclic without quitting it, and the toggle brings it back as it
+-- was; q quits it. Its diffs are in the colour scheme's colours, as code is in
+-- the editor, while the rest of it keeps the terminal's.
+--
+-- A bar across the top shows the repo in the colour gclic gives it, with its
+-- name, as gclic's own does, following the working folder. The plugin has to
+-- load at startup for it, as with lazy.nvim's `event = "VeryLazy"`.
+--
 -- With lazy.nvim:
 --
 --   {
@@ -31,13 +39,140 @@ M.config = {
   -- in, so gclic looks as it does outside Neovim, whatever the editor's
   -- colour scheme, or "editor", the colour scheme's.
   colors = "terminal",
+  -- Whose colours gclic's diffs take: "editor", the colour scheme's, so code
+  -- looks as it does in the editor, or "gclic", VS Code Dark Modern's, which
+  -- gclic has on its own.
+  diff_colors = "editor",
+  -- A bar across the top in the repo's colour, with its name, as gclic shows
+  -- them, which gclic works out (`gclic --color`).
+  accent = true,
 }
-
-local state = { buf = nil, win = nil }
 
 -- The colours of the terminal Neovim runs in, as it answers when asked: its
 -- 16 colours by number, and its foreground and background.
 local terminal = { palette = {}, fg = nil, bg = nil }
+
+-- The repo the working folder is in, and gclic's colour for it: nil for each
+-- outside a repo, and for the colour while gclic's bar is turned off.
+local accent = { color = nil, root = nil, asked = 0 }
+-- The tabline as it was, to put back where there's no bar.
+local plain_showtabline = nil
+
+--- The bar, drawn as the tabline: a line in the repo's colour, then its
+--- folder, dimmed, and its name, as gclic's tab bar has them.
+function M.tabline()
+  if not accent.root then
+    return ""
+  end
+  local escape = function(text)
+    return (text:gsub("%%", "%%%%"))
+  end
+  local name = vim.fn.fnamemodify(accent.root, ":t")
+  local folder = vim.fn.fnamemodify(accent.root, ":~:h") .. "/"
+  local label = " " .. folder .. name .. " "
+  local line = string.rep("━", math.max(0, vim.o.columns - vim.fn.strdisplaywidth(label)))
+  return "%#GclicAccentBar#" .. line .. "%#GclicAccentFolder# " .. escape(folder) .. "%#GclicAccentName#" .. escape(name) .. " "
+end
+
+--- Shows the bar for the repo as last found, or the tabline as it was.
+local function draw_accent()
+  if plain_showtabline == nil then
+    plain_showtabline = vim.o.showtabline
+  end
+  if not (accent.color and accent.root) then
+    vim.o.showtabline = plain_showtabline
+    vim.o.tabline = ""
+    return
+  end
+  local normal = vim.api.nvim_get_hl(0, { name = "Normal", link = false })
+  -- The folder in the grey gclic dims it in, the terminal's colour 8, or else
+  -- the line numbers', which colour schemes keep neutral.
+  local line_number = vim.api.nvim_get_hl(0, { name = "LineNr", link = false })
+  local folder = terminal.palette[8] or line_number.fg
+  vim.api.nvim_set_hl(0, "GclicAccentBar", { fg = accent.color, bg = normal.bg })
+  vim.api.nvim_set_hl(0, "GclicAccentName", { fg = accent.color, bg = normal.bg, bold = true })
+  vim.api.nvim_set_hl(0, "GclicAccentFolder", { fg = folder, bg = normal.bg })
+  vim.o.tabline = "%!v:lua.require'gclic'.tabline()"
+  vim.o.showtabline = 2
+end
+
+--- Asks gclic for the working folder's repo and its colour, without waiting
+--- for it, and shows them. gclic's `:color` calls this too, inside Neovim.
+function M.refresh_accent()
+  if not M.config.accent or not vim.system then
+    return
+  end
+  -- Answers can come back out of order, after quick changes of folder: only
+  -- the latest question's counts.
+  accent.asked = accent.asked + 1
+  local asked = accent.asked
+  vim.system({ M.config.cmd, "--color" }, { text = true, cwd = vim.fn.getcwd() }, function(result)
+    vim.schedule(function()
+      if asked ~= accent.asked then
+        return
+      end
+      local lines = vim.split(result.stdout or "", "\n")
+      local found = result.code == 0
+      accent.color = found and lines[1]:match("^#%x%x%x%x%x%x$") or nil
+      accent.root = found and lines[2] ~= "" and lines[2] or nil
+      draw_accent()
+    end)
+  end)
+end
+
+-- The colour scheme's colours for gclic's diffs: the editor's background and
+-- text, its diff colours, and a colour for each kind of token, as the groups
+-- gclic's theme.rs reads (its SCOPES), which this list mirrors.
+local DIFF_GROUPS = { { "Normal", "fg" }, { "Normal", "bg" }, { "DiffAdd", "bg" }, { "DiffDelete", "bg" } }
+local SYNTAX_GROUPS = {
+  "@comment", "@string", "@string.regexp", "@string.escape", "@constant", "@number",
+  "@boolean", "@constant.builtin", "@keyword", "@keyword.function", "@keyword.import",
+  "@keyword.return", "@operator", "@function", "@function.builtin", "@function.call",
+  "@function.macro", "@type", "@type.builtin", "@variable", "@variable.parameter",
+  "@variable.builtin", "@property", "@module", "@attribute", "@tag", "@tag.attribute",
+  "@punctuation",
+}
+
+--- A group's colour for a part, "fg" or "bg", as `#rrggbb`. A group a colour
+--- scheme leaves unset falls back to its parent, `@keyword.function` to
+--- `@keyword`, as Neovim does, and a reversed one swaps its colours.
+local function group_color(group, part)
+  while group do
+    local ok, hl = pcall(vim.api.nvim_get_hl, 0, { name = group, link = false })
+    if ok then
+      local key = part
+      if hl.reverse then
+        key = part == "fg" and "bg" or "fg"
+      end
+      if hl[key] then
+        return string.format("#%06x", hl[key])
+      end
+    end
+    group = group:match("^(.+)%.[^.]+$")
+  end
+end
+
+--- The colours to give gclic, as its $GCLIC_EDITOR_COLORS: `group:part=#rrggbb`
+--- pairs separated by `;`.
+function M._editor_colors()
+  local pairs_ = {}
+  local function add(group, part)
+    local color = group_color(group, part)
+    if color then
+      table.insert(pairs_, group .. ":" .. part .. "=" .. color)
+    end
+  end
+  for _, entry in ipairs(DIFF_GROUPS) do
+    add(entry[1], entry[2])
+  end
+  for _, group in ipairs(SYNTAX_GROUPS) do
+    add(group, "fg")
+  end
+  return table.concat(pairs_, ";")
+end
+
+local state = { buf = nil, win = nil }
+
 
 --- A colour from a terminal's answer, `rgb:` and 1 to 4 hex digits a
 --- channel, as `#rrggbb`.
@@ -54,6 +189,10 @@ function M._take_answer(sequence)
   local n, r, g, b = sequence:match("^\027%]4;(%d+);rgb:(%x+)/(%x+)/(%x+)")
   if n then
     terminal.palette[tonumber(n)] = to_hex(r, g, b)
+    -- The bar's folder is in colour 8, which may come after it's drawn.
+    if tonumber(n) == 8 and accent.root then
+      vim.schedule(draw_accent)
+    end
     return
   end
   local which
@@ -175,10 +314,16 @@ function M.show()
       state.buf = nil
     end)
   end
+  -- The colour scheme's colours as gclic starts: a later change of colour
+  -- scheme shows the next time it does.
+  local env = nil
+  if M.config.diff_colors == "editor" then
+    env = { GCLIC_EDITOR_COLORS = M._editor_colors() }
+  end
   if vim.fn.has("nvim-0.11") == 1 then
-    vim.fn.jobstart({ M.config.cmd }, { term = true, on_exit = on_exit })
+    vim.fn.jobstart({ M.config.cmd }, { term = true, env = env, on_exit = on_exit })
   else
-    vim.fn.termopen({ M.config.cmd }, { on_exit = on_exit })
+    vim.fn.termopen({ M.config.cmd }, { env = env, on_exit = on_exit })
   end
   if M.config.toggle_key then
     vim.keymap.set("t", M.config.toggle_key, M.hide, { buffer = state.buf, desc = "Hide gclic" })
@@ -207,6 +352,13 @@ function M.setup(opts)
   vim.api.nvim_create_user_command("Gclic", M.toggle, { desc = "Toggle gclic" })
   if M.config.colors == "terminal" and #vim.api.nvim_list_uis() > 0 then
     ask_terminal()
+  end
+  if M.config.accent then
+    local group = vim.api.nvim_create_augroup("gclic_accent", { clear = true })
+    vim.api.nvim_create_autocmd("DirChanged", { group = group, callback = M.refresh_accent })
+    -- A new colour scheme clears the bar's colours.
+    vim.api.nvim_create_autocmd("ColorScheme", { group = group, callback = draw_accent })
+    M.refresh_accent()
   end
   -- The window follows the terminal's size, and gclic redraws to fit it.
   vim.api.nvim_create_autocmd("VimResized", {

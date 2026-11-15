@@ -14,6 +14,7 @@ mod highlight;
 mod picker;
 mod repos;
 mod staging;
+mod theme;
 mod ui;
 mod worker;
 
@@ -25,6 +26,9 @@ use std::path::PathBuf;
 fn main() -> Result<()> {
     let start = std::env::current_dir()?;
     let repo_root = git::repo_root().ok().map(PathBuf::from);
+    if std::env::args().nth(1).as_deref() == Some("--color") {
+        print_color(repo_root);
+    }
     let search_root = repos::search_root(&start, repo_root.as_deref());
     // Outside a repo, gclic offers the ones under where it started.
     if repo_root.is_none() && repos::find(&search_root).is_empty() {
@@ -38,6 +42,24 @@ fn main() -> Result<()> {
     commands::plain_keys();
     ratatui::restore();
     result
+}
+
+/// `gclic --color`, for the Neovim plugin, or anything else that wants to
+/// show a repo in the colour gclic gives it: the colour, as `#rrggbb`, or an
+/// empty line if the colour bar is turned off, then the repo's folder. Fails
+/// outside a repo.
+fn print_color(repo_root: Option<PathBuf>) -> ! {
+    let Some(root) = repo_root else {
+        eprintln!("gclic: not in a git repo");
+        std::process::exit(1);
+    };
+    // The colour comes from the repo's config and name, read from its root.
+    if std::env::set_current_dir(&root).is_err() {
+        std::process::exit(1);
+    }
+    let color = if accent::bar_shown() { accent::Accent::current().hex() } else { String::new() };
+    println!("{color}\n{}", root.display());
+    std::process::exit(0);
 }
 
 /// Opens the repo gclic is in, or the one picked if it isn't in one, and runs

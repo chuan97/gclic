@@ -143,6 +143,13 @@ pub fn open_in_nvim(address: &str, file: &Path, line: usize) -> Command {
     nvim_expr(address, &format!("luaeval({}, [{file}, {line}])", vim_string(lua)))
 }
 
+/// Asks the parent Neovim to show the repo's colour again, after `:color`
+/// changed it. Nothing happens without gclic's plugin there.
+pub fn refresh_nvim_accent(address: &str) -> Command {
+    let lua = "pcall(function() require(\"gclic\").refresh_accent() end)";
+    nvim_expr(address, &format!("luaeval({})", vim_string(lua)))
+}
+
 /// Makes the parent Neovim's working folder the repo gclic switched to, so
 /// its file finder, search and file tree follow.
 pub fn cd_nvim(address: &str, folder: &Path) -> Command {

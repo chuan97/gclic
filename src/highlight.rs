@@ -29,11 +29,16 @@ fn syntaxes() -> &'static SyntaxSet {
     SYNTAXES.get_or_init(SyntaxSet::load_defaults_newlines)
 }
 
+/// The editor's syntax colours, inside an editor that passed them, or else
+/// gclic's own, VS Code Dark Modern's.
 fn theme() -> &'static Theme {
     static THEME_LOADED: OnceLock<Theme> = OnceLock::new();
-    THEME_LOADED.get_or_init(|| {
-        let mut reader = std::io::Cursor::new(THEME);
-        ThemeSet::load_from_reader(&mut reader).unwrap_or_default()
+    THEME_LOADED.get_or_init(|| match crate::theme::editor_colors() {
+        Some(editor) => crate::theme::syntax_theme(editor),
+        None => {
+            let mut reader = std::io::Cursor::new(THEME);
+            ThemeSet::load_from_reader(&mut reader).unwrap_or_default()
+        }
     })
 }
 

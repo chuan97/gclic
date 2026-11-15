@@ -729,6 +729,7 @@ impl App {
                 match git::set_global_config(accent::BAR_KEY, off.then_some("false")) {
                     Ok(()) => {
                         self.accent_bar = accent::bar_shown();
+                        self.tell_editor_about_color();
                         self.message = match (off, self.accent_bar) {
                             (true, false) => "The colour bar is off in every repo. :color on shows it again",
                             (false, true) => "The colour bar is on",
@@ -755,6 +756,7 @@ impl App {
         match git::set_local_config(accent::CONFIG_KEY, value.as_deref()) {
             Ok(()) => {
                 self.accent = Accent::current();
+                self.tell_editor_about_color();
                 let colour = match value {
                     Some(_) => format!("This repo's colour is now {}", self.accent.hex()),
                     None => format!("This repo's colour is back to {}, from its name", self.accent.hex()),
@@ -788,6 +790,13 @@ impl App {
         match Running::start(label, git::user_command(&args)) {
             Ok(running) => self.running = Some(running),
             Err(error) => self.modal = Modal::Error(format!("Couldn't run git: {error}")),
+        }
+    }
+
+    /// Inside Neovim, has it show the repo's colour as it now is.
+    fn tell_editor_about_color(&mut self) {
+        if let Some(address) = editor::parent_nvim() {
+            self.start_in_background("nvim", editor::refresh_nvim_accent(&address));
         }
     }
 
@@ -1423,9 +1432,19 @@ impl App {
 
     /// A line in the repo's colour across the top, to tell apart repos open
     /// side by side.
+    /// The repo's colour, as a line across the top ending in the repo's
+    /// folder and name, as Neovim's bar shows them with gclic's plugin.
     fn render_accent_bar(&self, frame: &mut Frame, area: Rect) {
-        let line = accent_line(area.width as usize);
-        frame.render_widget(Span::styled(line, Style::default().fg(self.accent.color())), area);
+        let (folder, name) = &self.project;
+        let (line, label) = accent_bar(area.width as usize, folder, name);
+        let color = Style::default().fg(self.accent.color());
+        let mut spans = vec![Span::raw(" "), Span::styled(line, color)];
+        if let Some((folder, name)) = label {
+            spans.push(Span::styled(format!(" {folder}"), Style::default().fg(ui::DIM)));
+            spans.push(Span::styled(name, color.add_modifier(Modifier::BOLD)));
+        }
+        spans.push(Span::raw(" "));
+        frame.render_widget(Line::from(spans), area);
     }
 
     /// The tab bar: both tabs, the showing one highlighted, the comparison's
@@ -1451,7 +1470,12 @@ impl App {
             spans.push(Span::raw("  "));
         }
         let tabs = Line::from(spans);
-        let name_color = if self.accent_bar { self.accent.color() } else { Color::Cyan };
+        // The colour bar shows the project when it's on.
+        if self.accent_bar {
+            frame.render_widget(tabs, area);
+            return;
+        }
+        let name_color = Color::Cyan;
         // Two columns at least between the tabs and the project.
         let room = (area.width as usize).saturating_sub(tabs.width() + 2);
         let (folder, name) = &self.project;
@@ -1993,8 +2017,18 @@ fn compare_items(recent_yanks: &[String]) -> Result<Vec<String>> {
 
 /// The line at the top, `width` wide, with a column of margin either side,
 /// as the tab bar has.
-fn accent_line(width: usize) -> String {
-    format!(" {} ", "━".repeat(width.saturating_sub(2)))
+/// The colour bar in `width` columns: its line, and the folder and name after
+/// it, the folder shortened or left out where there's no room for it, and
+/// the name too, so that at least a short line shows. A column of margin at
+/// each end, as the panes have.
+fn accent_bar(width: usize, folder: &str, name: &str) -> (String, Option<(String, String)>) {
+    const SHORTEST_LINE: usize = 4;
+    let inside = width.saturating_sub(2);
+    // A space between the line and the folder.
+    let room = inside.saturating_sub(SHORTEST_LINE + 1);
+    let label = fit_folder(folder, name, room).map(|folder| (folder, name.to_string()));
+    let label_width = label.as_ref().map_or(0, |(folder, name)| 1 + folder.chars().count() + name.chars().count());
+    ("━".repeat(inside - label_width), label)
 }
 
 /// The folder holding the repo, ending in a separator and with `~` for the
@@ -2120,9 +2154,15 @@ mod tests {
     }
 
     #[test]
-    fn the_accent_line_has_a_margin_either_side() {
-        assert_eq!(accent_line(6), " ━━━━ ");
-        assert_eq!(accent_line(1), "  ");
+    fn the_colour_bar_ends_in_the_repo_s_folder_and_name_as_far_as_they_fit() {
+        let bar = |width| accent_bar(width, "~/Code/", "gclic");
+        // 30 wide: 28 inside, of which " ~/Code/gclic" takes 13.
+        assert_eq!(bar(30), ("━".repeat(15), Some(("~/Code/".to_string(), "gclic".to_string()))));
+        // Shorter: the folder goes before the name, and some line always shows.
+        assert_eq!(bar(16).1, Some((String::new(), "gclic".to_string())));
+        assert_eq!(bar(16).0.chars().count(), 8);
+        assert_eq!(bar(8), ("━".repeat(6), None));
+        assert_eq!(bar(1), (String::new(), None));
     }
 
     #[test]

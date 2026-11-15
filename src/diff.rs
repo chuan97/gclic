@@ -2,6 +2,7 @@
 
 use crate::git::{self, DiffSource};
 use crate::highlight::{self, ColoredLine};
+use crate::theme::BUILT_IN;
 use crate::ui;
 use anyhow::Result;
 use ratatui::Frame;
@@ -11,18 +12,9 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use std::ops::Range;
 
-// Muted tints rather than pure red and green, so the syntax colours on top
-// stay readable. Changed words get a stronger tint of the same colour.
-const REMOVED_BG: Color = Color::Rgb(58, 30, 34);
-const ADDED_BG: Color = Color::Rgb(28, 52, 38);
-const REMOVED_WORD_BG: Color = Color::Rgb(112, 48, 54);
-const ADDED_WORD_BG: Color = Color::Rgb(46, 96, 62);
+// The background, text and tints behind the code come from `theme`: the
+// editor's, inside one, or else VS Code Dark Modern's, which gclic comes with.
 const FILLER_BG: Color = Color::Indexed(235);
-/// VS Code Dark Modern's editor background and text, behind and on the code,
-/// whatever the terminal's theme: the syntax colours and tints are made for
-/// them, and would be hard to read on a light background.
-const EDITOR_BG: Color = Color::Rgb(31, 31, 31);
-const EDITOR_FG: Color = Color::Rgb(204, 204, 204);
 // A conflict's two sides, as VS Code tints them: green for the current
 // change, which is yours, and blue for the incoming one.
 const CURRENT_BG: Color = Color::Rgb(26, 52, 46);
@@ -520,8 +512,8 @@ const MINIMAP_TRACK: Color = Color::Indexed(235);
 const MINIMAP_VIEW: Color = Color::Indexed(240);
 /// Changes are brighter where they're on screen, so the view still shows
 /// over them.
-const MINIMAP_REMOVED: [Color; 2] = [REMOVED_WORD_BG, Color::Rgb(205, 80, 88)];
-const MINIMAP_ADDED: [Color; 2] = [ADDED_WORD_BG, Color::Rgb(88, 184, 112)];
+const MINIMAP_REMOVED: [Color; 2] = [BUILT_IN.removed_word, Color::Rgb(205, 80, 88)];
+const MINIMAP_ADDED: [Color; 2] = [BUILT_IN.added_word, Color::Rgb(88, 184, 112)];
 const MINIMAP_CURRENT: [Color; 2] = [CURRENT_WORD_BG, Color::Rgb(72, 180, 146)];
 const MINIMAP_INCOMING: [Color; 2] = [INCOMING_WORD_BG, Color::Rgb(90, 146, 220)];
 
@@ -904,7 +896,8 @@ impl DiffPane {
         frame.render_widget(block, area);
         // The code's own background, inside the border. What's drawn on it
         // keeps it, unless it sets a background of its own.
-        frame.render_widget(ratatui::widgets::Block::new().style(Style::default().bg(EDITOR_BG).fg(EDITOR_FG)), inner);
+        let colors = crate::theme::diff_colors();
+        frame.render_widget(ratatui::widgets::Block::new().style(Style::default().bg(colors.background).fg(colors.text)), inner);
         self.height = inner.height as usize;
 
         if self.rows.is_empty() {
@@ -940,7 +933,7 @@ impl DiffPane {
         let (old_colors, new_colors) = if conflict {
             ((CURRENT_BG, CURRENT_WORD_BG), (INCOMING_BG, INCOMING_WORD_BG))
         } else {
-            ((REMOVED_BG, REMOVED_WORD_BG), (ADDED_BG, ADDED_WORD_BG))
+            ((colors.removed, colors.removed_word), (colors.added, colors.added_word))
         };
         let shown = self.items.iter().enumerate().skip(scroll).take(self.height);
         for (i, (index, item)) in shown.enumerate() {
@@ -1128,9 +1121,9 @@ mod tests {
             marks: vec![7..13],
             colors: Vec::new(),
         };
-        let line = side_line(Some(&cell), 3, false, ADDED_BG, ADDED_WORD_BG);
+        let line = side_line(Some(&cell), 3, false, BUILT_IN.added, BUILT_IN.added_word);
         assert_eq!(text_of(&line), "   7 lo wörld");
-        let marked = line.spans.iter().find(|span| span.style.bg == Some(ADDED_WORD_BG));
+        let marked = line.spans.iter().find(|span| span.style.bg == Some(BUILT_IN.added_word));
         assert_eq!(marked.unwrap().content, "wörld");
     }
 
@@ -1144,7 +1137,7 @@ mod tests {
             marks: vec![8..9],
             colors: vec![(0..3, red), (3..10, blue)],
         };
-        let line = side_line(Some(&cell), 0, false, ADDED_BG, ADDED_WORD_BG);
+        let line = side_line(Some(&cell), 0, false, BUILT_IN.added, BUILT_IN.added_word);
         let pieces: Vec<_> = line.spans[1..]
             .iter()
             .map(|span| (span.content.as_ref(), span.style.fg, span.style.bg))
@@ -1154,7 +1147,7 @@ mod tests {
             [
                 ("let", Some(red), None),
                 (" x = ", Some(blue), None),
-                ("1", Some(blue), Some(ADDED_WORD_BG)),
+                ("1", Some(blue), Some(BUILT_IN.added_word)),
                 (";", Some(blue), None),
             ]
         );
@@ -1174,7 +1167,7 @@ mod tests {
     #[test]
     fn scrolling_past_a_short_line_leaves_only_its_number() {
         let cell = Cell { number: 1, text: "ab".to_string(), changed: false, marks: Vec::new(), colors: Vec::new() };
-        assert_eq!(text_of(&side_line(Some(&cell), 10, false, ADDED_BG, ADDED_WORD_BG)), "   1 ");
+        assert_eq!(text_of(&side_line(Some(&cell), 10, false, BUILT_IN.added, BUILT_IN.added_word)), "   1 ");
     }
 
     #[test]
