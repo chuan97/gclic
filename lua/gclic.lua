@@ -300,6 +300,12 @@ local function show()
   options.style = "minimal"
   options.border = M.config.border
   state.win = vim.api.nvim_open_win(state.buf, true, options)
+  -- Never scrolled sideways: wrapping pins it to the first column, though
+  -- gclic's lines are as wide as the window anyway.
+  vim.wo[state.win].wrap = true
+  vim.api.nvim_win_call(state.win, function()
+    vim.fn.winrestview({ leftcol = 0 })
+  end)
   -- However the window closes, :quit included, the command line comes back.
   vim.api.nvim_create_autocmd("WinClosed", {
     pattern = tostring(state.win),
@@ -370,15 +376,24 @@ function M.show()
   if M.config.toggle_key then
     vim.keymap.set("t", M.config.toggle_key, M.hide, { buffer = state.buf, desc = "Hide gclic" })
   end
-  -- gclic doesn't use the mouse, so the mouse reaches Neovim, whose scroll
-  -- wheel would leave terminal mode and scroll back through the terminal's
-  -- history, with gclic's keys then going to Neovim. The wheel moves gclic's
-  -- cursor instead, as j and k do, and clicks do nothing.
+  -- gclic doesn't use the mouse, so the mouse reaches Neovim, whose scrolling,
+  -- up, down or sideways, would leave terminal mode and scroll the window,
+  -- shifting gclic's screen and sending its keys to Neovim. A trackpad keeps
+  -- scrolling for a moment after a flick, into gclic if it opens meanwhile.
+  -- So in gclic's window, the mouse does nothing.
   local keys = { buffer = state.buf }
-  vim.keymap.set("t", "<ScrollWheelDown>", "j", keys)
-  vim.keymap.set("t", "<ScrollWheelUp>", "k", keys)
-  for _, click in ipairs({ "LeftMouse", "LeftDrag", "LeftRelease", "2-LeftMouse", "RightMouse", "MiddleMouse" }) do
-    vim.keymap.set("t", "<" .. click .. ">", "<Nop>", keys)
+  local mouse = { "LeftMouse", "LeftDrag", "LeftRelease", "2-LeftMouse", "RightMouse", "MiddleMouse" }
+  for _, wheel in ipairs({ "ScrollWheelUp", "ScrollWheelDown", "ScrollWheelLeft", "ScrollWheelRight" }) do
+    for _, modifier in ipairs({ "", "S-", "C-", "M-" }) do
+      table.insert(mouse, modifier .. wheel)
+    end
+  end
+  for _, event in ipairs(mouse) do
+    vim.keymap.set({ "t", "n" }, "<" .. event .. ">", "<Nop>", keys)
+  end
+  -- The hide key works outside terminal mode too, so gclic can't get stuck.
+  if M.config.toggle_key then
+    vim.keymap.set("n", M.config.toggle_key, M.hide, { buffer = state.buf, desc = "Hide gclic" })
   end
   -- And should gclic's window leave terminal mode anyway, coming back to it
   -- goes back into it, at the live screen.
