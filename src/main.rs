@@ -14,6 +14,7 @@ mod highlight;
 mod picker;
 mod repos;
 mod staging;
+mod theme;
 mod ui;
 mod worker;
 

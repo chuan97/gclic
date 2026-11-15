@@ -6,6 +6,10 @@
 -- its `:cd` changes Neovim's working folder, so the file finder, search and
 -- file tree follow the repo picked in gclic.
 --
+-- ctrl-g hides gclic without quitting it, and the toggle brings it back as it
+-- was; q quits it. Its diffs are in the colour scheme's colours, as code is in
+-- the editor, while the rest of it keeps the terminal's.
+--
 -- With lazy.nvim:
 --
 --   {
@@ -31,7 +35,62 @@ M.config = {
   -- in, so gclic looks as it does outside Neovim, whatever the editor's
   -- colour scheme, or "editor", the colour scheme's.
   colors = "terminal",
+  -- Whose colours gclic's diffs take: "editor", the colour scheme's, so code
+  -- looks as it does in the editor, or "gclic", VS Code Dark Modern's, which
+  -- gclic has on its own.
+  diff_colors = "editor",
 }
+
+-- The colour scheme's colours for gclic's diffs: the editor's background and
+-- text, its diff colours, and a colour for each kind of token, as the groups
+-- gclic's theme.rs reads (its SCOPES), which this list mirrors.
+local DIFF_GROUPS = { { "Normal", "fg" }, { "Normal", "bg" }, { "DiffAdd", "bg" }, { "DiffDelete", "bg" } }
+local SYNTAX_GROUPS = {
+  "@comment", "@string", "@string.regexp", "@string.escape", "@constant", "@number",
+  "@boolean", "@constant.builtin", "@keyword", "@keyword.function", "@keyword.import",
+  "@keyword.return", "@operator", "@function", "@function.builtin", "@function.call",
+  "@function.macro", "@type", "@type.builtin", "@variable", "@variable.parameter",
+  "@variable.builtin", "@property", "@module", "@attribute", "@tag", "@tag.attribute",
+  "@punctuation",
+}
+
+--- A group's colour for a part, "fg" or "bg", as `#rrggbb`. A group a colour
+--- scheme leaves unset falls back to its parent, `@keyword.function` to
+--- `@keyword`, as Neovim does, and a reversed one swaps its colours.
+local function group_color(group, part)
+  while group do
+    local ok, hl = pcall(vim.api.nvim_get_hl, 0, { name = group, link = false })
+    if ok then
+      local key = part
+      if hl.reverse then
+        key = part == "fg" and "bg" or "fg"
+      end
+      if hl[key] then
+        return string.format("#%06x", hl[key])
+      end
+    end
+    group = group:match("^(.+)%.[^.]+$")
+  end
+end
+
+--- The colours to give gclic, as its $GCLIC_EDITOR_COLORS: `group:part=#rrggbb`
+--- pairs separated by `;`.
+function M._editor_colors()
+  local pairs_ = {}
+  local function add(group, part)
+    local color = group_color(group, part)
+    if color then
+      table.insert(pairs_, group .. ":" .. part .. "=" .. color)
+    end
+  end
+  for _, entry in ipairs(DIFF_GROUPS) do
+    add(entry[1], entry[2])
+  end
+  for _, group in ipairs(SYNTAX_GROUPS) do
+    add(group, "fg")
+  end
+  return table.concat(pairs_, ";")
+end
 
 local state = { buf = nil, win = nil }
 
@@ -175,10 +234,16 @@ function M.show()
       state.buf = nil
     end)
   end
+  -- The colour scheme's colours as gclic starts: a later change of colour
+  -- scheme shows the next time it does.
+  local env = nil
+  if M.config.diff_colors == "editor" then
+    env = { GCLIC_EDITOR_COLORS = M._editor_colors() }
+  end
   if vim.fn.has("nvim-0.11") == 1 then
-    vim.fn.jobstart({ M.config.cmd }, { term = true, on_exit = on_exit })
+    vim.fn.jobstart({ M.config.cmd }, { term = true, env = env, on_exit = on_exit })
   else
-    vim.fn.termopen({ M.config.cmd }, { on_exit = on_exit })
+    vim.fn.termopen({ M.config.cmd }, { env = env, on_exit = on_exit })
   end
   if M.config.toggle_key then
     vim.keymap.set("t", M.config.toggle_key, M.hide, { buffer = state.buf, desc = "Hide gclic" })
