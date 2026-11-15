@@ -370,6 +370,26 @@ function M.show()
   if M.config.toggle_key then
     vim.keymap.set("t", M.config.toggle_key, M.hide, { buffer = state.buf, desc = "Hide gclic" })
   end
+  -- gclic doesn't use the mouse, so the mouse reaches Neovim, whose scroll
+  -- wheel would leave terminal mode and scroll back through the terminal's
+  -- history, with gclic's keys then going to Neovim. The wheel moves gclic's
+  -- cursor instead, as j and k do, and clicks do nothing.
+  local keys = { buffer = state.buf }
+  vim.keymap.set("t", "<ScrollWheelDown>", "j", keys)
+  vim.keymap.set("t", "<ScrollWheelUp>", "k", keys)
+  for _, click in ipairs({ "LeftMouse", "LeftDrag", "LeftRelease", "2-LeftMouse", "RightMouse", "MiddleMouse" }) do
+    vim.keymap.set("t", "<" .. click .. ">", "<Nop>", keys)
+  end
+  -- And should gclic's window leave terminal mode anyway, coming back to it
+  -- goes back into it, at the live screen.
+  vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter" }, {
+    buffer = state.buf,
+    callback = function()
+      if vim.api.nvim_get_mode().mode ~= "t" then
+        vim.cmd.startinsert()
+      end
+    end,
+  })
 end
 
 function M.toggle()
