@@ -271,11 +271,41 @@ local function placement()
   }
 end
 
+--- Whether gclic's window covers the whole editor, as it does unless set
+--- smaller, for a pop-up.
+local function full_screen()
+  return M.config.width >= 1 and M.config.height >= 1
+end
+
+--- Full screen, Neovim's command line goes while gclic shows, as no window
+--- can cover it, and comes back when gclic is hidden. Messages still show
+--- when there are any.
+local function hide_command_line()
+  if full_screen() and state.cmdheight == nil then
+    state.cmdheight = vim.o.cmdheight
+    vim.o.cmdheight = 0
+  end
+end
+
+local function restore_command_line()
+  if state.cmdheight ~= nil then
+    vim.o.cmdheight = state.cmdheight
+    state.cmdheight = nil
+  end
+end
+
 local function show()
+  hide_command_line()
   local options = placement()
   options.style = "minimal"
   options.border = M.config.border
   state.win = vim.api.nvim_open_win(state.buf, true, options)
+  -- However the window closes, :quit included, the command line comes back.
+  vim.api.nvim_create_autocmd("WinClosed", {
+    pattern = tostring(state.win),
+    once = true,
+    callback = restore_command_line,
+  })
   color_window()
   vim.cmd.startinsert()
 end
@@ -286,6 +316,7 @@ function M.hide()
     vim.api.nvim_win_hide(state.win)
   end
   state.win = nil
+  restore_command_line()
 end
 
 --- Starts gclic in the working folder, or shows it again where it was.
