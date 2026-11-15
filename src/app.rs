@@ -729,6 +729,7 @@ impl App {
                 match git::set_global_config(accent::BAR_KEY, off.then_some("false")) {
                     Ok(()) => {
                         self.accent_bar = accent::bar_shown();
+                        self.tell_editor_about_color();
                         self.message = match (off, self.accent_bar) {
                             (true, false) => "The colour bar is off in every repo. :color on shows it again",
                             (false, true) => "The colour bar is on",
@@ -755,6 +756,7 @@ impl App {
         match git::set_local_config(accent::CONFIG_KEY, value.as_deref()) {
             Ok(()) => {
                 self.accent = Accent::current();
+                self.tell_editor_about_color();
                 let colour = match value {
                     Some(_) => format!("This repo's colour is now {}", self.accent.hex()),
                     None => format!("This repo's colour is back to {}, from its name", self.accent.hex()),
@@ -788,6 +790,13 @@ impl App {
         match Running::start(label, git::user_command(&args)) {
             Ok(running) => self.running = Some(running),
             Err(error) => self.modal = Modal::Error(format!("Couldn't run git: {error}")),
+        }
+    }
+
+    /// Inside Neovim, has it show the repo's colour as it now is.
+    fn tell_editor_about_color(&mut self) {
+        if let Some(address) = editor::parent_nvim() {
+            self.start_in_background("nvim", editor::refresh_nvim_accent(&address));
         }
     }
 
