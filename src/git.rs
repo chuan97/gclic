@@ -247,6 +247,18 @@ fn ssh_command() -> String {
         .unwrap_or_else(|| "ssh".to_string())
 }
 
+/// The root of the repo `folder` is in, if it's in one.
+pub fn repo_root_of(folder: &Path) -> Option<PathBuf> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .current_dir(folder)
+        .stdin(Stdio::null())
+        .output()
+        .ok()
+        .filter(|output| output.status.success())?;
+    Some(PathBuf::from(String::from_utf8_lossy(&output.stdout).trim()))
+}
+
 pub fn repo_root() -> Result<String> {
     Ok(run(&["rev-parse", "--show-toplevel"])?.trim().to_string())
 }

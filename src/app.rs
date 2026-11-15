@@ -219,6 +219,8 @@ pub struct App {
     /// A terminal editor to open, for the same reason: what to show as its
     /// command, its name, and the command.
     editor_in_terminal: Option<(String, String, Command)>,
+    /// Inside Neovim, how to follow its working folder to another repo.
+    follow: Option<editor::Follow>,
     /// "o open in nvim", naming the editor `o` opens.
     editor_hint: String,
     /// Where `:cd` looks for repos. It stays put as the repo changes, so the
@@ -249,6 +251,7 @@ impl App {
             fetched: None,
             shell_line: None,
             editor_in_terminal: None,
+            follow: editor::Follow::from_env(),
             editor_hint: match editor::parent_nvim() {
                 Some(_) => "o open in nvim".to_string(),
                 None => format!("o open in {}", editor::name(&editor::setting())),
@@ -368,6 +371,16 @@ impl App {
     /// Picks up what happened outside the app, such as git commands in another
     /// terminal. The worker does the reading, and `apply_poll` the rest.
     fn auto_refresh(&mut self) {
+        // Not while a popup or the command line is open, which switching
+        // repos would throw away: it waits for the next poll after it.
+        if matches!(self.modal, Modal::None)
+            && let Ok(current) = std::env::current_dir()
+            && let Some(root) = self.follow.as_mut().and_then(|follow| follow.moved_to(&current))
+        {
+            self.switch_repo(&root, false);
+            let name = root.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
+            self.message = format!("Followed Neovim to {name}");
+        }
         let diff = self.diff.as_ref().map(|diff| diff.source.clone());
         self.worker.poll(self.generation, diff);
         // Collects the editor commands that have finished, so none linger.
@@ -966,7 +979,7 @@ impl App {
         }
         let entries = repos::entries(&self.search_root);
         match repos::target(name, &entries) {
-            repos::Target::Repo(repo) => self.switch_repo(&repo),
+            repos::Target::Repo(repo) => self.switch_repo(&repo, true),
             repos::Target::Choose => self.open_repo_picker(name),
             repos::Target::None => {
                 self.message = format!("No repo matches {name} in {}", repos::tilde(&self.search_root));
@@ -997,7 +1010,9 @@ impl App {
     /// Makes another repo the one gclic shows and runs git in. Everything
     /// read from the old one goes, so the app starts afresh, keeping only the
     /// user's choices of how to show things.
-    fn switch_repo(&mut self, repo: &Path) {
+    /// `tell_nvim` is false when following Neovim, which is already there,
+    /// perhaps in a folder inside the repo, which telling it would undo.
+    fn switch_repo(&mut self, repo: &Path, tell_nvim: bool) {
         if let Err(error) = std::env::set_current_dir(repo) {
             self.modal = Modal::Error(format!("Can't open {}: {error}", repo.display()));
             return;
@@ -1005,13 +1020,14 @@ impl App {
         let mut fresh = App::new(self.search_root.clone());
         // Inside Neovim, its project follows, for its file finder, search and
         // file tree.
-        if let Some(address) = editor::parent_nvim() {
+        if let Some(address) = editor::parent_nvim().filter(|_| tell_nvim) {
             fresh.start_in_background("nvim", editor::cd_nvim(&address, repo));
         }
         fresh.split = self.split;
         fresh.auto_fetch = self.auto_fetch;
         // A command still running carries on, and its result shows here.
         fresh.running = self.running.take();
+        fresh.follow = self.follow.take();
         // The old worker stops once it finds no one listening for its results.
         *self = fresh;
     }
@@ -1271,7 +1287,7 @@ impl App {
                         self.search_root = parent;
                         self.open_repo_picker("");
                     }
-                    Some((_, repo)) => self.switch_repo(&repo),
+                    Some((_, repo)) => self.switch_repo(&repo, true),
                     None => {}
                 }
             }

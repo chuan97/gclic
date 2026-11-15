@@ -8,8 +8,9 @@
 //! `$NVIM` says how to reach it, the file opens in that Neovim instead.
 
 use crate::commands::split_args;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::SystemTime;
 
 /// How to open a file.
 pub enum Launch {
@@ -157,6 +158,42 @@ pub fn cd_nvim(address: &str, folder: &Path) -> Command {
     nvim_expr(address, &format!("luaeval({}, {})", vim_string(lua), vim_string(&folder.display().to_string())))
 }
 
+/// Following the Neovim gclic runs in: its plugin writes Neovim's working
+/// folder to a file, named in `$GCLIC_FOLLOW`, whenever it changes, and gclic
+/// switches to the repo that folder is in. A file rather than keys typed into
+/// gclic, which could land in a popup or a search.
+pub struct Follow {
+    file: PathBuf,
+    /// When the file last changed, as far as gclic has seen.
+    seen: Option<SystemTime>,
+}
+
+impl Follow {
+    /// Inside Neovim, with gclic's plugin there to write the file.
+    pub fn from_env() -> Option<Follow> {
+        let file = std::env::var_os("GCLIC_FOLLOW").filter(|file| !file.is_empty())?;
+        Some(Follow { file: PathBuf::from(file), seen: None })
+    }
+
+    /// The root of the repo Neovim has moved to, if it wrote a folder since
+    /// last asked and that folder is in a repo other than `current`. Folders
+    /// outside a repo are passed over.
+    pub fn moved_to(&mut self, current: &Path) -> Option<PathBuf> {
+        let changed = std::fs::metadata(&self.file).and_then(|meta| meta.modified()).ok()?;
+        if self.seen == Some(changed) {
+            return None;
+        }
+        self.seen = Some(changed);
+        let folder = std::fs::read_to_string(&self.file).ok()?;
+        let root = crate::git::repo_root_of(Path::new(folder.trim()))?;
+        let same = |a: &Path, b: &Path| match (a.canonicalize(), b.canonicalize()) {
+            (Ok(a), Ok(b)) => a == b,
+            _ => a == b,
+        };
+        (!same(&root, current)).then_some(root)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -212,6 +249,34 @@ mod tests {
         assert_eq!(run("myeditor --line {line} {file}"), (custom, true));
         // Unknown and without a template, it just gets the file.
         assert_eq!(run("myeditor").0, ["myeditor", "/repo/src/main.rs"]);
+    }
+
+    #[test]
+    fn following_neovim_finds_the_repo_it_moved_to_once() {
+        let base = std::env::temp_dir().join(format!("gclic-follow-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let (here, there) = (base.join("here"), base.join("there"));
+        for repo in [&here, &there] {
+            std::fs::create_dir_all(repo.join("src")).unwrap();
+            Command::new("git").args(["init", "-q"]).current_dir(repo).status().unwrap();
+        }
+        let file = base.join("follow");
+        let mut follow = Follow { file: file.clone(), seen: None };
+        assert_eq!(follow.moved_to(&here), None); // no file yet
+        // A subfolder of the repo gclic is in: nowhere to go.
+        std::fs::write(&file, here.join("src").display().to_string()).unwrap();
+        assert_eq!(follow.moved_to(&here), None);
+        // Another repo, given by a subfolder of it: its root, once.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::fs::write(&file, there.join("src").display().to_string()).unwrap();
+        let moved = follow.moved_to(&here).map(|root| root.canonicalize().unwrap());
+        assert_eq!(moved, Some(there.canonicalize().unwrap()));
+        assert_eq!(follow.moved_to(&here), None);
+        // Outside any repo: passed over.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::fs::write(&file, std::env::temp_dir().display().to_string()).unwrap();
+        assert_eq!(follow.moved_to(&here), None);
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
