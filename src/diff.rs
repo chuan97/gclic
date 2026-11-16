@@ -16,7 +16,9 @@ use std::ops::Range;
 // editor's, inside one, or else VS Code Dark Modern's, which gclic comes with.
 const FILLER_BG: Color = Color::Indexed(235);
 // A conflict's two sides, as VS Code tints them: green for the current
-// change, which is yours, and blue for the incoming one.
+// change, ours, and blue for the incoming one, theirs. Ours is yours in a
+// merge, but upstream in a rebase, so the colours keep to the sides and the
+// title says what they are.
 const CURRENT_BG: Color = Color::Rgb(26, 52, 46);
 const CURRENT_WORD_BG: Color = Color::Rgb(40, 98, 84);
 const INCOMING_BG: Color = Color::Rgb(26, 42, 64);
@@ -611,6 +613,9 @@ pub struct DiffPane {
     /// Whether the user has stepped to a change with n or N, which makes the
     /// active line worth showing even while another pane has focus.
     navigated: bool,
+    /// Whether this is a conflict met while rebasing, whose sides are named
+    /// the other way round from a merge's.
+    rebasing: bool,
 }
 
 /// The most rows the colour cache keeps, over all its diffs. Enough for the
@@ -695,7 +700,9 @@ impl DiffPane {
 
     fn new(source: DiffSource, text: String, colored: Colored, is_colored: bool) -> DiffPane {
         let Colored { rows, file_lines } = colored;
+        let rebasing = matches!(source, DiffSource::Conflict(_)) && git::operation_in_progress() == Some("rebasing");
         DiffPane {
+            rebasing,
             source,
             text,
             items: layout(&rows, true),
@@ -807,7 +814,7 @@ impl DiffPane {
         let title = match &self.source {
             DiffSource::Unstaged(path) => format!(" {path} "),
             DiffSource::Untracked(path) => format!(" {path} (untracked) "),
-            DiffSource::Conflict(path) => format!(" {path} (conflict: yours ↔ theirs) "),
+            DiffSource::Conflict(path) => format!(" {path} (conflict: {}) ", conflict_sides(self.rebasing)),
             DiffSource::Staged(path) => format!(" {path} (staged) "),
             DiffSource::Commit { sha, path } => format!(" {path} @ {} ", &sha[..sha.len().min(7)]),
             DiffSource::Refs { a, b, path } => format!(" {path}: {a} → {b} "),
@@ -1013,6 +1020,14 @@ fn gutter_style(active: bool) -> Style {
     }
 }
 
+/// What a conflict's two sides are, left and right. In a merge, ours is the
+/// branch checked out, yours, and theirs the one coming in. A rebase replays
+/// your commits onto upstream, so there ours is upstream, with the commits
+/// replayed so far, and theirs is the commit being replayed, your own.
+fn conflict_sides(rebasing: bool) -> &'static str {
+    if rebasing { "upstream ↔ your commit" } else { "yours ↔ theirs" }
+}
+
 /// One side of a row, with its text scrolled `shift` characters to the left.
 /// The line number stays put, and stands out on the active row. Only the number
 /// does, so that the colours of a change stay readable.
@@ -1204,6 +1219,12 @@ mod tests {
         assert_eq!(headings.len(), 2);
         assert_eq!(headings[1], &Row::Heading("Conflict 2 of 2: ours ↔ theirs".to_string()));
         assert!(!texts(&rows).iter().any(|(left, right)| *left == Some("old") || *right == Some("old")));
+    }
+
+    #[test]
+    fn a_rebase_s_conflict_names_its_sides_the_other_way_round() {
+        assert_eq!(conflict_sides(false), "yours ↔ theirs");
+        assert_eq!(conflict_sides(true), "upstream ↔ your commit");
     }
 
     #[test]

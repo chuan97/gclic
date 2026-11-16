@@ -78,7 +78,7 @@ The Compare tab, reached with `tab`, shows how two refs differ, going *from* one
 
 ## Merge conflicts
 
-While a merge, rebase or cherry-pick is stopped on conflicts, the Changes pane says so, and lists the conflicted files in a section of their own, above the staged ones. A conflicted file's preview shows each conflict as your side (green) against theirs (blue). Resolve them in your editor with `o`, which opens the file at the conflict, then mark the file resolved with `space`, which stages it.
+While a merge, rebase or cherry-pick is stopped on conflicts, the Changes pane says so, and lists the conflicted files in a section of their own, above the staged ones. A conflicted file's preview shows each conflict as your side (green) against theirs (blue). In a rebase, which replays your commits onto upstream, it's the other way round, and the preview says so: upstream is green, and your commit, the one being replayed, blue. Resolve them in your editor with `o`, which opens the file at the conflict, then mark the file resolved with `space`, which stages it.
 
 ![A merge conflict, yours against theirs](docs/images/conflict.svg)
 
