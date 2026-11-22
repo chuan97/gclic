@@ -8,6 +8,7 @@ use crate::commands::{self, OutputPopup, Running};
 use crate::details::DetailsPane;
 use crate::editor::{self, Launch};
 use crate::repos;
+use crate::review::{self, Anchor, Comment, ListAction, Review, ReviewList};
 use crate::diff::{ColorCache, Colored, DiffPane, DiffView};
 use crate::git::{self, Stash, CommitDetails, DiffSource};
 use crate::graph::GraphPanel;
@@ -44,6 +45,7 @@ const COMPARE_PICKER_KEYS: [(&str, &str); 4] =
     [("i", "type"), ("p", "paste"), ("enter", "choose"), ("esc", "close")];
 /// The preview's share of the width, focused or not. Zooming gives it all of it.
 const DIFF_PERCENT: u16 = 80;
+const REVIEW_DIFF_PERCENT: u16 = 60;
 /// The most of the left column's height that Branches and Changes can take,
 /// as percentages, so that the graph always keeps a good part of it.
 const BRANCHES_MAX_PERCENT: u16 = 40;
@@ -110,6 +112,8 @@ pub enum Confirm {
     /// already leaves the comparison without losing it.
     CloseCompare,
     DropStash(Stash),
+    /// D on the Review tab: every comment.
+    ClearReview,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -118,18 +122,22 @@ enum Focus {
     Changes,
     Graph,
     Compare,
+    /// The Review tab's list of comments.
+    Review,
     /// The diff or the commit details on the right.
     Preview,
 }
 
-/// The two views. Repo is the panes; Compare shows how two refs differ.
+/// The views. Repo is the panes; Compare shows how two refs differ; Review
+/// lists the comments written on diffs, and only shows while there are some.
 #[derive(Clone, Copy, PartialEq)]
 enum Tab {
     Repo,
     Compare,
+    Review,
 }
 
-/// What a tab keeps while the other one shows: where the focus was and what
+/// What a tab keeps while another one shows: where the focus was and what
 /// was open on the right.
 struct TabState {
     focus: Focus,
@@ -137,6 +145,25 @@ struct TabState {
     diff: Option<DiffPane>,
     details: Option<DetailsPane>,
     zoomed: bool,
+}
+
+impl TabState {
+    /// A tab as it first opens: on its own list, with nothing on the right.
+    fn fresh(tab: Tab) -> TabState {
+        let focus = match tab {
+            Tab::Repo => Focus::Changes,
+            Tab::Compare => Focus::Compare,
+            Tab::Review => Focus::Review,
+        };
+        TabState { focus, last_left_focus: focus, diff: None, details: None, zoomed: false }
+    }
+}
+
+/// A review comment being written, on the diff's line it's for.
+struct CommentBox {
+    source: DiffSource,
+    anchor: Anchor,
+    draft: String,
 }
 
 /// What the picker's result will be used for.
@@ -156,6 +183,7 @@ enum Modal {
     Picker(Picker, PickerUse),
     Confirm(Confirm),
     CommitBox,
+    CommentBox(CommentBox),
     ConfirmQuit,
     Error(String),
     Help(HelpPopup),
@@ -167,12 +195,15 @@ enum Modal {
 
 pub struct App {
     tab: Tab,
-    /// The tab not showing, put aside until `tab` switches back to it.
-    other_tab: TabState,
+    /// The tabs not showing, each put aside until it shows again.
+    saved_tabs: Vec<(Tab, TabState)>,
     branches: BranchesPanel,
     staging: StagingPanel,
     graph: GraphPanel,
     compare: Option<ComparePanel>,
+    /// Comments on diffs' lines, for the agent that made the changes.
+    review: Review,
+    review_list: ReviewList,
     /// The right-hand side shows a diff or a commit's details, never both.
     /// Each stays in its mode: moving onto a commit leaves a diff alone, and
     /// moving onto a file leaves the details alone.
@@ -257,13 +288,9 @@ impl App {
                 None => format!("o open in {}", editor::name(&editor::setting())),
             },
             tab: Tab::Repo,
-            other_tab: TabState {
-                focus: Focus::Compare,
-                last_left_focus: Focus::Compare,
-                diff: None,
-                details: None,
-                zoomed: false,
-            },
+            saved_tabs: Vec::new(),
+            review: Review::default(),
+            review_list: ReviewList::new(),
             branches: BranchesPanel::new(),
             staging: StagingPanel::new(),
             graph: GraphPanel::new(),
@@ -488,7 +515,7 @@ impl App {
             Focus::Changes => self.staging.sources_around(),
             Focus::Graph => self.graph.file_sources_around(),
             Focus::Compare => self.compare.as_ref().map(|c| c.sources_around()).unwrap_or_default(),
-            Focus::Branches | Focus::Preview => Vec::new(),
+            Focus::Branches | Focus::Review | Focus::Preview => Vec::new(),
         };
         if self.diff.is_none() {
             around.truncate(1);
@@ -593,6 +620,7 @@ impl App {
             Modal::Picker(picker, usage) => self.handle_picker_key(picker, usage, key),
             Modal::Confirm(confirm) => self.handle_confirm_key(confirm, key),
             Modal::CommitBox => self.handle_commit_key(key),
+            Modal::CommentBox(comment) => self.handle_comment_key(comment, key),
             Modal::ConfirmQuit => match key.code {
                 KeyCode::Enter => self.should_quit = true,
                 KeyCode::Esc => {}
@@ -641,7 +669,8 @@ impl App {
             KeyCode::Char(':') => self.modal = Modal::Command(String::new()),
             KeyCode::Char('o') => self.open_in_editor(),
             KeyCode::Char('r') if self.tab == Tab::Compare && self.compare.is_some() => self.swap_compare(),
-            KeyCode::Tab | KeyCode::BackTab => self.switch_tab(),
+            KeyCode::Tab => self.cycle_tab(true),
+            KeyCode::BackTab => self.cycle_tab(false),
             KeyCode::Char('e') if self.diff.is_some() => self.toggle_whole_files(),
             // A diff on screen takes n and N from any pane, so its changes can
             // be stepped through while browsing files. The graph's own n and N,
@@ -654,6 +683,8 @@ impl App {
             KeyCode::Char('s') if self.diff.is_some() => {
                 self.split = self.diff.as_ref().map(|diff| !diff.is_split());
             }
+            // In a diff, c comments on the active line.
+            KeyCode::Char('c') if self.focus == Focus::Preview && self.diff.is_some() => self.comment_on_active_line(),
             // On the Compare tab, c starts a new comparison, as c compares from
             // where the user is in the other panes.
             KeyCode::Char('c') if self.focus == Focus::Compare => self.open_compare_picker(),
@@ -1042,7 +1073,7 @@ impl App {
                 }
             }
             _ if self.has_preview() => self.close_preview(),
-            Focus::Compare if self.compare.is_none() => self.switch_tab(),
+            Focus::Compare if self.compare.is_none() => self.go_to_tab(Tab::Repo),
             _ => self.send_to_focused_panel(KeyEvent::from(KeyCode::Esc)),
         }
     }
@@ -1056,6 +1087,11 @@ impl App {
                 Some(compare) => compare.handle_key(key),
                 None => Action::None,
             },
+            Focus::Review => {
+                let action = self.review_list.handle_key(&self.review, key);
+                self.act_on_review(action);
+                Action::None
+            }
             Focus::Preview => {
                 if let Some(diff) = &mut self.diff {
                     diff.handle_key(key);
@@ -1142,6 +1178,7 @@ impl App {
         // take over h and l on the Repo tab.
         let order = match self.tab {
             Tab::Compare => vec![Focus::Compare],
+            Tab::Review => vec![Focus::Review],
             Tab::Repo => vec![Focus::Branches, Focus::Changes, Focus::Graph],
         };
         let current = order.iter().position(|f| *f == self.focus).unwrap_or(0);
@@ -1187,6 +1224,12 @@ impl App {
                     Confirm::DropStash(stash) => {
                         let result = git::stash_drop(stash);
                         self.after_stash(StashAction::Drop, stash, result);
+                        return;
+                    }
+                    Confirm::ClearReview => {
+                        self.review.clear();
+                        self.after_review_change();
+                        self.message = "Cleared the review".to_string();
                         return;
                     }
                 };
@@ -1342,9 +1385,7 @@ impl App {
     /// Puts a comparison, or a stash, on the Compare tab, replacing what was
     /// there, and goes to it.
     fn show_compare(&mut self, compare: ComparePanel) {
-        if self.tab == Tab::Repo {
-            self.switch_tab();
-        }
+        self.go_to_tab(Tab::Compare);
         // Whatever was open on the right belonged to the old comparison.
         self.close_preview();
         self.zoomed = false;
@@ -1356,7 +1397,7 @@ impl App {
     fn close_compare(&mut self) {
         self.compare = None;
         self.close_preview();
-        self.switch_tab();
+        self.go_to_tab(Tab::Repo);
     }
 
     /// Switches every diff between the whole file and just the changes. It
@@ -1371,8 +1412,32 @@ impl App {
         }
     }
 
-    /// Swaps the showing tab's state with the other tab's.
-    fn switch_tab(&mut self) {
+    /// The tabs `tab` goes through: Review only while there are comments.
+    fn tabs(&self) -> Vec<Tab> {
+        let mut tabs = vec![Tab::Repo, Tab::Compare];
+        if !self.review.is_empty() {
+            tabs.push(Tab::Review);
+        }
+        tabs
+    }
+
+    /// The tab `tab` leads to, or shift-tab when not `forward`.
+    fn next_tab(&self, forward: bool) -> Tab {
+        let tabs = self.tabs();
+        let current = tabs.iter().position(|tab| *tab == self.tab).unwrap_or(0);
+        let next = if forward { ui::next_index(current, tabs.len()) } else { ui::previous_index(current, tabs.len()) };
+        tabs[next]
+    }
+
+    fn cycle_tab(&mut self, forward: bool) {
+        self.go_to_tab(self.next_tab(forward));
+    }
+
+    /// Shows another tab, as it was left, putting the showing one aside.
+    fn go_to_tab(&mut self, tab: Tab) {
+        if tab == self.tab {
+            return;
+        }
         let showing = TabState {
             focus: self.focus,
             last_left_focus: self.last_left_focus,
@@ -1380,16 +1445,149 @@ impl App {
             details: self.details.take(),
             zoomed: self.zoomed,
         };
-        let other = std::mem::replace(&mut self.other_tab, showing);
-        self.focus = other.focus;
-        self.last_left_focus = other.last_left_focus;
-        self.diff = other.diff;
-        self.details = other.details;
-        self.zoomed = other.zoomed;
-        self.tab = match self.tab {
-            Tab::Repo => Tab::Compare,
-            Tab::Compare => Tab::Repo,
+        self.saved_tabs.retain(|(saved, _)| *saved != self.tab);
+        self.saved_tabs.push((self.tab, showing));
+        let state = match self.saved_tabs.iter().position(|(saved, _)| *saved == tab) {
+            Some(index) => self.saved_tabs.remove(index).1,
+            None => TabState::fresh(tab),
         };
+        self.focus = state.focus;
+        self.last_left_focus = state.last_left_focus;
+        self.diff = state.diff;
+        self.details = state.details;
+        self.zoomed = state.zoomed;
+        self.tab = tab;
+        // The Review tab opens on its selected comment's line.
+        if tab == Tab::Review && self.diff.is_none() {
+            self.show_selected_comment();
+        }
+    }
+
+    // -------------------------------------------------------------- review
+
+    /// c in a diff: writes a comment on the active line, or edits the one
+    /// already on it.
+    fn comment_on_active_line(&mut self) {
+        let Some(diff) = &self.diff else {
+            return;
+        };
+        if review::Place::of(&diff.source).is_none() {
+            self.message = "A conflict takes no comments: o resolves it in your editor".to_string();
+            return;
+        }
+        let Some(anchor) = diff.comment_at_active().or_else(|| diff.active_anchor()) else {
+            self.message = "Move to one of the file's lines to comment on it".to_string();
+            return;
+        };
+        let source = diff.source.clone();
+        let existing = self.review.find(&source, anchor.side, anchor.number).and_then(|index| self.review.get(index));
+        let draft = existing.map(|comment| comment.body.clone()).unwrap_or_default();
+        self.modal = Modal::CommentBox(CommentBox { source, anchor, draft });
+    }
+
+    /// Typing a comment: ctrl-enter saves it, an empty one removing what was
+    /// there, and esc leaves it as it was.
+    fn handle_comment_key(&mut self, mut comment: CommentBox, key: KeyEvent) {
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        match key.code {
+            KeyCode::Esc => return,
+            // ctrl-s for terminals that send ctrl-enter as plain enter.
+            KeyCode::Enter | KeyCode::Char('s') if ctrl => {
+                let had = self.review.len();
+                let CommentBox { source, anchor, draft } = comment;
+                if let Some(comment) = Comment::new(source, anchor, draft) {
+                    self.review.set(comment);
+                }
+                self.message = match (had, self.review.len()) {
+                    (before, after) if after < before => "Comment removed".to_string(),
+                    (0, 1) => "Comment saved: tab goes to the Review tab, to copy it for your agent".to_string(),
+                    (before, after) if after > before => format!("Comment saved: {after} in the review"),
+                    _ => "Comment saved".to_string(),
+                };
+                self.after_review_change();
+                return;
+            }
+            KeyCode::Enter => comment.draft.push('\n'),
+            KeyCode::Backspace => {
+                comment.draft.pop();
+            }
+            KeyCode::Char(ch) if !ctrl => comment.draft.push(ch),
+            _ => {}
+        }
+        self.modal = Modal::CommentBox(comment);
+    }
+
+    fn act_on_review(&mut self, action: ListAction) {
+        match action {
+            ListAction::None => {}
+            ListAction::Moved => self.show_selected_comment(),
+            ListAction::Enter => {
+                if self.diff.is_none() {
+                    self.show_selected_comment();
+                }
+                if self.diff.is_some() {
+                    self.focus_preview();
+                }
+            }
+            ListAction::Edit(index) => {
+                if let Some(comment) = self.review.get(index) {
+                    let (source, anchor, draft) = (comment.source.clone(), comment.anchor.clone(), comment.body.clone());
+                    self.modal = Modal::CommentBox(CommentBox { source, anchor, draft });
+                }
+            }
+            ListAction::Delete(index) => {
+                self.review.remove(index);
+                self.message = "Comment deleted".to_string();
+                self.after_review_change();
+                self.show_selected_comment();
+            }
+            ListAction::Copy => match copy_to_clipboard(&self.review.prompt()) {
+                Ok(()) => {
+                    let count = match self.review.len() {
+                        1 => "the comment".to_string(),
+                        n => format!("the {n} comments"),
+                    };
+                    self.message = format!("Copied {count} as a prompt: paste it to your agent");
+                }
+                Err(error) => self.modal = Modal::Error(error.to_string()),
+            },
+            ListAction::Clear => self.modal = Modal::Confirm(Confirm::ClearReview),
+        }
+    }
+
+    /// Shows the selected comment's diff, at its line.
+    fn show_selected_comment(&mut self) {
+        let Some(comment) = self.review_list.selected(&self.review).and_then(|index| self.review.get(index)) else {
+            return;
+        };
+        let anchor = comment.anchor.clone();
+        let source = self.review_source(comment);
+        self.show_diff(source);
+        if let Some(diff) = &mut self.diff {
+            diff.go_to(&anchor);
+        }
+    }
+
+    /// The diff to show a comment in. A working-tree file's changes may have
+    /// been staged since, or the other way round: the diff that has it now.
+    fn review_source(&self, comment: &Comment) -> DiffSource {
+        if comment.source.is_working_tree() {
+            self.staging.source_for_path(comment.path(), &comment.source).unwrap_or_else(|| comment.source.clone())
+        } else {
+            comment.source.clone()
+        }
+    }
+
+    /// Once the last comment goes, so does the Review tab.
+    fn after_review_change(&mut self) {
+        if !self.review.is_empty() {
+            return;
+        }
+        if self.tab == Tab::Review {
+            self.go_to_tab(Tab::Repo);
+        }
+        self.saved_tabs.retain(|(tab, _)| *tab != Tab::Review);
+        self.review_list = ReviewList::new();
     }
 
     fn open_graph_picker(&mut self) {
@@ -1433,9 +1631,11 @@ impl App {
             (false, _) => self.render_left(frame, main),
             (true, true) => self.render_preview(frame, main),
             (true, false) => {
+                // The review's comments are read in the list, so it gets more room.
+                let diff_percent = if self.tab == Tab::Review { REVIEW_DIFF_PERCENT } else { DIFF_PERCENT };
                 let [left, right] = Layout::horizontal([
-                    Constraint::Percentage(100 - DIFF_PERCENT),
-                    Constraint::Percentage(DIFF_PERCENT),
+                    Constraint::Percentage(100 - diff_percent),
+                    Constraint::Percentage(diff_percent),
                 ])
                 .areas(main);
                 self.render_left(frame, left);
@@ -1463,9 +1663,10 @@ impl App {
         frame.render_widget(Line::from(spans), area);
     }
 
-    /// The tab bar: both tabs, the showing one highlighted, the comparison's
-    /// refs on its tab so it's visible from the Repo tab too. The other tab is
-    /// marked with the key that leads to it, like the panes' [h] and [l]. The
+    /// The tab bar: the tabs, the showing one highlighted, the comparison's
+    /// refs on its tab so it's visible from the Repo tab too, and the review's
+    /// count on its own. The tab `tab` leads to is marked with that key, like
+    /// the panes' [h] and [l]. The
     /// project goes on the right: its folder dimmed, and its name in the repo's
     /// colour, shortened to fit.
     fn render_tabs(&self, frame: &mut Frame, area: Rect) {
@@ -1474,14 +1675,22 @@ impl App {
             Some(compare) => format!(" {} ", compare.title()),
             None => " Compare ".to_string(),
         };
+        let next = self.next_tab(true);
         let mut spans = Vec::new();
-        for (tab, label) in [(Tab::Repo, " Repo ".to_string()), (Tab::Compare, compare)] {
+        for tab in self.tabs() {
+            let label = match tab {
+                Tab::Repo => " Repo ".to_string(),
+                Tab::Compare => compare.clone(),
+                Tab::Review => format!(" {} ({}) ", review::TITLE, self.review.len()),
+            };
             if tab == self.tab {
                 let style = Style::default().fg(Color::Cyan).bg(ui::SELECTED_BG).add_modifier(Modifier::BOLD);
                 spans.push(Span::styled(label, style));
             } else {
                 spans.push(Span::styled(label, Style::default().fg(ui::DIM)));
-                spans.push(Span::styled("[tab]", Style::default().fg(Color::Gray)));
+                if tab == next {
+                    spans.push(Span::styled("[tab]", Style::default().fg(Color::Gray)));
+                }
             }
             spans.push(Span::raw("  "));
         }
@@ -1506,6 +1715,10 @@ impl App {
     }
 
     fn render_left(&mut self, frame: &mut Frame, area: Rect) {
+        if self.tab == Tab::Review {
+            self.review_list.render(frame, area, self.focus == Focus::Review, &self.review);
+            return;
+        }
         if self.tab == Tab::Compare {
             let focused = self.focus == Focus::Compare;
             match &mut self.compare {
@@ -1557,6 +1770,7 @@ impl App {
     fn render_preview(&mut self, frame: &mut Frame, area: Rect) {
         let focused = self.focus == Focus::Preview;
         if let Some(diff) = &mut self.diff {
+            diff.set_comments(self.review.on_diff(&diff.source));
             diff.render(frame, area, focused, self.split);
         } else if let Some(details) = &mut self.details {
             details.render(frame, area, focused);
@@ -1701,9 +1915,15 @@ impl App {
                     esc = Some("esc close compare");
                 }
             }
+            Focus::Review => {
+                hints.extend(["j/k move", "enter focus diff", "c edit", "d delete", "y copy for your agent", "D clear"]);
+            }
             Focus::Preview => {
-                if self.diff.is_some() {
+                if let Some(diff) = &self.diff {
                     hints.extend(["j/k move", "h/l sideways", "ctrl-d/u page"]);
+                    if review::Place::of(&diff.source).is_some() {
+                        hints.push(if diff.comment_at_active().is_some() { "c edit comment" } else { "c comment" });
+                    }
                     hints.extend(self.diff_view_hints());
                 } else {
                     hints.extend(["j/k scroll", "ctrl-d/u page", "y copy sha"]);
@@ -1737,6 +1957,10 @@ impl App {
             Focus::Changes => self.staging.selected_source(),
             Focus::Graph => self.graph.selected_file_source(),
             Focus::Compare => self.compare.as_ref().and_then(|compare| compare.selected_source()),
+            Focus::Review => {
+                let comment = self.review_list.selected(&self.review).and_then(|index| self.review.get(index));
+                comment.map(|comment| self.review_source(comment))
+            }
             Focus::Preview => self.diff.as_ref().map(|diff| diff.source.clone()),
         }
     }
@@ -1748,6 +1972,7 @@ impl App {
             Focus::Changes => "Changes",
             Focus::Graph => "Graph",
             Focus::Compare => "Compare",
+            Focus::Review => "Review",
             Focus::Preview if self.diff.is_some() => "Diff",
             Focus::Preview => "Commit details",
         }
@@ -1888,6 +2113,13 @@ impl App {
                         ])],
                         "delete",
                     ),
+                    Confirm::ClearReview => {
+                        let count = match self.review.len() {
+                            1 => "the review's comment".to_string(),
+                            n => format!("the review's {n} comments"),
+                        };
+                        (" Clear review ", vec![Line::raw(format!("Delete {count}?"))], "clear")
+                    }
                     Confirm::CloseCompare => {
                         let refs = self.compare.as_ref().map(|c| c.refs()).unwrap_or_default();
                         let body = vec![
@@ -1913,8 +2145,30 @@ impl App {
                 // Quitting loses whatever was open: the graph's branches, the
                 // comparison, expanded commits. gclic starts from scratch.
                 let hints = ui::key_hints(&[("enter", "quit"), ("esc", "cancel")], Some("quit"));
-                let body = vec![Line::raw("Quit gclic?")];
-                render_popup(frame, area, " Quit ", body, hints, (40, 4), Color::Cyan);
+                let mut body = vec![Line::raw("Quit gclic?")];
+                // gclic doesn't keep comments: they'd be lost.
+                let lost = match self.review.len() {
+                    0 => None,
+                    1 => Some("Your review's comment will be lost.".to_string()),
+                    n => Some(format!("Your review's {n} comments will be lost.")),
+                };
+                body.extend(lost.map(|lost| Line::styled(lost, Style::default().fg(Color::Yellow))));
+                let height = body.len() as u16 + 3;
+                render_popup(frame, area, " Quit ", body, hints, (44, height), Color::Cyan);
+            }
+            Modal::CommentBox(comment) => {
+                let location = match comment.anchor.side {
+                    review::Side::New => format!("{}:{}", comment.source.path(), comment.anchor.number),
+                    review::Side::Old => format!("{}, removed line {}", comment.source.path(), comment.anchor.number),
+                };
+                let mut body = vec![
+                    Line::styled(comment.anchor.text.trim().to_string(), Style::default().fg(ui::DIM)),
+                    Line::default(),
+                ];
+                let draft = format!("{}▏", comment.draft);
+                body.extend(draft.split('\n').map(|line| Line::raw(line.to_string())));
+                let hints = ui::key_hints(&[("ctrl-enter", "save"), ("esc", "cancel")], None);
+                render_popup(frame, area, &format!(" Comment on {location} "), body, hints, (72, 12), Color::Cyan);
             }
             Modal::CommitBox => {
                 let draft = format!("{}▏", self.commit_draft);
@@ -2274,6 +2528,63 @@ mod tests {
         press(&mut app, KeyCode::Esc);
         press(&mut app, KeyCode::Enter);
         assert!(app.tab == Tab::Repo && app.compare.is_none());
+    }
+
+    fn type_text(app: &mut App, text: &str) {
+        for ch in text.chars() {
+            press(app, KeyCode::Char(ch));
+        }
+    }
+
+    #[test]
+    fn a_comment_opens_the_review_tab_and_deleting_the_last_closes_it() {
+        let mut app = App::new(PathBuf::new());
+        // A file the last commit changed, in its diff.
+        let output = std::process::Command::new("git").args(["diff", "--name-only", "HEAD~1", "HEAD"]).output().unwrap();
+        let path = String::from_utf8_lossy(&output.stdout).lines().next().unwrap().to_string();
+        let source = DiffSource::Refs { a: "HEAD~1".to_string(), b: "HEAD".to_string(), path };
+        app.show_diff(source.clone());
+        app.focus_preview();
+        press(&mut app, KeyCode::Char('j'));
+        assert_eq!(app.tabs().len(), 2);
+
+        press(&mut app, KeyCode::Char('c'));
+        assert!(matches!(app.modal, Modal::CommentBox(_)));
+        type_text(&mut app, "Why?");
+        app.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
+        assert_eq!(app.review.len(), 1);
+        assert!(app.review.prompt().contains("> Why?"));
+        assert!(app.tabs().contains(&Tab::Review));
+
+        // c again edits the same comment.
+        press(&mut app, KeyCode::Char('c'));
+        assert!(matches!(&app.modal, Modal::CommentBox(comment) if comment.draft == "Why?"));
+        press(&mut app, KeyCode::Esc);
+
+        // Tab leads to Compare, then Review, which shows the comment's diff.
+        press(&mut app, KeyCode::Tab);
+        press(&mut app, KeyCode::Tab);
+        assert!(app.tab == Tab::Review && app.focus == Focus::Review);
+        assert!(app.diff.as_ref().is_some_and(|diff| diff.source == source));
+
+        press(&mut app, KeyCode::Char('d'));
+        assert!(app.review.is_empty());
+        assert!(app.tab == Tab::Repo && !app.tabs().contains(&Tab::Review));
+    }
+
+    #[test]
+    fn clearing_the_review_asks_first() {
+        let mut app = App::new(PathBuf::new());
+        let anchor = Anchor { side: review::Side::New, number: 1, text: "x".to_string() };
+        let source = DiffSource::Unstaged("a.rs".to_string());
+        app.review.set(Comment::new(source, anchor, "y".to_string()).unwrap());
+        app.go_to_tab(Tab::Review);
+        press(&mut app, KeyCode::Char('D'));
+        press(&mut app, KeyCode::Esc);
+        assert_eq!(app.review.len(), 1);
+        press(&mut app, KeyCode::Char('D'));
+        press(&mut app, KeyCode::Enter);
+        assert!(app.review.is_empty() && app.tab == Tab::Repo);
     }
 
     fn yanks(labels: &[&str]) -> Vec<String> {

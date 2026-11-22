@@ -58,6 +58,7 @@ Two tabs, `Repo` and `Compare`, switched with `tab`. A hint bar at the bottom li
 | `branches.rs` | 436 | The Branches pane |
 | `staging.rs` | 286 | The Changes pane |
 | `compare.rs` | 278 | The Compare view, of two refs or of a stash |
+| `review.rs` | 406 | Review comments on diffs' lines, the prompt they make, and the Review tab's list |
 | `file_list.rs` | 117 | Compare's file list, and the file row shared with other panes |
 | `details.rs` | 150 | The commit details preview |
 | `picker.rs` | 520 | The fuzzy-searchable list behind the Branches pane and the pickers |
@@ -126,6 +127,7 @@ The measuring scripts lived in the git-ignored `target/bench/`. `docs/screenshot
 - **Switching repos starts the app afresh.** Every git call runs in the process's working directory, so `:cd` moves it to the new repo and rebuilds the app state, keeping only how the user chose to show diffs. The old worker stops once nothing listens for its results, which are about the old repo anyway. The repos are found by reading folders, five deep, not inside a repo and not in hidden or dependency folders, which takes a few tens of milliseconds on a typical `~/Code`, so it runs on demand. The search folder stays the one gclic started with, the repo's parent or where gclic started outside a repo, so `:cd` lists the same repos wherever the user has switched to. `..` moves it up, for the rest of the session. `:cd name` skips the finder when the name can only mean one repo: an exact path or folder name, or the only fuzzy match.
 - **A diff on screen takes `n`/`N`, `e` and `s` from any pane,** so its changes can be stepped through while browsing files, and from then on its active line shows, as that's where the user is. The graph's own `n`/`N` between commits only work with no diff open.
 - **Commit details as a preview,** following the selected commit, rather than a popup.
+- **Reviewing an agent's changes goes by the clipboard.** `c` comments on a diff's line, the Review tab gathers the comments, and `y` copies them as one prompt, which works with any agent, in any terminal, with nothing to install on its side. Hunk (hunk.dev) instead has the agent fetch the comments by running a command, through a local server, which also lets it reply to them; gclic could do the same later by keeping the comments in a file in `.git`. A comment keeps its line's text as well as its number, so it finds the line again when the agent, or the user, edits above it, and the prompt quotes the line for the same reason. Comments on the working tree belong to the file, not to its staged or unstaged diff, so staging doesn't lose them. Review is a tab, as Compare is, a place to gather comments rather than a different way of using gclic, and it only shows while there are comments, so `tab` cycles through two tabs the rest of the time. Comments aren't saved: they last until cleared or until gclic quits, which says how many would be lost. Ranges of lines aren't taken yet.
 
 ## Considered and declined
 

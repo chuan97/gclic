@@ -27,7 +27,7 @@ const LEFT: &[Section] = &[
             ("esc", "go back, then close the diff or details"),
             ("o", "open the file in your editor, at the line"),
             ("z", "zoom the diff or details"),
-            ("tab", "switch between Repo and Compare"),
+            ("tab", "next tab: Repo, Compare, Review"),
             (":", "a command; tab completes its name"),
             ("?", "this help"),
             ("q ctrl-c", "quit, after asking; ctrl-c stops a :git first"),
@@ -82,6 +82,18 @@ const RIGHT: &[Section] = &[
         ],
     },
     Section {
+        title: "Review",
+        keys: &[
+            ("c", "in a diff: comment on the line"),
+            ("tab", "the Review tab, once there are comments"),
+            ("enter", "move into the comment's diff"),
+            ("c", "edit the comment"),
+            ("d", "delete it"),
+            ("y", "copy them all, as a prompt for your agent"),
+            ("D", "clear the review, after asking"),
+        ],
+    },
+    Section {
         title: "Commands",
         keys: &crate::commands::COMMAND_HELP,
     },
@@ -105,6 +117,7 @@ const RIGHT: &[Section] = &[
             ("h l", "scroll sideways"),
             ("e", "whole file, or just the changes, from any pane"),
             ("s", "side by side, or unified, from any pane"),
+            ("c", "comment on the line, for the review"),
         ],
     },
     Section {
@@ -121,6 +134,10 @@ const RIGHT: &[Section] = &[
             ("enter", "confirm"),
             ("esc", "stop typing, then close"),
         ],
+    },
+    Section {
+        title: "Comment",
+        keys: &[("ctrl-enter", "save; saved empty, it's removed"), ("esc", "cancel")],
     },
     Section {
         title: "Commit message",

@@ -2,6 +2,7 @@
 
 use crate::git::{self, DiffSource};
 use crate::highlight::{self, ColoredLine};
+use crate::review::{Anchor, Side};
 use crate::theme::BUILT_IN;
 use crate::ui;
 use anyhow::Result;
@@ -10,6 +11,7 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
+use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
 // The background, text and tints behind the code come from `theme`: the
@@ -35,6 +37,10 @@ const MAX_LINE_PAIRS: usize = 400;
 const SIDE_STEP: usize = 4;
 /// The line number in front of each side's text, as drawn by `side_line`.
 const GUTTER_WIDTH: usize = 5;
+/// A review comment's lines, under the line it's on, and the mark beside that
+/// line's number.
+const NOTE_BG: Color = Color::Rgb(46, 42, 22);
+const NOTE_MARK: Color = Color::Yellow;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Cell {
@@ -519,6 +525,76 @@ const MINIMAP_ADDED: [Color; 2] = [BUILT_IN.added_word, Color::Rgb(88, 184, 112)
 const MINIMAP_CURRENT: [Color; 2] = [CURRENT_WORD_BG, Color::Rgb(72, 180, 146)];
 const MINIMAP_INCOMING: [Color; 2] = [INCOMING_WORD_BG, Color::Rgb(90, 146, 220)];
 
+/// A comment's line broken into lines of at most `width` characters, at
+/// spaces where it can be.
+fn wrap(text: &str, width: usize) -> Vec<String> {
+    let width = width.max(10);
+    let mut lines = Vec::new();
+    let mut line = String::new();
+    for word in text.split(' ') {
+        let mut word = word.to_string();
+        // A word too long for a line of its own is cut.
+        while word.chars().count() > width {
+            if !line.is_empty() {
+                lines.push(std::mem::take(&mut line));
+            }
+            let cut = word.char_indices().nth(width).map_or(word.len(), |(i, _)| i);
+            lines.push(word[..cut].to_string());
+            word = word[cut..].to_string();
+        }
+        let needed = if line.is_empty() { word.chars().count() } else { line.chars().count() + 1 + word.chars().count() };
+        if needed > width && !line.is_empty() {
+            lines.push(std::mem::take(&mut line));
+        }
+        if !line.is_empty() {
+            line.push(' ');
+        }
+        line.push_str(&word);
+    }
+    lines.push(line);
+    lines
+}
+
+/// The file's lines with a review comment, by side and number.
+type CommentedLines = HashSet<(Side, usize)>;
+
+/// The first of `total` lines to show in `height` rows so that `position` is
+/// in the middle, without going past either end.
+fn scroll_to(position: usize, total: usize, height: usize) -> usize {
+    position.saturating_sub(height / 2).min(total.saturating_sub(height))
+}
+
+/// The file's lines a line on screen shows, by side, as comments are put:
+/// a removed line on the old side, any other on the new one. Side by side, a
+/// row shows both lines of a change.
+fn item_lines(rows: &[Row], item: Item) -> Vec<(Side, usize)> {
+    let Row::Lines { left, right } = &rows[item.row()] else {
+        return Vec::new();
+    };
+    let old = left.as_ref().filter(|cell| cell.changed).map(|cell| (Side::Old, cell.number));
+    let new = right.as_ref().map(|cell| (Side::New, cell.number));
+    match item {
+        Item::Old(_) => old.into_iter().collect(),
+        Item::New(_) => new.into_iter().collect(),
+        Item::Row(_) => new.into_iter().chain(old).collect(),
+    }
+}
+
+/// The number a comment's line has now: its own, if the line there is still
+/// the same, or else that of the nearest line on its side with its text, as
+/// the file may have changed above it. None if no such line is in the diff.
+fn locate(rows: &[Row], anchor: &Anchor) -> Option<usize> {
+    let cells = rows.iter().filter_map(|row| match (row, anchor.side) {
+        (Row::Lines { left, .. }, Side::Old) => left.as_ref().filter(|cell| cell.changed),
+        (Row::Lines { right, .. }, Side::New) => right.as_ref(),
+        (Row::Heading(_), _) => None,
+    });
+    cells
+        .filter(|cell| cell.text == anchor.text)
+        .map(|cell| cell.number)
+        .min_by_key(|number| number.abs_diff(anchor.number))
+}
+
 /// Whether the minimap measures the new version of the file: the one the
 /// diff goes to, unless it has no lines, as when the file was deleted.
 fn measures_new_side(rows: &[Row]) -> bool {
@@ -616,6 +692,9 @@ pub struct DiffPane {
     /// Whether this is a conflict met while rebasing, whose sides are named
     /// the other way round from a merge's.
     rebasing: bool,
+    /// The review's comments on this file, each with the line it's on, to
+    /// draw under their lines.
+    comments: Vec<(Anchor, String)>,
 }
 
 /// The most rows the colour cache keeps, over all its diffs. Enough for the
@@ -715,6 +794,7 @@ impl DiffPane {
             text_width: 0,
             colored: is_colored,
             navigated: false,
+            comments: Vec::new(),
         }
     }
 
@@ -775,11 +855,83 @@ impl DiffPane {
         self.active = self.items.iter().position(|item| item.row() == row).unwrap_or(0);
     }
 
-    /// The first line on screen: the one that centres the active line, without
-    /// going past either end.
+    /// The first line on screen without comments: the one that centres the
+    /// active line, without going past either end. Drawing does the same,
+    /// counting the comments' lines.
+    #[cfg(test)]
     fn scroll(&self) -> usize {
-        let furthest = self.items.len().saturating_sub(self.height);
-        self.active.saturating_sub(self.height / 2).min(furthest)
+        scroll_to(self.active, self.items.len(), self.height)
+    }
+
+    /// The review's comments on this file, which show under their lines.
+    pub fn set_comments(&mut self, comments: Vec<(Anchor, String)>) {
+        self.comments = comments;
+    }
+
+    /// The line under the cursor, to comment on: the new version's, or a
+    /// removed line's, which only the old version has. None on a heading.
+    pub fn active_anchor(&self) -> Option<Anchor> {
+        let item = *self.items.get(self.active)?;
+        let Row::Lines { left, right } = &self.rows[item.row()] else {
+            return None;
+        };
+        let (side, cell) = match item {
+            Item::Old(_) => (Side::Old, left.as_ref()?),
+            Item::New(_) => (Side::New, right.as_ref()?),
+            Item::Row(_) => match (right, left) {
+                (Some(cell), _) => (Side::New, cell),
+                (None, Some(cell)) => (Side::Old, cell),
+                (None, None) => return None,
+            },
+        };
+        Some(Anchor { side, number: cell.number, text: cell.text.clone() })
+    }
+
+    /// The comment on the active line, if it has one, as it was written:
+    /// editing it replaces it, even if its line has moved since.
+    pub fn comment_at_active(&self) -> Option<Anchor> {
+        let item = *self.items.get(self.active)?;
+        let lines = item_lines(&self.rows, item);
+        let here = |anchor: &Anchor| locate(&self.rows, anchor).is_some_and(|number| lines.contains(&(anchor.side, number)));
+        self.comments.iter().map(|(anchor, _)| anchor).find(|anchor| here(anchor)).cloned()
+    }
+
+    /// Moves the active line to the one a comment is on, wherever it has
+    /// moved to since. Shown even without focus, as after n.
+    pub fn go_to(&mut self, anchor: &Anchor) {
+        let Some(number) = locate(&self.rows, anchor) else {
+            return;
+        };
+        if let Some(index) = (0..self.items.len()).find(|&i| item_lines(&self.rows, self.items[i]).contains(&(anchor.side, number))) {
+            self.active = index;
+            self.navigated = true;
+        }
+    }
+
+    /// Where the comments go: the lines of each under the line on screen it's
+    /// on, and the file's lines that have one, for their marks. Comments
+    /// whose line is no longer in the diff aren't shown.
+    /// Each comment's lines are wrapped to `width`.
+    fn placed_comments(&self, width: usize) -> (HashMap<usize, Vec<String>>, CommentedLines) {
+        let mut notes: HashMap<usize, Vec<String>> = HashMap::new();
+        let mut marked = HashSet::new();
+        if self.comments.is_empty() {
+            return (notes, marked);
+        }
+        let mut item_of = HashMap::new();
+        for (index, item) in self.items.iter().enumerate() {
+            for line in item_lines(&self.rows, *item) {
+                item_of.entry(line).or_insert(index);
+            }
+        }
+        for (anchor, body) in &self.comments {
+            let Some(number) = locate(&self.rows, anchor) else { continue };
+            let Some(&index) = item_of.get(&(anchor.side, number)) else { continue };
+            marked.insert((anchor.side, number));
+            let lines = body.trim_end().lines().flat_map(|line| wrap(line, width));
+            notes.entry(index).or_default().extend(lines);
+        }
+        (notes, marked)
     }
 
     /// The line number in the current file at the active row. Rows without
@@ -919,10 +1071,22 @@ impl DiffPane {
         let auto = (column_width as usize).saturating_sub(GUTTER_WIDTH) >= SPLIT_MIN_TEXT;
         self.set_split(split.unwrap_or(auto));
 
-        let scroll = self.scroll();
+        // What's on screen, line by line: the diff's lines, each followed by
+        // the lines of the comments on it, if any.
+        let indent = if self.split { GUTTER_WIDTH } else { UNIFIED_GUTTER_WIDTH };
+        let (notes, marked) = self.placed_comments((content.width as usize).saturating_sub(indent + 1));
+        let mut screen: Vec<(usize, Option<&str>)> = Vec::with_capacity(self.items.len());
+        for index in 0..self.items.len() {
+            screen.push((index, None));
+            for note in notes.get(&index).into_iter().flatten() {
+                screen.push((index, Some(note.as_str())));
+            }
+        }
+        let at = screen.iter().position(|&(index, note)| index == self.active && note.is_none()).unwrap_or(0);
+        let scroll = scroll_to(at, screen.len(), self.height);
+        let shown = &screen[scroll.min(screen.len())..(scroll + self.height).min(screen.len())];
         if has_map {
-            let visible: Vec<usize> =
-                self.items.iter().skip(scroll).take(self.height).map(|item| item.row()).collect();
+            let visible: Vec<usize> = shown.iter().map(|&(index, _)| self.items[index].row()).collect();
             let map = minimap(&self.rows, self.file_lines, self.height, &visible);
             let map_area = Rect { x: inner.right() - MINIMAP_WIDTH + 1, width: MINIMAP_WIDTH - 1, ..inner };
             self.render_minimap(frame, map_area, &map);
@@ -942,9 +1106,22 @@ impl DiffPane {
         } else {
             ((colors.removed, colors.removed_word), (colors.added, colors.added_word))
         };
-        let shown = self.items.iter().enumerate().skip(scroll).take(self.height);
-        for (i, (index, item)) in shown.enumerate() {
+        let has_mark = |side: Side, cell: Option<&Cell>| {
+            cell.is_some_and(|cell| (side == Side::New || cell.changed) && marked.contains(&(side, cell.number)))
+        };
+        for (i, &(index, note)) in shown.iter().enumerate() {
             let full = Rect { y: content.y + i as u16, height: 1, ..content };
+            let item = self.items[index];
+            if let Some(note) = note {
+                // Under the line it's on, past where line numbers go.
+                let line = Line::from(vec![
+                    Span::raw(" ".repeat(indent.saturating_sub(2))),
+                    Span::styled("▌ ", Style::default().fg(NOTE_MARK)),
+                    Span::raw(note.to_string()),
+                ]);
+                frame.render_widget(line.style(Style::default().bg(NOTE_BG)), full);
+                continue;
+            }
             // Like a list's selection, the active line only shows while focused,
             // or once n or N has moved it, as then it's where the user is.
             let active = (focused || self.navigated) && index == self.active;
@@ -968,26 +1145,33 @@ impl DiffPane {
                     };
                     let (left_bg, left_word) = old_colors;
                     let (right_bg, right_word) = new_colors;
-                    frame.render_widget(side_line(left, self.shift, active, left_bg, left_word), left_area);
+                    let left_line = side_line(left, self.shift, (active, has_mark(Side::Old, left)), left_bg, left_word);
+                    let right_line =
+                        side_line(right, self.shift, (active, has_mark(Side::New, right)), right_bg, right_word);
+                    frame.render_widget(left_line, left_area);
                     frame.render_widget(Line::styled("│", Style::default().fg(ui::DIM)), separator);
-                    frame.render_widget(side_line(right, self.shift, active, right_bg, right_word), right_area);
+                    frame.render_widget(right_line, right_area);
                 }
                 // Context, with both line numbers.
                 Item::Row(_) => {
                     let numbers = (left.map(|cell| cell.number), right.map(|cell| cell.number));
+                    let mark = has_mark(Side::New, right) || has_mark(Side::Old, left);
                     if let Some(cell) = right.or(left) {
-                        frame.render_widget(unified_line(numbers, cell, self.shift, active, new_colors), full);
+                        let line = unified_line(numbers, cell, self.shift, (active, mark), new_colors);
+                        frame.render_widget(line, full);
                     }
                 }
                 Item::Old(_) => {
                     if let Some(cell) = left {
-                        let line = unified_line((Some(cell.number), None), cell, self.shift, active, old_colors);
+                        let flags = (active, has_mark(Side::Old, left));
+                        let line = unified_line((Some(cell.number), None), cell, self.shift, flags, old_colors);
                         frame.render_widget(line, full);
                     }
                 }
                 Item::New(_) => {
                     if let Some(cell) = right {
-                        let line = unified_line((None, Some(cell.number)), cell, self.shift, active, new_colors);
+                        let flags = (active, has_mark(Side::New, right));
+                        let line = unified_line((None, Some(cell.number)), cell, self.shift, flags, new_colors);
                         frame.render_widget(line, full);
                     }
                 }
@@ -1034,15 +1218,25 @@ fn conflict_sides(rebasing: bool) -> &'static str {
 fn side_line(
     cell: Option<&Cell>,
     shift: usize,
-    active: bool,
+    (active, marked): (bool, bool),
     changed_bg: Color,
     word_bg: Color,
 ) -> Line<'_> {
     let Some(cell) = cell else {
         return Line::default().style(Style::default().bg(FILLER_BG));
     };
-    let gutter = Span::styled(format!("{:>4} ", cell.number), gutter_style(active));
-    finish_line(gutter, cell, shift, changed_bg, word_bg)
+    finish_line(gutter(format!("{:>4}", cell.number), active, marked), cell, shift, changed_bg, word_bg)
+}
+
+/// The line numbers, standing out on the active line, then a mark if the
+/// line has a review comment, or a space.
+fn gutter(numbers: String, active: bool, marked: bool) -> Vec<Span<'static>> {
+    let mark = if marked {
+        Span::styled("●", Style::default().fg(NOTE_MARK))
+    } else {
+        Span::styled(" ", gutter_style(active))
+    };
+    vec![Span::styled(numbers, gutter_style(active)), mark]
 }
 
 /// A line of a unified diff: the old and new line numbers, either of which
@@ -1051,19 +1245,19 @@ fn unified_line(
     (old, new): (Option<usize>, Option<usize>),
     cell: &Cell,
     shift: usize,
-    active: bool,
+    (active, marked): (bool, bool),
     (changed_bg, word_bg): (Color, Color),
 ) -> Line<'_> {
     let number = |n: Option<usize>| n.map_or("    ".to_string(), |n| format!("{n:>4}"));
-    let gutter = Span::styled(format!("{} {} ", number(old), number(new)), gutter_style(active));
-    finish_line(gutter, cell, shift, changed_bg, word_bg)
+    let numbers = format!("{} {}", number(old), number(new));
+    finish_line(gutter(numbers, active, marked), cell, shift, changed_bg, word_bg)
 }
 
 /// The gutter, then the visible text, cut wherever a syntax colour or a
 /// changed word starts or ends, so each piece has one text colour and one
 /// background.
-fn finish_line<'a>(gutter: Span<'a>, cell: &'a Cell, shift: usize, changed_bg: Color, word_bg: Color) -> Line<'a> {
-    let mut spans = vec![gutter];
+fn finish_line<'a>(gutter: Vec<Span<'a>>, cell: &'a Cell, shift: usize, changed_bg: Color, word_bg: Color) -> Line<'a> {
+    let mut spans = gutter;
     let text = &cell.text;
     let start = text.char_indices().nth(shift).map_or(text.len(), |(i, _)| i);
     let mut cuts = vec![start, text.len()];
@@ -1136,7 +1330,7 @@ mod tests {
             marks: vec![7..13],
             colors: Vec::new(),
         };
-        let line = side_line(Some(&cell), 3, false, BUILT_IN.added, BUILT_IN.added_word);
+        let line = side_line(Some(&cell), 3, (false, false), BUILT_IN.added, BUILT_IN.added_word);
         assert_eq!(text_of(&line), "   7 lo wörld");
         let marked = line.spans.iter().find(|span| span.style.bg == Some(BUILT_IN.added_word));
         assert_eq!(marked.unwrap().content, "wörld");
@@ -1152,8 +1346,9 @@ mod tests {
             marks: vec![8..9],
             colors: vec![(0..3, red), (3..10, blue)],
         };
-        let line = side_line(Some(&cell), 0, false, BUILT_IN.added, BUILT_IN.added_word);
-        let pieces: Vec<_> = line.spans[1..]
+        let line = side_line(Some(&cell), 0, (false, false), BUILT_IN.added, BUILT_IN.added_word);
+        // After the line number and the space for a comment's mark.
+        let pieces: Vec<_> = line.spans[2..]
             .iter()
             .map(|span| (span.content.as_ref(), span.style.fg, span.style.bg))
             .collect();
@@ -1182,7 +1377,7 @@ mod tests {
     #[test]
     fn scrolling_past_a_short_line_leaves_only_its_number() {
         let cell = Cell { number: 1, text: "ab".to_string(), changed: false, marks: Vec::new(), colors: Vec::new() };
-        assert_eq!(text_of(&side_line(Some(&cell), 10, false, BUILT_IN.added, BUILT_IN.added_word)), "   1 ");
+        assert_eq!(text_of(&side_line(Some(&cell), 10, (false, false), BUILT_IN.added, BUILT_IN.added_word)), "   1 ");
     }
 
     #[test]
@@ -1343,6 +1538,76 @@ mod tests {
         press(&mut pane, 'n');
         assert_eq!(pane.items[pane.active], Item::Old(4));
         assert_eq!(pane.change_counter().as_deref(), Some(" change 2 of 2 "));
+    }
+
+    fn anchor(side: Side, number: usize, text: &str) -> Anchor {
+        Anchor { side, number, text: text.to_string() }
+    }
+
+    #[test]
+    fn a_comment_goes_on_a_removed_line_or_the_new_version_s() {
+        let mut pane = pane_of(parse_diff("@@ -1,2 +1,2 @@\n-x\n+y\n w"));
+        pane.set_split(false);
+        // Unified: x removed, y added, then w.
+        let at = |pane: &mut DiffPane, active| {
+            pane.active = active;
+            pane.active_anchor()
+        };
+        assert_eq!(at(&mut pane, 0), None, "a hunk's heading");
+        assert_eq!(at(&mut pane, 1), Some(anchor(Side::Old, 1, "x")));
+        assert_eq!(at(&mut pane, 2), Some(anchor(Side::New, 1, "y")));
+        assert_eq!(at(&mut pane, 3), Some(anchor(Side::New, 2, "w")));
+        // Side by side, a change's row is the new line's.
+        pane.set_split(true);
+        assert_eq!(at(&mut pane, 1), Some(anchor(Side::New, 1, "y")));
+    }
+
+    #[test]
+    fn a_comment_wraps_at_spaces_and_cuts_words_too_long_for_a_line() {
+        assert_eq!(wrap("Is thirty seconds enough", 12), ["Is thirty", "seconds", "enough"]);
+        assert_eq!(wrap("", 12), [""]);
+        assert_eq!(wrap("a abcdefghijklmnop b", 10), ["a", "abcdefghij", "klmnop b"]);
+    }
+
+    #[test]
+    fn a_comment_finds_its_line_after_lines_above_it_moved() {
+        let rows = parse_diff("@@ -1,3 +1,4 @@\n a\n+new\n b\n c");
+        // Written on c when it was line 3; it's line 4 now.
+        assert_eq!(locate(&rows, &anchor(Side::New, 3, "c")), Some(4));
+        assert_eq!(locate(&rows, &anchor(Side::New, 4, "c")), Some(4));
+        assert_eq!(locate(&rows, &anchor(Side::New, 3, "gone")), None);
+        // Of two lines with its text, the nearer one.
+        let rows = parse_diff("@@ -1,3 +1,3 @@\n }\n x\n }");
+        assert_eq!(locate(&rows, &anchor(Side::New, 3, "}")), Some(3));
+    }
+
+    #[test]
+    fn going_to_a_comment_makes_its_line_the_active_one() {
+        let mut pane = pane_of(parse_diff("@@ -1,3 +1,4 @@\n a\n+new\n b\n c"));
+        pane.go_to(&anchor(Side::New, 3, "c"));
+        assert_eq!(pane.active_line(), Some(4));
+        assert!(pane.navigated);
+    }
+
+    #[test]
+    fn a_comment_shows_under_its_line_with_a_mark_beside_it() {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        let mut pane = pane_of(parse_diff("@@ -1,2 +1,2 @@\n a\n-b\n+c"));
+        pane.set_comments(vec![(anchor(Side::New, 2, "c"), "Why c?\nb was fine.".to_string())]);
+        assert_eq!(pane.comment_at_active(), None);
+        let mut terminal = Terminal::new(TestBackend::new(60, 8)).unwrap();
+        terminal.draw(|frame| pane.render(frame, frame.area(), true, Some(false))).unwrap();
+        let screen: Vec<String> = (0..8)
+            .map(|y| (0..60).map(|x| terminal.backend().buffer()[(x, y)].symbol().to_string()).collect())
+            .collect();
+        let line = |text: &str| screen.iter().position(|row| row.contains(text)).unwrap();
+        let commented = &screen[line("   2●")];
+        assert!(commented.contains('c'), "{commented}");
+        assert_eq!(line("Why c?"), line("   2●") + 1);
+        assert_eq!(line("b was fine."), line("   2●") + 2);
+        pane.active = 3;
+        assert_eq!(pane.comment_at_active(), Some(anchor(Side::New, 2, "c")));
     }
 
     #[test]
