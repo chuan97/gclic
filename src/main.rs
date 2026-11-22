@@ -26,8 +26,15 @@ use std::path::PathBuf;
 fn main() -> Result<()> {
     let start = std::env::current_dir()?;
     let repo_root = git::repo_root().ok().map(PathBuf::from);
-    if std::env::args().nth(1).as_deref() == Some("--color") {
-        print_color(repo_root);
+    match std::env::args().nth(1).as_deref() {
+        Some("--color") => print_color(repo_root),
+        // For the Neovim plugin's health check, to tell whether gclic and the
+        // plugin come from the same version.
+        Some("--version" | "-V") => {
+            println!("gclic {}", env!("CARGO_PKG_VERSION"));
+            return Ok(());
+        }
+        _ => {}
     }
     let search_root = repos::search_root(&start, repo_root.as_deref());
     // Outside a repo, gclic offers the ones under where it started.

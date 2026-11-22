@@ -118,8 +118,11 @@ pub fn parent_nvim() -> Option<String> {
 }
 
 /// Asks the Neovim at `address` to evaluate an expression, in the background.
+/// Through the very Neovim gclic runs in, which the plugin names in
+/// `$GCLIC_NVIM`, as `nvim` on the `PATH` may be another, or none.
 fn nvim_expr(address: &str, expr: &str) -> Command {
-    let mut command = Command::new("nvim");
+    let program = std::env::var("GCLIC_NVIM").ok().filter(|program| !program.is_empty());
+    let mut command = Command::new(program.as_deref().unwrap_or("nvim"));
     command.args(["--server", address, "--remote-expr", expr]);
     command
 }
