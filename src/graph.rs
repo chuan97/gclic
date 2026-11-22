@@ -236,17 +236,32 @@ fn bead_char(up: bool, down: bool, left: bool, right: bool) -> char {
     }
 }
 
+/// Overrides whether the beads use the branch drawing symbols: `1` to use
+/// them, `0` for plain beads. Unset, gclic goes by the terminal.
+const BRANCH_SYMBOLS_VARIABLE: &str = "GCLIC_BRANCH_SYMBOLS";
+
 /// Whether the terminal draws the branch drawing symbols itself, so the beads
-/// can use them, going by how it identifies itself. Elsewhere they'd show as
-/// empty boxes, so plain beads are used.
+/// can use them. Elsewhere they'd show as empty boxes, so plain beads are used.
 fn draws_branch_symbols() -> bool {
     static DRAWS: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *DRAWS.get_or_init(|| {
-        let var = |name: &str| std::env::var(name).unwrap_or_default();
-        // WezTerm's nightly builds draw them too, but its stable release
-        // doesn't, so it gets plain beads.
-        var("TERM_PROGRAM") == "ghostty" || var("TERM") == "xterm-kitty" || !var("KITTY_WINDOW_ID").is_empty()
-    })
+    *DRAWS.get_or_init(|| branch_symbols_from(|name| std::env::var(name).ok()))
+}
+
+/// No terminal can be asked whether it draws a character, so this goes by the
+/// override if there is one, and otherwise by how the terminal identifies
+/// itself.
+fn branch_symbols_from(var: impl Fn(&str) -> Option<String>) -> bool {
+    match var(BRANCH_SYMBOLS_VARIABLE).as_deref().map(str::trim) {
+        Some("1" | "true" | "yes" | "on") => return true,
+        Some("0" | "false" | "no" | "off") => return false,
+        _ => {}
+    }
+    let var = |name: &str| var(name).unwrap_or_default();
+    // WezTerm's nightly builds draw them too, but its stable release
+    // doesn't, so it gets plain beads.
+    matches!(var("TERM_PROGRAM").as_str(), "ghostty" | "rex")
+        || var("TERM") == "xterm-kitty"
+        || !var("KITTY_WINDOW_ID").is_empty()
 }
 
 fn is_bead(ch: char) -> bool {
@@ -1019,6 +1034,29 @@ mod tests {
             assert!(is_bead(hollow(ch)));
         }
         assert_eq!(hollow('\u{f5ee}'), '\u{f5ef}');
+    }
+
+    fn env<'a>(pairs: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
+        move |name| pairs.iter().find(|(n, _)| *n == name).map(|(_, v)| v.to_string())
+    }
+
+    #[test]
+    fn terminals_that_draw_branch_symbols_get_them() {
+        assert!(branch_symbols_from(env(&[("TERM_PROGRAM", "ghostty")])));
+        assert!(branch_symbols_from(env(&[("TERM_PROGRAM", "rex")])));
+        assert!(branch_symbols_from(env(&[("TERM", "xterm-kitty")])));
+        assert!(!branch_symbols_from(env(&[("TERM_PROGRAM", "Apple_Terminal")])));
+        assert!(!branch_symbols_from(env(&[])));
+    }
+
+    #[test]
+    fn the_override_wins_over_the_terminal() {
+        let vars = [("TERM_PROGRAM", "ghostty"), (BRANCH_SYMBOLS_VARIABLE, "0")];
+        assert!(!branch_symbols_from(env(&vars)));
+        let vars = [("TERM_PROGRAM", "WezTerm"), (BRANCH_SYMBOLS_VARIABLE, "1")];
+        assert!(branch_symbols_from(env(&vars)));
+        let vars = [("TERM_PROGRAM", "rex"), (BRANCH_SYMBOLS_VARIABLE, "maybe")];
+        assert!(branch_symbols_from(env(&vars)));
     }
 
     #[test]
