@@ -15,18 +15,12 @@
 -- load at startup for it, as with lazy.nvim's `event = "VeryLazy"`. gclic
 -- follows the working folder too: :cd in Neovim moves it to that repo.
 --
--- With lazy.nvim:
---
---   {
---     "chuan97/gclic",
---     keys = { { "<leader>gg", function() require("gclic").toggle() end, desc = "gclic" } },
---     opts = {},
---   }
+-- To install it, see "Neovim" in the README, and `:checkhealth gclic`.
 
 local M = {}
 
 M.config = {
-  -- The command that runs gclic.
+  -- The command that runs gclic: `gclic` on the PATH, or a path to it.
   cmd = "gclic",
   -- The window's share of the editor, wide and high: all of it, but for the
   -- command line, unless set lower for a pop-up, which a border then suits.
@@ -58,6 +52,11 @@ local terminal = { palette = {}, fg = nil, bg = nil }
 local accent = { color = nil, root = nil, asked = 0 }
 -- The tabline as it was, to put back where there's no bar.
 local plain_showtabline = nil
+
+--- Whether there's a gclic to run.
+local function installed()
+  return vim.fn.executable(M.config.cmd) == 1
+end
 
 --- The bar, drawn as the tabline: a line in the repo's colour, then its
 --- folder, dimmed, and its name, as gclic's tab bar has them.
@@ -100,7 +99,8 @@ end
 --- Asks gclic for the working folder's repo and its colour, without waiting
 --- for it, and shows them. gclic's `:color` calls this too, inside Neovim.
 function M.refresh_accent()
-  if not M.config.accent or not vim.system then
+  -- Without gclic, no bar, quietly: showing gclic says what's missing.
+  if not M.config.accent or not vim.system or not installed() then
     return
   end
   -- Answers can come back out of order, after quick changes of folder: only
@@ -336,6 +336,13 @@ function M.show()
     show()
     return
   end
+  if not installed() then
+    vim.notify(
+      "gclic: can't find `" .. M.config.cmd .. "`. Install gclic, or set the plugin's `cmd`. See :checkhealth gclic",
+      vim.log.levels.ERROR
+    )
+    return
+  end
   state.buf = vim.api.nvim_create_buf(false, true)
   show()
   -- Before gclic starts, as a terminal takes its colours when it does.
@@ -364,7 +371,9 @@ function M.show()
   end
   -- The colour scheme's colours as gclic starts: a later change of colour
   -- scheme shows the next time it does.
-  local env = { GCLIC_FOLLOW = state.follow }
+  -- And this Neovim, for gclic to call back into, as `nvim` on the PATH may
+  -- be another.
+  local env = { GCLIC_FOLLOW = state.follow, GCLIC_NVIM = vim.v.progpath }
   if M.config.diff_colors == "editor" then
     env.GCLIC_EDITOR_COLORS = M._editor_colors()
   end

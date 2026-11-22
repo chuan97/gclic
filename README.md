@@ -17,6 +17,7 @@ gclic is heavily inspired by the features I like and have grown accustomed to in
 - **[Running commands](#running-commands):** run git, or anything else, from gclic, in the repo it shows.
 - **[Switching repos](#switching-repos):** fuzzy find any repo near the one you're in, and switch to it without leaving gclic.
 - **[Your editor](#your-editor):** open the file you're on in your editor, at the line.
+- **[In Neovim](#in-neovim):** toggle gclic in a floating window, open files from it in the editor, and switch repos together.
 - **[Keyboard driven](#keyboard-driven):** with Vim-style keybindings, and the keys that apply always shown at the bottom.
 
 ## Installation
@@ -101,6 +102,45 @@ While a merge, rebase or cherry-pick is stopped on conflicts, the Changes pane s
 `o` opens the file you're on in your editor, at the line you're on in its diff. The editor is the first of `$GCLIC_EDITOR`, `$VISUAL` and `$EDITOR` that's set, as git picks its own: vi if none is, Notepad on Windows. A terminal editor, such as vim, Neovim or Helix, gets the terminal, and quitting it brings you back to gclic as you left it. A GUI one, such as Zed or VS Code, opens in its own window. gclic knows how the common editors take a line. For another, say where the file and line go: `GCLIC_EDITOR="myeditor --line {line} {file}"`.
 
 To set it, add `export GCLIC_EDITOR=nvim` to your `~/.zshrc` or `~/.bashrc`, or on Windows run `[Environment]::SetEnvironmentVariable("GCLIC_EDITOR", "nvim", "User")` in PowerShell, and open a new terminal. The hint bar names the editor `o` will use.
+
+## In Neovim
+
+gclic comes with a Neovim plugin, for Neovim 0.10 or later, that shows gclic in a floating window. A key toggles it, and it keeps running while hidden, so it's as you left it each time it comes back. `o` hides it and opens the file in the editor, at the line. `:cd` in gclic changes Neovim's working folder, and `:cd` in Neovim moves gclic to that repo. A bar across the top shows the repo in gclic's colour for it, and gclic's diffs take the colour scheme's colours.
+
+The plugin runs gclic, so [install it](#installation) first, and update the two together. With [lazy.nvim](https://github.com/folke/lazy.nvim):
+
+```lua
+{
+  "chuan97/gclic",
+  -- Releases only, to match a released gclic.
+  version = "*",
+  -- At startup, for the bar across the top.
+  event = "VeryLazy",
+  cmd = "Gclic",
+  keys = { { "<leader>gg", function() require("gclic").toggle() end, desc = "gclic" } },
+  opts = {},
+}
+```
+
+With another plugin manager, install the repo and call `require("gclic").setup()`.
+
+In gclic, `ctrl-g` hides it and `q` quits it. `:Gclic` toggles it too. `:checkhealth gclic` checks that gclic and git are found, and which gclic it is.
+
+The options, with their defaults:
+
+```lua
+opts = {
+  cmd = "gclic",           -- `gclic` on the PATH, or a path to it
+  width = 1, height = 1,   -- the window's share of the editor; lower for a pop-up
+  border = "none",         -- a border, which suits a pop-up
+  toggle_key = "<C-g>",    -- hides gclic from inside it; false for none
+  colors = "terminal",     -- gclic's window in the "terminal"'s colours, or the "editor"'s
+  diff_colors = "editor",  -- the diffs in the "editor"'s colours, or "gclic"'s own
+  accent = true,           -- the bar across the top in the repo's colour
+}
+```
+
+gclic's window has the filetype `gclic`, to keep a status line or winbar out of it.
 
 ## A colour for each repo
 
