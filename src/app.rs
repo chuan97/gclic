@@ -112,6 +112,8 @@ pub enum Confirm {
     /// already leaves the comparison without losing it.
     CloseCompare,
     DropStash(Stash),
+    /// d on the Review tab: this comment, by its index in the review.
+    DeleteComment(usize),
     /// D on the Review tab: every comment.
     ClearReview,
 }
@@ -1240,6 +1242,13 @@ impl App {
                         self.after_stash(StashAction::Drop, stash, result);
                         return;
                     }
+                    Confirm::DeleteComment(index) => {
+                        self.review.remove(*index);
+                        self.message = "Comment deleted".to_string();
+                        self.after_review_change();
+                        self.show_selected_comment();
+                        return;
+                    }
                     Confirm::ClearReview => {
                         self.review.clear();
                         self.after_review_change();
@@ -1575,12 +1584,7 @@ impl App {
                     self.modal = Modal::CommentBox(CommentBox { source, anchor, draft });
                 }
             }
-            ListAction::Delete(index) => {
-                self.review.remove(index);
-                self.message = "Comment deleted".to_string();
-                self.after_review_change();
-                self.show_selected_comment();
-            }
+            ListAction::Delete(index) => self.modal = Modal::Confirm(Confirm::DeleteComment(index)),
             ListAction::Copy => match copy_to_clipboard(&self.review.text()) {
                 Ok(()) => {
                     let count = match self.review.len() {
@@ -2179,6 +2183,20 @@ impl App {
                         ])],
                         "delete",
                     ),
+                    Confirm::DeleteComment(index) => {
+                        let comment = self.review.get(*index);
+                        let location = comment.map(|comment| comment.location()).unwrap_or_default();
+                        let first = comment.and_then(|comment| comment.body.lines().next()).unwrap_or_default();
+                        let body = vec![
+                            Line::from(vec![
+                                Span::raw("Delete the comment on "),
+                                Span::styled(location, bold),
+                                Span::raw("?"),
+                            ]),
+                            Line::styled(first.to_string(), Style::default().fg(ui::DIM)),
+                        ];
+                        (" Delete comment ", body, "delete")
+                    }
                     Confirm::ClearReview => {
                         let count = match self.review.len() {
                             1 => "the review's comment".to_string(),
@@ -2661,7 +2679,12 @@ mod tests {
         assert!(app.tab == Tab::Review && app.focus == Focus::Review);
         assert!(app.diff.as_ref().is_some_and(|diff| diff.source == source));
 
+        // Deleting asks first, and esc keeps it.
         press(&mut app, KeyCode::Char('d'));
+        press(&mut app, KeyCode::Esc);
+        assert_eq!(app.review.len(), 1);
+        press(&mut app, KeyCode::Char('d'));
+        press(&mut app, KeyCode::Enter);
         assert!(app.review.is_empty());
         assert!(app.tab == Tab::Repo && !app.tabs().contains(&Tab::Review));
     }

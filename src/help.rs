@@ -89,7 +89,7 @@ const RIGHT: &[Section] = &[
             ("tab", "the Review tab, once there are comments"),
             ("enter", "move into the comment's diff"),
             ("c", "edit the comment"),
-            ("d", "delete it"),
+            ("d", "delete it, after asking"),
             ("y", "copy them all, ready to paste"),
             ("D", "clear the review, after asking"),
         ],
