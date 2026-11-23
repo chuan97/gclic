@@ -84,6 +84,17 @@ impl StagingPanel {
         positions.into_iter().filter_map(|index| self.source_at(index)).collect()
     }
 
+    /// The diff that has this file's changes, for a review comment written
+    /// on `written_on`: that one if the file is still there, or else the
+    /// file's other one, staged or not. None if the file has no changes.
+    pub fn source_for_path(&self, path: &str, written_on: &DiffSource) -> Option<DiffSource> {
+        let sources: Vec<DiffSource> = (0..self.total())
+            .filter_map(|index| self.source_at(index))
+            .filter(|source| source.path() == path && !matches!(source, DiffSource::Conflict(_)))
+            .collect();
+        sources.iter().find(|source| *source == written_on).or(sources.first()).cloned()
+    }
+
     fn source_at(&self, index: usize) -> Option<DiffSource> {
         let (section, entry) = self.entry_at(index)?;
         let path = entry.path.clone();

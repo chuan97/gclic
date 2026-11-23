@@ -92,6 +92,36 @@ pub fn render_lines(frame: &mut Frame, area: Rect, lines: Vec<Line>) {
     }
 }
 
+/// A line of text broken into lines of at most `width` characters, at
+/// spaces where it can be.
+pub fn wrap(text: &str, width: usize) -> Vec<String> {
+    let width = width.max(10);
+    let mut lines = Vec::new();
+    let mut line = String::new();
+    for word in text.split(' ') {
+        let mut word = word.to_string();
+        // A word too long for a line of its own is cut.
+        while word.chars().count() > width {
+            if !line.is_empty() {
+                lines.push(std::mem::take(&mut line));
+            }
+            let cut = word.char_indices().nth(width).map_or(word.len(), |(i, _)| i);
+            lines.push(word[..cut].to_string());
+            word = word[cut..].to_string();
+        }
+        let needed = if line.is_empty() { word.chars().count() } else { line.chars().count() + 1 + word.chars().count() };
+        if needed > width && !line.is_empty() {
+            lines.push(std::mem::take(&mut line));
+        }
+        if !line.is_empty() {
+            line.push(' ');
+        }
+        line.push_str(&word);
+    }
+    lines.push(line);
+    lines
+}
+
 pub fn centered(area: Rect, width: u16, height: u16) -> Rect {
     let width = width.min(area.width);
     let height = height.min(area.height);
@@ -118,6 +148,14 @@ pub fn status_color(status: char) -> Color {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn text_wraps_at_spaces_and_cuts_words_too_long_for_a_line() {
+        assert_eq!(wrap("Is thirty seconds enough", 12), ["Is thirty", "seconds", "enough"]);
+        assert_eq!(wrap("", 12), [""]);
+        assert_eq!(wrap("a abcdefghijklmnop b", 10), ["a", "abcdefghij", "klmnop b"]);
+    }
+
 
     #[test]
     fn moving_wraps_around_both_ends() {

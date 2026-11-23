@@ -14,6 +14,7 @@ gclic is heavily inspired by the features I like and have grown accustomed to in
 - **[Compare](#compare):** pick any two refs to see how far they have diverged and which files differ.
 - **[Merge conflicts](#merge-conflicts):** see each conflict as your side against theirs, and open it in your editor to resolve it.
 - **[Stashes](#stashes):** see what's in each stash, and apply, pop or drop it.
+- **[Review comments](#review-comments):** comment on the lines of any diff, and copy the comments as one review, to paste to whoever made the changes.
 - **[Running commands](#running-commands):** run git, or anything else, from gclic, in the repo it shows.
 - **[Switching repos](#switching-repos):** fuzzy find any repo near the one you're in, and switch to it without leaving gclic.
 - **[Your editor](#your-editor):** open the file you're on in your editor, at the line.
@@ -87,6 +88,14 @@ While a merge, rebase or cherry-pick is stopped on conflicts, the Changes pane s
 
 `:stash` lists your stashes. `enter` shows a stash's files, untracked ones included, each with its diff, as a comparison does. `a` applies it, with every change back unstaged, `p` pops it, and `d` drops it after asking. The graph shows each stash too, hanging off the commit it was made on, with the same keys. Making one is left to `:git stash`, which has the options for what goes in it.
 
+## Review comments
+
+`gc` writes a comment on the diff's active line: in the Changes pane, a commit's files, a comparison or a stash. That works from inside the diff, or from the list beside it once `n` has stepped to a change, so a change can be commented on without entering the diff. `gC` writes a comment on the whole file the diff shows. A comment shows under its line, which gets a mark beside its number, or at the top of the diff for the whole file, and `gc` or `gC` there again edits it. A removed line takes comments too, as in "why did this go?". Saving a comment left empty removes it.
+
+The first comment adds a Review tab, which `tab` goes to. It lists the comments under where they were made: uncommitted changes, which keep their comments when staged, a commit, or a comparison. Moving through them shows each one's diff at its line. `y` copies them all as one review to paste to whoever made the changes, each with its file, line number and the line itself, so the line can be found even after code has moved around. `c` edits a comment, `d` deletes one and `D` clears the review, each after asking. The Review tab goes once the last comment does.
+
+Comments last until cleared, or until gclic quits, which says how many would be lost.
+
 ## Running commands
 
 `:git …` runs a git command in the background, in the repo gclic shows, which refreshes once it ends. A line of output goes to the message line, and more to a popup, red if it failed. `ctrl-c` stops it. It has no terminal to ask anything on, so a command that would open an editor or ask for a password fails at once, and says to run it with `:!` instead. Keys in an SSH agent still work. When a command fails and git suggests one to run instead, such as `git push --set-upstream origin main`, the next `:` offers it, and `tab` fills it in.
@@ -148,7 +157,7 @@ A line across the top is in the repo's own colour, and ends in the repo's folder
 
 ## Keyboard driven
 
-Every action has a key, mostly Vim-style. `h`/`l` move between panes, marked `[h]` and `[l]` on their borders. The bar at the bottom lists the keys that apply right now, and `?` shows them all.
+Every action has a key, mostly Vim-style: `j`/`k` move, `gg`/`G` go to the top and bottom, and `ctrl-d`/`ctrl-u` move half a page. `h`/`l` move between panes, marked `[h]` and `[l]` on their borders. The bar at the bottom lists the keys that apply right now, apart from those for moving, which work everywhere, and `?` shows them all.
 
 ![The help, opened from the graph](docs/images/help.svg)
 

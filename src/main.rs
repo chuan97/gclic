@@ -13,6 +13,7 @@ mod help;
 mod highlight;
 mod picker;
 mod repos;
+mod review;
 mod staging;
 mod theme;
 mod ui;

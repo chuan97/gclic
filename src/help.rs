@@ -22,12 +22,12 @@ const LEFT: &[Section] = &[
         title: "Everywhere",
         keys: &[
             ("h l", "previous/next pane"),
-            ("j k g G", "move, wrapping around in lists"),
+            ("j k gg G", "move, wrapping around in lists"),
             ("enter", "open; on a file, again to move into it"),
             ("esc", "go back, then close the diff or details"),
             ("o", "open the file in your editor, at the line"),
             ("z", "zoom the diff or details"),
-            ("tab", "switch between Repo and Compare"),
+            ("tab", "next tab: Repo, Compare, Review"),
             (":", "a command; tab completes its name"),
             ("?", "this help"),
             ("q ctrl-c", "quit, after asking; ctrl-c stops a :git first"),
@@ -82,6 +82,19 @@ const RIGHT: &[Section] = &[
         ],
     },
     Section {
+        title: "Review",
+        keys: &[
+            ("gc", "comment on the diff's active line"),
+            ("gC", "comment on the diff's whole file"),
+            ("tab", "the Review tab, once there are comments"),
+            ("enter", "move into the comment's diff"),
+            ("c", "edit the comment"),
+            ("d", "delete it, after asking"),
+            ("y", "copy them all, ready to paste"),
+            ("D", "clear the review, after asking"),
+        ],
+    },
+    Section {
         title: "Commands",
         keys: &crate::commands::COMMAND_HELP,
     },
@@ -99,17 +112,18 @@ const RIGHT: &[Section] = &[
         title: "Diff",
         keys: &[
             ("j k", "move the active line"),
-            ("g G", "first/last line"),
+            ("gg G", "first/last line"),
             ("ctrl-d u", "half a page down/up"),
             ("n N", "next/previous change, from any pane"),
             ("h l", "scroll sideways"),
             ("e", "whole file, or just the changes, from any pane"),
             ("s", "side by side, or unified, from any pane"),
+            ("gc gC", "comment on the line, on the file"),
         ],
     },
     Section {
         title: "Commit details",
-        keys: &[("j k g G", "scroll"), ("ctrl-d u", "half a page down/up"), ("y", "copy the sha")],
+        keys: &[("j k gg G", "scroll"), ("ctrl-d u", "half a page down/up"), ("y", "copy the sha")],
     },
     Section {
         title: "Pickers",
@@ -121,6 +135,10 @@ const RIGHT: &[Section] = &[
             ("enter", "confirm"),
             ("esc", "stop typing, then close"),
         ],
+    },
+    Section {
+        title: "Comment",
+        keys: &[("ctrl-enter", "save; saved empty, it's removed"), ("esc", "cancel")],
     },
     Section {
         title: "Commit message",
