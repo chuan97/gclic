@@ -134,8 +134,8 @@
 <line x1="12.3" y1="76.5" x2="12.3" y2="68.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="12.3" y1="76.5" x2="12.3" y2="85.0" stroke="#8abeb7" stroke-width="1.2"/>
 <text x="49.2" y="80.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">j</text>
 <text x="65.6" y="80.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">k</text>
-<text x="82.0" y="80.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">g</text>
-<text x="98.4" y="80.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">G</text>
+<text x="82.0" y="80.6" fill="#f0c674" textLength="16.4" lengthAdjust="spacingAndGlyphs">gg</text>
+<text x="106.6" y="80.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">G</text>
 <text x="147.6" y="80.6" fill="#ffffff" textLength="41.0" lengthAdjust="spacingAndGlyphs">move,</text>
 <text x="196.8" y="80.6" fill="#ffffff" textLength="65.6" lengthAdjust="spacingAndGlyphs">wrapping</text>
 <text x="270.6" y="80.6" fill="#ffffff" textLength="49.2" lengthAdjust="spacingAndGlyphs">around</text>
@@ -197,11 +197,11 @@
 <line x1="4.1" y1="161.5" x2="4.1" y2="153.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="161.5" x2="4.1" y2="170.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="12.3" y1="161.5" x2="12.3" y2="153.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="12.3" y1="161.5" x2="12.3" y2="170.0" stroke="#8abeb7" stroke-width="1.2"/>
 <text x="49.2" y="165.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">tab</text>
-<text x="147.6" y="165.6" fill="#ffffff" textLength="49.2" lengthAdjust="spacingAndGlyphs">switch</text>
-<text x="205.0" y="165.6" fill="#ffffff" textLength="57.4" lengthAdjust="spacingAndGlyphs">between</text>
-<text x="270.6" y="165.6" fill="#ffffff" textLength="32.8" lengthAdjust="spacingAndGlyphs">Repo</text>
-<text x="311.6" y="165.6" fill="#ffffff" textLength="24.6" lengthAdjust="spacingAndGlyphs">and</text>
-<text x="344.4" y="165.6" fill="#ffffff" textLength="57.4" lengthAdjust="spacingAndGlyphs">Compare</text>
+<text x="147.6" y="165.6" fill="#ffffff" textLength="32.8" lengthAdjust="spacingAndGlyphs">next</text>
+<text x="188.6" y="165.6" fill="#ffffff" textLength="32.8" lengthAdjust="spacingAndGlyphs">tab:</text>
+<text x="229.6" y="165.6" fill="#ffffff" textLength="41.0" lengthAdjust="spacingAndGlyphs">Repo,</text>
+<text x="278.8" y="165.6" fill="#ffffff" textLength="65.6" lengthAdjust="spacingAndGlyphs">Compare,</text>
+<text x="352.6" y="165.6" fill="#ffffff" textLength="49.2" lengthAdjust="spacingAndGlyphs">Review</text>
 <line x1="971.7" y1="161.5" x2="971.7" y2="153.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="971.7" y1="161.5" x2="971.7" y2="170.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="979.9" y1="161.5" x2="979.9" y2="153.0" stroke="#666666" stroke-width="1.2"/><line x1="979.9" y1="161.5" x2="979.9" y2="170.0" stroke="#666666" stroke-width="1.2"/>
 <line x1="4.1" y1="178.5" x2="4.1" y2="170.0" stroke="#666666" stroke-width="1.2"/><line x1="4.1" y1="178.5" x2="4.1" y2="187.0" stroke="#666666" stroke-width="1.2"/>

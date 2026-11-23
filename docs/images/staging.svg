@@ -816,10 +816,9 @@
 <text x="705.2" y="573.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">c</text>
 <text x="721.6" y="573.6" fill="#ffffff" textLength="49.2" lengthAdjust="spacingAndGlyphs">commit</text>
 <text x="779.0" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
-<text x="795.4" y="573.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">n/N</text>
-<text x="828.2" y="573.6" fill="#ffffff" textLength="49.2" lengthAdjust="spacingAndGlyphs">change</text>
-<text x="885.6" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
-<text x="902.0" y="573.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">e</text>
-<text x="918.4" y="573.6" fill="#ffffff" textLength="41.0" lengthAdjust="spacingAndGlyphs">whole</text>
-<text x="967.6" y="573.6" fill="#ffffff" textLength="8.2" lengthAdjust="spacingAndGlyphs">f</text>
+<text x="795.4" y="573.6" fill="#f0c674" textLength="16.4" lengthAdjust="spacingAndGlyphs">gC</text>
+<text x="820.0" y="573.6" fill="#ffffff" textLength="57.4" lengthAdjust="spacingAndGlyphs">comment</text>
+<text x="885.6" y="573.6" fill="#ffffff" textLength="32.8" lengthAdjust="spacingAndGlyphs">file</text>
+<text x="926.6" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="943.0" y="573.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">n/N</text>
 </g></svg>
