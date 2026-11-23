@@ -207,11 +207,7 @@ impl Review {
     /// The comments as one review, for whoever made the changes: each under
     /// its place, with its file and line, the line itself, and the comment.
     pub fn text(&self) -> String {
-        let count = match self.comments.len() {
-            1 => "the comment".to_string(),
-            _ => "each comment".to_string(),
-        };
-        let mut text = format!("Here's my review of your changes. Address {count}.\n");
+        let mut text = "Here's my review of your changes.\n".to_string();
         let mut heading = None;
         for index in self.ordered() {
             let comment = &self.comments[index];
@@ -401,7 +397,7 @@ mod tests {
         review.set(on_file);
         assert_eq!(
             review.text(),
-            "Here's my review of your changes. Address each comment.\n\
+            "Here's my review of your changes.\n\
              \n## Uncommitted changes\n\
              \na.rs, removed line 12\n    check();\n> Keep this check.\n>\n> It guards the empty case.\n\
              \nb.rs\n> Split this file.\n\
