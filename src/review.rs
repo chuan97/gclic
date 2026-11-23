@@ -1,5 +1,5 @@
-//! Review comments on the lines of diffs: `c` on a diff's line writes one, the
-//! Review tab lists them, and `y` there copies them all as one review, to paste
+//! Review comments on diffs, on a line or on the whole file: `gc` on a diff's
+//! active line writes one, `gC` one on its file, the Review tab lists them, and `y` there copies them all as one review, to paste
 //! to whoever made the changes. They last until cleared, or until gclic quits.
 
 use crate::git::{self, DiffSource};
@@ -80,12 +80,20 @@ pub struct Comment {
     pub place: Place,
     /// The place's heading, worked out once, as a commit's needs git.
     heading: String,
-    pub anchor: Anchor,
+    /// The line it's on. None for a comment on the whole file.
+    pub anchor: Option<Anchor>,
     pub body: String,
 }
 
+/// A comment's line, as a key: its side and number, or None for the file.
+pub type LineKey = Option<(Side, usize)>;
+
+fn key_of(anchor: &Option<Anchor>) -> LineKey {
+    anchor.as_ref().map(|anchor| (anchor.side, anchor.number))
+}
+
 impl Comment {
-    pub fn new(source: DiffSource, anchor: Anchor, body: String) -> Option<Comment> {
+    pub fn new(source: DiffSource, anchor: Option<Anchor>, body: String) -> Option<Comment> {
         let place = Place::of(&source)?;
         let heading = place.heading();
         Some(Comment { source, place, heading, anchor, body })
@@ -96,17 +104,23 @@ impl Comment {
     }
 
     /// `path:line`, or for a removed line, which only the old version has,
-    /// says so.
+    /// says so. Just the path for the whole file.
     pub fn location(&self) -> String {
-        match self.anchor.side {
-            Side::New => format!("{}:{}", self.path(), self.anchor.number),
-            Side::Old => format!("{}, removed line {}", self.path(), self.anchor.number),
-        }
+        location(self.path(), &self.anchor)
     }
 
-    /// Whether it's about this same line of this same diff.
-    fn is_on(&self, place: &Place, path: &str, side: Side, number: usize) -> bool {
-        self.place == *place && self.path() == path && self.anchor.side == side && self.anchor.number == number
+    /// Whether it's about this same line, or file, of this same diff.
+    fn is_on(&self, place: &Place, path: &str, key: LineKey) -> bool {
+        self.place == *place && self.path() == path && key_of(&self.anchor) == key
+    }
+}
+
+/// Where a comment is, as the list, the box and the copied review say it.
+pub fn location(path: &str, anchor: &Option<Anchor>) -> String {
+    match anchor {
+        None => path.to_string(),
+        Some(Anchor { side: Side::New, number, .. }) => format!("{path}:{number}"),
+        Some(Anchor { side: Side::Old, number, .. }) => format!("{path}, removed line {number}"),
     }
 }
 
@@ -128,18 +142,17 @@ impl Review {
         self.comments.get(index)
     }
 
-    /// The comment on this line, if there is one.
-    pub fn find(&self, source: &DiffSource, side: Side, number: usize) -> Option<usize> {
+    /// The comment on this line, or on the file for None, if there is one.
+    pub fn find(&self, source: &DiffSource, key: LineKey) -> Option<usize> {
         let place = Place::of(source)?;
-        self.comments.iter().position(|comment| comment.is_on(&place, source.path(), side, number))
+        self.comments.iter().position(|comment| comment.is_on(&place, source.path(), key))
     }
 
     /// Adds a comment, or replaces the one already on its line. An empty one
     /// removes it.
     pub fn set(&mut self, comment: Comment) {
-        let existing = self.comments.iter().position(|c| {
-            c.is_on(&comment.place, comment.path(), comment.anchor.side, comment.anchor.number)
-        });
+        let key = key_of(&comment.anchor);
+        let existing = self.comments.iter().position(|c| c.is_on(&comment.place, comment.path(), key));
         match (existing, comment.body.trim().is_empty()) {
             (Some(index), true) => {
                 self.comments.remove(index);
@@ -161,7 +174,7 @@ impl Review {
     }
 
     /// The comments on this diff's file, to show in it.
-    pub fn on_diff(&self, source: &DiffSource) -> Vec<(Anchor, String)> {
+    pub fn on_diff(&self, source: &DiffSource) -> Vec<(Option<Anchor>, String)> {
         let Some(place) = Place::of(source) else {
             return Vec::new();
         };
@@ -173,7 +186,8 @@ impl Review {
     }
 
     /// The comments in the order they're listed and sent: by place, in the
-    /// order each was first commented on, then by file, then down the file.
+    /// order each was first commented on, then by file, the file's own
+    /// comments first, then down the file.
     pub fn ordered(&self) -> Vec<usize> {
         let mut places: Vec<&Place> = Vec::new();
         for comment in &self.comments {
@@ -185,7 +199,7 @@ impl Review {
         order.sort_by_key(|&i| {
             let comment = &self.comments[i];
             let place = places.iter().position(|place| **place == comment.place);
-            (place, comment.path().to_string(), comment.anchor.number)
+            (place, comment.path().to_string(), comment.anchor.as_ref().map(|anchor| anchor.number))
         });
         order
     }
@@ -206,7 +220,9 @@ impl Review {
                 text.push_str(&format!("\n## {}\n", comment.heading));
             }
             text.push_str(&format!("\n{}\n", comment.location()));
-            text.push_str(&format!("    {}\n", comment.anchor.text.trim_end()));
+            if let Some(anchor) = &comment.anchor {
+                text.push_str(&format!("    {}\n", anchor.text.trim_end()));
+            }
             for line in comment.body.trim_end().lines() {
                 // A bare > for an empty line, without a trailing space.
                 text.push_str(format!("> {line}").trim_end());
@@ -325,7 +341,7 @@ mod tests {
     use super::*;
 
     fn comment(source: DiffSource, side: Side, number: usize, text: &str, body: &str) -> Comment {
-        let anchor = Anchor { side, number, text: text.to_string() };
+        let anchor = Some(Anchor { side, number, text: text.to_string() });
         Comment {
             place: Place::of(&source).unwrap(),
             heading: match &source {
@@ -354,7 +370,7 @@ mod tests {
         assert_eq!(review.len(), 1);
         assert_eq!(review.get(0).unwrap().body, "second");
         // The same line staged is the same place.
-        assert_eq!(review.find(&DiffSource::Staged("a.rs".to_string()), Side::New, 3), Some(0));
+        assert_eq!(review.find(&DiffSource::Staged("a.rs".to_string()), Some((Side::New, 3))), Some(0));
         review.set(comment(unstaged("a.rs"), Side::New, 3, "x", "  "));
         assert!(review.is_empty());
     }
@@ -369,7 +385,7 @@ mod tests {
 
     #[test]
     fn conflicts_take_no_comments() {
-        let anchor = Anchor { side: Side::New, number: 1, text: String::new() };
+        let anchor = Some(Anchor { side: Side::New, number: 1, text: String::new() });
         assert!(Comment::new(DiffSource::Conflict("a.rs".to_string()), anchor, "x".to_string()).is_none());
     }
 
@@ -380,11 +396,15 @@ mod tests {
         review.set(comment(in_commit("a.rs"), Side::New, 4, "fn a() {}", "Rename this."));
         review.set(comment(unstaged("a.rs"), Side::Old, 12, "check();", "Keep this check.\n\nIt guards the empty case."));
         review.set(comment(unstaged("b.rs"), Side::New, 2, "use x;", "Unused."));
+        let mut on_file = comment(unstaged("b.rs"), Side::New, 0, "", "Split this file.");
+        on_file.anchor = None;
+        review.set(on_file);
         assert_eq!(
             review.text(),
             "Here's my review of your changes. Address each comment.\n\
              \n## Uncommitted changes\n\
              \na.rs, removed line 12\n    check();\n> Keep this check.\n>\n> It guards the empty case.\n\
+             \nb.rs\n> Split this file.\n\
              \nb.rs:2\n    use x;\n> Unused.\n\
              \nb.rs:9\n        let b = 2;\n> Why 2?\n\
              \n## Commit a3f9c12 \"Name the sides\"\n\

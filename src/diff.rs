@@ -525,36 +525,6 @@ const MINIMAP_ADDED: [Color; 2] = [BUILT_IN.added_word, Color::Rgb(88, 184, 112)
 const MINIMAP_CURRENT: [Color; 2] = [CURRENT_WORD_BG, Color::Rgb(72, 180, 146)];
 const MINIMAP_INCOMING: [Color; 2] = [INCOMING_WORD_BG, Color::Rgb(90, 146, 220)];
 
-/// A comment's line broken into lines of at most `width` characters, at
-/// spaces where it can be.
-fn wrap(text: &str, width: usize) -> Vec<String> {
-    let width = width.max(10);
-    let mut lines = Vec::new();
-    let mut line = String::new();
-    for word in text.split(' ') {
-        let mut word = word.to_string();
-        // A word too long for a line of its own is cut.
-        while word.chars().count() > width {
-            if !line.is_empty() {
-                lines.push(std::mem::take(&mut line));
-            }
-            let cut = word.char_indices().nth(width).map_or(word.len(), |(i, _)| i);
-            lines.push(word[..cut].to_string());
-            word = word[cut..].to_string();
-        }
-        let needed = if line.is_empty() { word.chars().count() } else { line.chars().count() + 1 + word.chars().count() };
-        if needed > width && !line.is_empty() {
-            lines.push(std::mem::take(&mut line));
-        }
-        if !line.is_empty() {
-            line.push(' ');
-        }
-        line.push_str(&word);
-    }
-    lines.push(line);
-    lines
-}
-
 /// The file's lines with a review comment, by side and number.
 type CommentedLines = HashSet<(Side, usize)>;
 
@@ -693,8 +663,8 @@ pub struct DiffPane {
     /// the other way round from a merge's.
     rebasing: bool,
     /// The review's comments on this file, each with the line it's on, to
-    /// draw under their lines.
-    comments: Vec<(Anchor, String)>,
+    /// draw under their lines, or none for the file's own, drawn at the top.
+    comments: Vec<(Option<Anchor>, String)>,
 }
 
 /// The most rows the colour cache keeps, over all its diffs. Enough for the
@@ -864,8 +834,14 @@ impl DiffPane {
     }
 
     /// The review's comments on this file, which show under their lines.
-    pub fn set_comments(&mut self, comments: Vec<(Anchor, String)>) {
+    pub fn set_comments(&mut self, comments: Vec<(Option<Anchor>, String)>) {
         self.comments = comments;
+    }
+
+    /// Whether the active line shows: while focused, or once n or N has
+    /// moved it, from any pane.
+    pub fn shows_active_line(&self, focused: bool) -> bool {
+        focused || self.navigated
     }
 
     /// The line under the cursor, to comment on: the new version's, or a
@@ -893,12 +869,17 @@ impl DiffPane {
         let item = *self.items.get(self.active)?;
         let lines = item_lines(&self.rows, item);
         let here = |anchor: &Anchor| locate(&self.rows, anchor).is_some_and(|number| lines.contains(&(anchor.side, number)));
-        self.comments.iter().map(|(anchor, _)| anchor).find(|anchor| here(anchor)).cloned()
+        self.comments.iter().filter_map(|(anchor, _)| anchor.as_ref()).find(|anchor| here(anchor)).cloned()
     }
 
     /// Moves the active line to the one a comment is on, wherever it has
-    /// moved to since. Shown even without focus, as after n.
-    pub fn go_to(&mut self, anchor: &Anchor) {
+    /// moved to since, or to the top for a comment on the file. Shown even
+    /// without focus, as after n.
+    pub fn go_to(&mut self, anchor: Option<&Anchor>) {
+        let Some(anchor) = anchor else {
+            self.active = 0;
+            return;
+        };
         let Some(number) = locate(&self.rows, anchor) else {
             return;
         };
@@ -925,10 +906,18 @@ impl DiffPane {
             }
         }
         for (anchor, body) in &self.comments {
+            // The file's own go at the top, under the first heading.
+            let Some(anchor) = anchor else {
+                if !self.items.is_empty() {
+                    let lines = body.trim_end().lines().flat_map(|line| ui::wrap(line, width));
+                    notes.entry(0).or_default().extend(lines);
+                }
+                continue;
+            };
             let Some(number) = locate(&self.rows, anchor) else { continue };
             let Some(&index) = item_of.get(&(anchor.side, number)) else { continue };
             marked.insert((anchor.side, number));
-            let lines = body.trim_end().lines().flat_map(|line| wrap(line, width));
+            let lines = body.trim_end().lines().flat_map(|line| ui::wrap(line, width));
             notes.entry(index).or_default().extend(lines);
         }
         (notes, marked)
@@ -1563,13 +1552,6 @@ mod tests {
     }
 
     #[test]
-    fn a_comment_wraps_at_spaces_and_cuts_words_too_long_for_a_line() {
-        assert_eq!(wrap("Is thirty seconds enough", 12), ["Is thirty", "seconds", "enough"]);
-        assert_eq!(wrap("", 12), [""]);
-        assert_eq!(wrap("a abcdefghijklmnop b", 10), ["a", "abcdefghij", "klmnop b"]);
-    }
-
-    #[test]
     fn a_comment_finds_its_line_after_lines_above_it_moved() {
         let rows = parse_diff("@@ -1,3 +1,4 @@\n a\n+new\n b\n c");
         // Written on c when it was line 3; it's line 4 now.
@@ -1584,7 +1566,7 @@ mod tests {
     #[test]
     fn going_to_a_comment_makes_its_line_the_active_one() {
         let mut pane = pane_of(parse_diff("@@ -1,3 +1,4 @@\n a\n+new\n b\n c"));
-        pane.go_to(&anchor(Side::New, 3, "c"));
+        pane.go_to(Some(&anchor(Side::New, 3, "c")));
         assert_eq!(pane.active_line(), Some(4));
         assert!(pane.navigated);
     }
@@ -1594,7 +1576,7 @@ mod tests {
         use ratatui::Terminal;
         use ratatui::backend::TestBackend;
         let mut pane = pane_of(parse_diff("@@ -1,2 +1,2 @@\n a\n-b\n+c"));
-        pane.set_comments(vec![(anchor(Side::New, 2, "c"), "Why c?\nb was fine.".to_string())]);
+        pane.set_comments(vec![(Some(anchor(Side::New, 2, "c")), "Why c?\nb was fine.".to_string())]);
         assert_eq!(pane.comment_at_active(), None);
         let mut terminal = Terminal::new(TestBackend::new(60, 8)).unwrap();
         terminal.draw(|frame| pane.render(frame, frame.area(), true, Some(false))).unwrap();

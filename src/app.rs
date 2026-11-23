@@ -159,10 +159,11 @@ impl TabState {
     }
 }
 
-/// A review comment being written, on the diff's line it's for.
+/// A review comment being written, on the diff's line it's for, or on the
+/// whole file for None.
 struct CommentBox {
     source: DiffSource,
-    anchor: Anchor,
+    anchor: Option<Anchor>,
     draft: String,
 }
 
@@ -217,6 +218,9 @@ pub struct App {
     /// The left-hand panel to return to when leaving the preview.
     last_left_focus: Focus,
     modal: Modal,
+    /// `g` was pressed, and the next key says what for: `gg` the top, `gc`
+    /// and `gC` a comment.
+    pending_g: bool,
     commit_draft: String,
     /// The last commits yanked, oldest first, as labels starting with the sha.
     recent_yanks: Vec<String>,
@@ -302,6 +306,7 @@ impl App {
             focus: Focus::Changes,
             last_left_focus: Focus::Changes,
             modal: Modal::None,
+            pending_g: false,
             commit_draft: String::new(),
             recent_yanks: Vec::new(),
             message: String::new(),
@@ -660,6 +665,17 @@ impl App {
             _ if self.focus == Focus::Branches && self.branches.is_typing() => {
                 self.send_to_focused_panel(key);
             }
+            // The key after g.
+            _ if self.pending_g => {
+                self.pending_g = false;
+                match key.code {
+                    KeyCode::Char('g') => self.send_to_focused_panel(KeyEvent::from(KeyCode::Char('g'))),
+                    KeyCode::Char('c') => self.comment_on_line(),
+                    KeyCode::Char('C') => self.comment_on_file(),
+                    _ => {}
+                }
+            }
+            KeyCode::Char('g') => self.pending_g = true,
             KeyCode::Char('q') => self.modal = Modal::ConfirmQuit,
             // h and l move between the Repo tab's panes. Elsewhere they're the
             // pane's own: a diff scrolls sideways, Compare's tree folds.
@@ -683,8 +699,6 @@ impl App {
             KeyCode::Char('s') if self.diff.is_some() => {
                 self.split = self.diff.as_ref().map(|diff| !diff.is_split());
             }
-            // In a diff, c comments on the active line.
-            KeyCode::Char('c') if self.focus == Focus::Preview && self.diff.is_some() => self.comment_on_active_line(),
             // On the Compare tab, c starts a new comparison, as c compares from
             // where the user is in the other panes.
             KeyCode::Char('c') if self.focus == Focus::Compare => self.open_compare_picker(),
@@ -1465,22 +1479,48 @@ impl App {
 
     // -------------------------------------------------------------- review
 
-    /// c in a diff: writes a comment on the active line, or edits the one
-    /// already on it.
-    fn comment_on_active_line(&mut self) {
+    /// gc: writes a comment on the diff's active line, or edits the one
+    /// already on it. From another pane too, once n or N shows the active
+    /// line there, so a change can be commented on without entering it.
+    fn comment_on_line(&mut self) {
         let Some(diff) = &self.diff else {
+            self.message = "Open a diff to comment on its lines".to_string();
+            return;
+        };
+        if !diff.shows_active_line(self.focus == Focus::Preview) {
+            self.message = "Step to a change with n, or enter the diff, to comment on a line".to_string();
+            return;
+        }
+        if review::Place::of(&diff.source).is_none() {
+            self.message = "A conflict takes no comments: o resolves it in your editor".to_string();
+            return;
+        }
+        let Some(anchor) = diff.comment_at_active().or_else(|| diff.active_anchor()) else {
+            self.message = "That's a heading: gC comments on the whole file".to_string();
+            return;
+        };
+        let source = diff.source.clone();
+        self.open_comment_box(source, Some(anchor));
+    }
+
+    /// gC: writes a comment on the whole file in the diff, or edits it.
+    fn comment_on_file(&mut self) {
+        let Some(diff) = &self.diff else {
+            self.message = "Open a file's diff to comment on it".to_string();
             return;
         };
         if review::Place::of(&diff.source).is_none() {
             self.message = "A conflict takes no comments: o resolves it in your editor".to_string();
             return;
         }
-        let Some(anchor) = diff.comment_at_active().or_else(|| diff.active_anchor()) else {
-            self.message = "Move to one of the file's lines to comment on it".to_string();
-            return;
-        };
         let source = diff.source.clone();
-        let existing = self.review.find(&source, anchor.side, anchor.number).and_then(|index| self.review.get(index));
+        self.open_comment_box(source, None);
+    }
+
+    /// The comment box, holding the comment already there, if any.
+    fn open_comment_box(&mut self, source: DiffSource, anchor: Option<Anchor>) {
+        let key = anchor.as_ref().map(|anchor| (anchor.side, anchor.number));
+        let existing = self.review.find(&source, key).and_then(|index| self.review.get(index));
         let draft = existing.map(|comment| comment.body.clone()).unwrap_or_default();
         self.modal = Modal::CommentBox(CommentBox { source, anchor, draft });
     }
@@ -1564,7 +1604,7 @@ impl App {
         let source = self.review_source(comment);
         self.show_diff(source);
         if let Some(diff) = &mut self.diff {
-            diff.go_to(&anchor);
+            diff.go_to(anchor.as_ref());
         }
     }
 
@@ -1811,6 +1851,15 @@ impl App {
             return;
         }
         let dim = Style::default().fg(ui::DIM);
+        // After g, what can follow it.
+        if self.pending_g {
+            let mut hints = vec!["gg top"];
+            hints.extend(self.comment_hints());
+            hints.push("esc cancel");
+            let spans = hint_spans(&hints.join(" · "));
+            frame.render_widget(Line::from(spans), area);
+            return;
+        }
         let (mut spans, empty) = if let Some(running) = self.running.as_ref().filter(|_| self.message.is_empty()) {
             let running = format!("running {}… ", running.label);
             (vec![Span::styled(running, Style::default().fg(Color::Yellow))]
@@ -1916,23 +1965,21 @@ impl App {
                 }
             }
             Focus::Review => {
-                hints.extend(["j/k move", "enter focus diff", "c edit", "d delete", "y copy all", "D clear"]);
+                hints.extend(["enter focus diff", "c edit", "d delete", "y copy all", "D clear"]);
             }
             Focus::Preview => {
-                if let Some(diff) = &self.diff {
-                    hints.extend(["j/k move", "h/l sideways", "ctrl-d/u page"]);
-                    if review::Place::of(&diff.source).is_some() {
-                        hints.push(if diff.comment_at_active().is_some() { "c edit comment" } else { "c comment" });
-                    }
+                if self.diff.is_some() {
+                    hints.extend(self.comment_hints());
                     hints.extend(self.diff_view_hints());
                 } else {
-                    hints.extend(["j/k scroll", "ctrl-d/u page", "y copy sha"]);
+                    hints.push("y copy sha");
                 }
                 hints.push(if self.zoomed { "z unzoom" } else { "z zoom" });
                 esc = Some("esc back");
             }
         }
         if self.focus != Focus::Preview {
+            hints.extend(self.comment_hints());
             hints.extend(self.diff_view_hints());
         }
         if self.focused_file().is_some() {
@@ -2038,6 +2085,25 @@ impl App {
             }
             Err(error) => self.modal = Modal::Error(format!("Couldn't run {name}: {error}")),
         }
+    }
+
+    /// gc and gC, where they'd comment: on the diff's active line when it
+    /// shows, and on its file whenever there's one to comment on.
+    fn comment_hints(&self) -> Vec<&'static str> {
+        let Some(diff) = &self.diff else {
+            return Vec::new();
+        };
+        if review::Place::of(&diff.source).is_none() {
+            return Vec::new();
+        }
+        let mut hints = Vec::new();
+        let on_line = diff.shows_active_line(self.focus == Focus::Preview) && diff.active_anchor().is_some();
+        if on_line {
+            hints.push(if diff.comment_at_active().is_some() { "gc edit comment" } else { "gc comment" });
+        }
+        let on_file = self.review.find(&diff.source, None).is_some();
+        hints.push(if on_file { "gC edit file comment" } else { "gC comment file" });
+        hints
     }
 
     /// The keys that work on a diff on screen, from any pane.
@@ -2157,24 +2223,16 @@ impl App {
                 render_popup(frame, area, " Quit ", body, hints, (44, height), Color::Cyan);
             }
             Modal::CommentBox(comment) => {
-                let location = match comment.anchor.side {
-                    review::Side::New => format!("{}:{}", comment.source.path(), comment.anchor.number),
-                    review::Side::Old => format!("{}, removed line {}", comment.source.path(), comment.anchor.number),
-                };
-                let mut body = vec![
-                    Line::styled(comment.anchor.text.trim().to_string(), Style::default().fg(ui::DIM)),
-                    Line::default(),
-                ];
-                let draft = format!("{}▏", comment.draft);
-                body.extend(draft.split('\n').map(|line| Line::raw(line.to_string())));
+                let location = review::location(comment.source.path(), &comment.anchor);
+                // The line it's on, above, or nothing for the whole file.
+                let quoted = comment.anchor.as_ref().map(|anchor| anchor.text.trim().to_string());
                 let hints = ui::key_hints(&[("ctrl-enter", "save"), ("esc", "cancel")], None);
-                render_popup(frame, area, &format!(" Comment on {location} "), body, hints, (72, 12), Color::Cyan);
+                let title = format!(" Comment on {location} ");
+                render_text_box(frame, area, &title, quoted, &comment.draft, hints);
             }
             Modal::CommitBox => {
-                let draft = format!("{}▏", self.commit_draft);
-                let body = draft.split('\n').map(|line| Line::raw(line.to_string())).collect();
                 let hints = ui::key_hints(&[("ctrl-enter", "commit"), ("esc", "close, keeping it")], None);
-                render_popup(frame, area, " Commit message ", body, hints, (72, 12), Color::Cyan);
+                render_text_box(frame, area, " Commit message ", None, &self.commit_draft, hints);
             }
             Modal::Error(error) => {
                 let body: Vec<Line> = error.lines().map(|line| Line::raw(line.to_string())).collect();
@@ -2264,6 +2322,40 @@ fn render_popup(
         .title_bottom(hints);
     let paragraph = Paragraph::new(body).block(block).wrap(Wrap { trim: false });
     frame.render_widget(paragraph, popup);
+}
+
+/// Where a commit message or a comment is typed: `draft`, wrapped, with the
+/// cursor at its end, under a dimmed line `above` it, if any. The box grows
+/// with the text, up to most of the screen's height, and then scrolls to
+/// keep the cursor in view.
+fn render_text_box(
+    frame: &mut Frame,
+    area: Rect,
+    title: &str,
+    above: Option<String>,
+    draft: &str,
+    hints: Line<'static>,
+) {
+    const WIDTH: u16 = 72;
+    const MIN_HEIGHT: u16 = 12;
+    let width = WIDTH.max(hints.width() as u16 + 4).min(area.width);
+    let text_width = width.saturating_sub(2) as usize;
+    let mut lines: Vec<Line<'static>> = Vec::new();
+    if let Some(above) = above {
+        let dim = Style::default().fg(ui::DIM);
+        lines.extend(ui::wrap(&above, text_width).into_iter().map(|line| Line::styled(line, dim)));
+        lines.push(Line::default());
+    }
+    let typed = format!("{draft}▏");
+    lines.extend(typed.split('\n').flat_map(|line| ui::wrap(line, text_width)).map(Line::raw));
+    let most = (area.height * 4 / 5).max(MIN_HEIGHT.min(area.height));
+    let height = (lines.len() as u16 + 2).clamp(MIN_HEIGHT.min(most), most);
+    let room = height.saturating_sub(2) as usize;
+    let hidden = lines.len().saturating_sub(room);
+    let popup = ui::centered(area, width, height);
+    frame.render_widget(Clear, popup);
+    let block = ui::panel(title.to_string(), true).border_style(Style::default().fg(Color::Cyan)).title_bottom(hints);
+    frame.render_widget(Paragraph::new(lines.split_off(hidden)).block(block), popup);
 }
 
 /// Keeps the last two yanks, the most a comparison can use. In yank order, so
@@ -2548,6 +2640,7 @@ mod tests {
         press(&mut app, KeyCode::Char('j'));
         assert_eq!(app.tabs().len(), 2);
 
+        press(&mut app, KeyCode::Char('g'));
         press(&mut app, KeyCode::Char('c'));
         assert!(matches!(app.modal, Modal::CommentBox(_)));
         type_text(&mut app, "Why?");
@@ -2556,7 +2649,8 @@ mod tests {
         assert!(app.review.text().contains("> Why?"));
         assert!(app.tabs().contains(&Tab::Review));
 
-        // c again edits the same comment.
+        // gc again edits the same comment.
+        press(&mut app, KeyCode::Char('g'));
         press(&mut app, KeyCode::Char('c'));
         assert!(matches!(&app.modal, Modal::CommentBox(comment) if comment.draft == "Why?"));
         press(&mut app, KeyCode::Esc);
@@ -2572,10 +2666,68 @@ mod tests {
         assert!(app.tab == Tab::Repo && !app.tabs().contains(&Tab::Review));
     }
 
+    /// A diff of a file the last commit changed, as `a_comment_opens…` uses.
+    fn last_commit_diff() -> DiffSource {
+        let output = std::process::Command::new("git").args(["diff", "--name-only", "HEAD~1", "HEAD"]).output().unwrap();
+        let path = String::from_utf8_lossy(&output.stdout).lines().next().unwrap().to_string();
+        DiffSource::Refs { a: "HEAD~1".to_string(), b: "HEAD".to_string(), path }
+    }
+
+    #[test]
+    fn gg_goes_to_the_top_and_g_then_another_key_does_nothing() {
+        let mut app = App::new(PathBuf::new());
+        app.show_diff(last_commit_diff());
+        app.focus_preview();
+        press(&mut app, KeyCode::Char('j'));
+        press(&mut app, KeyCode::Char('g'));
+        assert!(app.pending_g);
+        press(&mut app, KeyCode::Char('g'));
+        assert!(!app.pending_g && app.diff.as_ref().unwrap().active_anchor().is_none(), "on the first heading");
+        press(&mut app, KeyCode::Char('g'));
+        press(&mut app, KeyCode::Esc);
+        assert!(!app.pending_g && app.focus == Focus::Preview);
+    }
+
+    #[test]
+    fn gc_from_a_list_needs_n_to_show_the_active_line_and_gc_upper_takes_the_file() {
+        let mut app = App::new(PathBuf::new());
+        app.focus_left(Focus::Graph);
+        app.show_diff(last_commit_diff());
+        press(&mut app, KeyCode::Char('g'));
+        press(&mut app, KeyCode::Char('c'));
+        assert!(matches!(app.modal, Modal::None));
+        press(&mut app, KeyCode::Char('n'));
+        press(&mut app, KeyCode::Char('g'));
+        press(&mut app, KeyCode::Char('c'));
+        assert!(matches!(&app.modal, Modal::CommentBox(comment) if comment.anchor.is_some()));
+        press(&mut app, KeyCode::Esc);
+        press(&mut app, KeyCode::Char('g'));
+        press(&mut app, KeyCode::Char('C'));
+        assert!(matches!(&app.modal, Modal::CommentBox(comment) if comment.anchor.is_none()));
+        type_text(&mut app, "Split it.");
+        app.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
+        assert_eq!(app.review.len(), 1);
+        assert!(app.review.find(&app.diff.as_ref().unwrap().source, None).is_some());
+    }
+
+    #[test]
+    fn a_long_draft_keeps_its_end_in_view() {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        let draft: String = (1..=40).map(|n| format!("line {n}\n")).collect::<String>() + "the end";
+        let mut terminal = Terminal::new(TestBackend::new(80, 30)).unwrap();
+        terminal
+            .draw(|frame| render_text_box(frame, frame.area(), " Box ", None, &draft, Line::default()))
+            .unwrap();
+        let screen: String = terminal.backend().buffer().content().iter().map(|cell| cell.symbol()).collect();
+        assert!(screen.contains("the end▏"));
+        assert!(!screen.contains("line 1 "), "the start scrolled away");
+    }
+
     #[test]
     fn clearing_the_review_asks_first() {
         let mut app = App::new(PathBuf::new());
-        let anchor = Anchor { side: review::Side::New, number: 1, text: "x".to_string() };
+        let anchor = Some(Anchor { side: review::Side::New, number: 1, text: "x".to_string() });
         let source = DiffSource::Unstaged("a.rs".to_string());
         app.review.set(Comment::new(source, anchor, "y".to_string()).unwrap());
         app.go_to_tab(Tab::Review);

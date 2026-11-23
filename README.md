@@ -89,7 +89,7 @@ While a merge, rebase or cherry-pick is stopped on conflicts, the Changes pane s
 
 ## Review comments
 
-`c` on a line of any diff writes a comment on it: in the Changes pane, a commit's files, a comparison or a stash. The comment shows under its line, which gets a mark beside its number, and `c` there again edits it. A removed line takes comments too, as in "why did this go?". Saving a comment left empty removes it.
+`gc` writes a comment on the diff's active line: in the Changes pane, a commit's files, a comparison or a stash. That works from inside the diff, or from the list beside it once `n` has stepped to a change, so a change can be commented on without entering the diff. `gC` writes a comment on the whole file the diff shows. A comment shows under its line, which gets a mark beside its number, or at the top of the diff for the whole file, and `gc` or `gC` there again edits it. A removed line takes comments too, as in "why did this go?". Saving a comment left empty removes it.
 
 The first comment adds a Review tab, which `tab` goes to. It lists the comments under where they were made: uncommitted changes, which keep their comments when staged, a commit, or a comparison. Moving through them shows each one's diff at its line. `y` copies them all as one review to paste to whoever made the changes, each with its file, line number and the line itself, so the line can be found even after code has moved around. `c` edits a comment, `d` deletes one, and `D` clears the review, after asking. The Review tab goes once the last comment does.
 
@@ -117,7 +117,7 @@ A line across the top is in the repo's own colour, and ends in the repo's folder
 
 ## Keyboard driven
 
-Every action has a key, mostly Vim-style. `h`/`l` move between panes, marked `[h]` and `[l]` on their borders. The bar at the bottom lists the keys that apply right now, and `?` shows them all.
+Every action has a key, mostly Vim-style: `j`/`k` move, `gg`/`G` go to the top and bottom, and `ctrl-d`/`ctrl-u` move half a page. `h`/`l` move between panes, marked `[h]` and `[l]` on their borders. The bar at the bottom lists the keys that apply right now, apart from those for moving, which work everywhere, and `?` shows them all.
 
 ![The help, opened from the graph](docs/images/help.svg)
 

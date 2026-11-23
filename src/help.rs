@@ -22,7 +22,7 @@ const LEFT: &[Section] = &[
         title: "Everywhere",
         keys: &[
             ("h l", "previous/next pane"),
-            ("j k g G", "move, wrapping around in lists"),
+            ("j k gg G", "move, wrapping around in lists"),
             ("enter", "open; on a file, again to move into it"),
             ("esc", "go back, then close the diff or details"),
             ("o", "open the file in your editor, at the line"),
@@ -84,7 +84,8 @@ const RIGHT: &[Section] = &[
     Section {
         title: "Review",
         keys: &[
-            ("c", "in a diff: comment on the line"),
+            ("gc", "comment on the diff's active line"),
+            ("gC", "comment on the diff's whole file"),
             ("tab", "the Review tab, once there are comments"),
             ("enter", "move into the comment's diff"),
             ("c", "edit the comment"),
@@ -111,18 +112,18 @@ const RIGHT: &[Section] = &[
         title: "Diff",
         keys: &[
             ("j k", "move the active line"),
-            ("g G", "first/last line"),
+            ("gg G", "first/last line"),
             ("ctrl-d u", "half a page down/up"),
             ("n N", "next/previous change, from any pane"),
             ("h l", "scroll sideways"),
             ("e", "whole file, or just the changes, from any pane"),
             ("s", "side by side, or unified, from any pane"),
-            ("c", "comment on the line, for the review"),
+            ("gc gC", "comment on the line, on the file"),
         ],
     },
     Section {
         title: "Commit details",
-        keys: &[("j k g G", "scroll"), ("ctrl-d u", "half a page down/up"), ("y", "copy the sha")],
+        keys: &[("j k gg G", "scroll"), ("ctrl-d u", "half a page down/up"), ("y", "copy the sha")],
     },
     Section {
         title: "Pickers",
