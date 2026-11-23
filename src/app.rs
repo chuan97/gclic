@@ -201,7 +201,7 @@ pub struct App {
     staging: StagingPanel,
     graph: GraphPanel,
     compare: Option<ComparePanel>,
-    /// Comments on diffs' lines, for the agent that made the changes.
+    /// Comments on diffs' lines, for whoever made the changes.
     review: Review,
     review_list: ReviewList,
     /// The right-hand side shows a diff or a commit's details, never both.
@@ -1500,7 +1500,7 @@ impl App {
                 }
                 self.message = match (had, self.review.len()) {
                     (before, after) if after < before => "Comment removed".to_string(),
-                    (0, 1) => "Comment saved: tab goes to the Review tab, to copy it for your agent".to_string(),
+                    (0, 1) => "Comment saved: tab goes to the Review tab, to copy it".to_string(),
                     (before, after) if after > before => format!("Comment saved: {after} in the review"),
                     _ => "Comment saved".to_string(),
                 };
@@ -1541,13 +1541,13 @@ impl App {
                 self.after_review_change();
                 self.show_selected_comment();
             }
-            ListAction::Copy => match copy_to_clipboard(&self.review.prompt()) {
+            ListAction::Copy => match copy_to_clipboard(&self.review.text()) {
                 Ok(()) => {
                     let count = match self.review.len() {
                         1 => "the comment".to_string(),
                         n => format!("the {n} comments"),
                     };
-                    self.message = format!("Copied {count} as a prompt: paste it to your agent");
+                    self.message = format!("Copied {count}, ready to paste");
                 }
                 Err(error) => self.modal = Modal::Error(error.to_string()),
             },
@@ -1916,7 +1916,7 @@ impl App {
                 }
             }
             Focus::Review => {
-                hints.extend(["j/k move", "enter focus diff", "c edit", "d delete", "y copy for your agent", "D clear"]);
+                hints.extend(["j/k move", "enter focus diff", "c edit", "d delete", "y copy all", "D clear"]);
             }
             Focus::Preview => {
                 if let Some(diff) = &self.diff {
@@ -2553,7 +2553,7 @@ mod tests {
         type_text(&mut app, "Why?");
         app.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
         assert_eq!(app.review.len(), 1);
-        assert!(app.review.prompt().contains("> Why?"));
+        assert!(app.review.text().contains("> Why?"));
         assert!(app.tabs().contains(&Tab::Review));
 
         // c again edits the same comment.

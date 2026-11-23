@@ -14,7 +14,7 @@ gclic is heavily inspired by the features I like and have grown accustomed to in
 - **[Compare](#compare):** pick any two refs to see how far they have diverged and which files differ.
 - **[Merge conflicts](#merge-conflicts):** see each conflict as your side against theirs, and open it in your editor to resolve it.
 - **[Stashes](#stashes):** see what's in each stash, and apply, pop or drop it.
-- **[Reviewing an agent's changes](#reviewing-an-agents-changes):** comment on the lines of any diff, and copy the comments as one prompt for the coding agent that made the changes.
+- **[Review comments](#review-comments):** comment on the lines of any diff, and copy the comments as one review, to paste to whoever made the changes.
 - **[Running commands](#running-commands):** run git, or anything else, from gclic, in the repo it shows.
 - **[Switching repos](#switching-repos):** fuzzy find any repo near the one you're in, and switch to it without leaving gclic.
 - **[Your editor](#your-editor):** open the file you're on in your editor, at the line.
@@ -87,11 +87,11 @@ While a merge, rebase or cherry-pick is stopped on conflicts, the Changes pane s
 
 `:stash` lists your stashes. `enter` shows a stash's files, untracked ones included, each with its diff, as a comparison does. `a` applies it, with every change back unstaged, `p` pops it, and `d` drops it after asking. The graph shows each stash too, hanging off the commit it was made on, with the same keys. Making one is left to `:git stash`, which has the options for what goes in it.
 
-## Reviewing an agent's changes
+## Review comments
 
-When a coding agent changes your code, `c` on a line of any diff writes a comment on it: in the Changes pane, a commit's files, a comparison or a stash. The comment shows under its line, which gets a mark beside its number, and `c` there again edits it. A removed line takes comments too, as in "why did this go?". Saving a comment left empty removes it.
+`c` on a line of any diff writes a comment on it: in the Changes pane, a commit's files, a comparison or a stash. The comment shows under its line, which gets a mark beside its number, and `c` there again edits it. A removed line takes comments too, as in "why did this go?". Saving a comment left empty removes it.
 
-The first comment adds a Review tab, which `tab` goes to. It lists the comments under where they were made: uncommitted changes, which keep their comments when staged, a commit, or a comparison. Moving through them shows each one's diff at its line. `y` copies them all as one prompt to paste to the agent, each with its file, line number and the line itself, so the agent finds it even after moving code around. `c` edits a comment, `d` deletes one, and `D` clears the review, after asking. The Review tab goes once the last comment does.
+The first comment adds a Review tab, which `tab` goes to. It lists the comments under where they were made: uncommitted changes, which keep their comments when staged, a commit, or a comparison. Moving through them shows each one's diff at its line. `y` copies them all as one review to paste to whoever made the changes, each with its file, line number and the line itself, so the line can be found even after code has moved around. `c` edits a comment, `d` deletes one, and `D` clears the review, after asking. The Review tab goes once the last comment does.
 
 Comments last until cleared, or until gclic quits, which says how many would be lost.
 

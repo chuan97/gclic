@@ -89,7 +89,7 @@ const RIGHT: &[Section] = &[
             ("enter", "move into the comment's diff"),
             ("c", "edit the comment"),
             ("d", "delete it"),
-            ("y", "copy them all, as a prompt for your agent"),
+            ("y", "copy them all, ready to paste"),
             ("D", "clear the review, after asking"),
         ],
     },

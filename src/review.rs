@@ -1,7 +1,6 @@
-//! Review comments on the lines of diffs, gathered into a prompt for a coding
-//! agent: `c` on a diff's line writes one, the Review tab lists them, and `y`
-//! there copies them all as one prompt, to paste to the agent. They last until
-//! cleared, or until gclic quits.
+//! Review comments on the lines of diffs: `c` on a diff's line writes one, the
+//! Review tab lists them, and `y` there copies them all as one review, to paste
+//! to whoever made the changes. They last until cleared, or until gclic quits.
 
 use crate::git::{self, DiffSource};
 use crate::ui;
@@ -55,8 +54,8 @@ impl Place {
         })
     }
 
-    /// How the prompt and the list name it: the commit with its subject, so
-    /// the agent can tell which of its commits is meant.
+    /// How the copied review and the list name it: the commit with its
+    /// subject, so the reader can tell which commit is meant.
     fn heading(&self) -> String {
         let short = |sha: &str| sha[..sha.len().min(7)].to_string();
         match self {
@@ -191,10 +190,9 @@ impl Review {
         order
     }
 
-    /// The comments as one prompt for the agent that made the changes: each
-    /// under its place, with its file and line, the line itself, and the
-    /// comment.
-    pub fn prompt(&self) -> String {
+    /// The comments as one review, for whoever made the changes: each under
+    /// its place, with its file and line, the line itself, and the comment.
+    pub fn text(&self) -> String {
         let count = match self.comments.len() {
             1 => "the comment".to_string(),
             _ => "each comment".to_string(),
@@ -210,7 +208,9 @@ impl Review {
             text.push_str(&format!("\n{}\n", comment.location()));
             text.push_str(&format!("    {}\n", comment.anchor.text.trim_end()));
             for line in comment.body.trim_end().lines() {
-                text.push_str(&format!("> {line}\n"));
+                // A bare > for an empty line, without a trailing space.
+                text.push_str(format!("> {line}").trim_end());
+                text.push('\n');
             }
         }
         text
@@ -374,17 +374,17 @@ mod tests {
     }
 
     #[test]
-    fn the_prompt_groups_comments_by_place_then_file_then_line() {
+    fn the_review_groups_comments_by_place_then_file_then_line() {
         let mut review = Review::default();
         review.set(comment(unstaged("b.rs"), Side::New, 9, "    let b = 2;", "Why 2?"));
         review.set(comment(in_commit("a.rs"), Side::New, 4, "fn a() {}", "Rename this."));
-        review.set(comment(unstaged("a.rs"), Side::Old, 12, "check();", "Keep this check.\nIt guards the empty case."));
+        review.set(comment(unstaged("a.rs"), Side::Old, 12, "check();", "Keep this check.\n\nIt guards the empty case."));
         review.set(comment(unstaged("b.rs"), Side::New, 2, "use x;", "Unused."));
         assert_eq!(
-            review.prompt(),
+            review.text(),
             "Here's my review of your changes. Address each comment.\n\
              \n## Uncommitted changes\n\
-             \na.rs, removed line 12\n    check();\n> Keep this check.\n> It guards the empty case.\n\
+             \na.rs, removed line 12\n    check();\n> Keep this check.\n>\n> It guards the empty case.\n\
              \nb.rs:2\n    use x;\n> Unused.\n\
              \nb.rs:9\n        let b = 2;\n> Why 2?\n\
              \n## Commit a3f9c12 \"Name the sides\"\n\
