@@ -127,14 +127,10 @@ impl ComparePanel {
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Action {
         if let Subject::Stash(stash) = &self.subject {
-            let action = match key.code {
-                KeyCode::Esc => return Action::CloseStash,
-                KeyCode::Char('a') => Some(StashAction::Apply),
-                KeyCode::Char('p') => Some(StashAction::Pop),
-                KeyCode::Char('d') => Some(StashAction::Drop),
-                _ => None,
-            };
-            if let Some(action) = action {
+            if key.code == KeyCode::Esc {
+                return Action::CloseStash;
+            }
+            if let Some(action) = StashAction::from_key(key.code) {
                 return Action::Stash(action, stash.clone());
             }
         } else if key.code == KeyCode::Esc {
@@ -156,7 +152,7 @@ impl ComparePanel {
         let lines = match &self.subject {
             Subject::Refs { from, to, only_from, only_to, merge_base } => {
                 let base = match merge_base {
-                    Some(sha) => format!("common ancestor {}", &sha[..sha.len().min(7)]),
+                    Some(sha) => format!("common ancestor {}", git::short(sha)),
                     None => "no common ancestor".to_string(),
                 };
                 // From to's point of view: what it adds to from, and what it lacks.
@@ -176,7 +172,7 @@ impl ComparePanel {
             }
             Subject::Stash(stash) => vec![
                 Line::styled(stash.message.as_str(), bold),
-                Line::styled(format!("made on {} · {}", &stash.base[..stash.base.len().min(7)], stash.age), dim),
+                Line::styled(format!("made on {} · {}", git::short(&stash.base), stash.age), dim),
                 Line::default(),
             ],
         };

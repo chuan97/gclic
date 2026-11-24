@@ -57,7 +57,6 @@ impl Place {
     /// How the copied review and the list name it: the commit with its
     /// subject, so the reader can tell which commit is meant.
     fn heading(&self) -> String {
-        let short = |sha: &str| sha[..sha.len().min(7)].to_string();
         match self {
             Place::WorkingTree => "Uncommitted changes".to_string(),
             Place::Commit(sha) => match git::commit_label(sha) {
@@ -65,10 +64,10 @@ impl Place {
                     Some((short, subject)) => format!("Commit {short} \"{subject}\""),
                     None => format!("Commit {label}"),
                 },
-                None => format!("Commit {}", short(sha)),
+                None => format!("Commit {}", git::short(sha)),
             },
             Place::Refs(a, b) => format!("Changes from {a} to {b}"),
-            Place::Stash(sha) => format!("Stashed changes {}", short(sha)),
+            Place::Stash(sha) => format!("Stashed changes {}", git::short(sha)),
         }
     }
 }
@@ -310,16 +309,13 @@ impl ReviewList {
                 selected_line = lines.len();
             }
             let first = comment.body.lines().next().unwrap_or_default().to_string();
-            let mut line = Line::from(vec![
+            let line = Line::from(vec![
                 Span::raw("  "),
                 Span::styled(comment.location(), Style::default().fg(ui::DIM)),
                 Span::raw("  "),
                 Span::raw(first),
             ]);
-            if focused && position == self.selected {
-                line = line.style(Style::default().bg(ui::SELECTED_BG));
-            }
-            lines.push(line);
+            lines.push(ui::selected(line, position == self.selected, focused));
         }
         let height = inner.height as usize;
         self.scroll = ui::keep_visible(self.scroll, selected_line, height);

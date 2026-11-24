@@ -957,7 +957,7 @@ impl DiffPane {
             DiffSource::Untracked(path) => format!(" {path} (untracked) "),
             DiffSource::Conflict(path) => format!(" {path} (conflict: {}) ", conflict_sides(self.rebasing)),
             DiffSource::Staged(path) => format!(" {path} (staged) "),
-            DiffSource::Commit { sha, path } => format!(" {path} @ {} ", &sha[..sha.len().min(7)]),
+            DiffSource::Commit { sha, path } => format!(" {path} @ {} ", git::short(sha)),
             DiffSource::Refs { a, b, path } => format!(" {path}: {a} → {b} "),
             DiffSource::Stash { path, untracked: false, .. } => format!(" {path} (stashed) "),
             DiffSource::Stash { path, .. } => format!(" {path} (stashed, untracked) "),

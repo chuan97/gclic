@@ -7,7 +7,7 @@ use crate::ui;
 use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use std::collections::{BTreeMap, HashSet};
 
@@ -233,11 +233,6 @@ impl FileList {
             frame.render_widget(note, area);
             return;
         }
-        let selected_style = if focused {
-            Style::default().bg(ui::SELECTED_BG).add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().bg(ui::SELECTED_BG)
-        };
         let lines: Vec<Line> = self
             .visible()
             .into_iter()
@@ -249,7 +244,7 @@ impl FileList {
                         let arrow = if self.collapsed.contains(path) { '▶' } else { '▼' };
                         let indent = "  ".repeat(*depth);
                         let line = Line::styled(format!(" {indent}{arrow} {name}/"), Style::default().fg(ui::DIM));
-                        if selected { line.style(selected_style) } else { line }
+                        ui::selected(line, selected, focused)
                     }
                     TreeRow::File { index, depth } => {
                         let file = &self.files[*index];
@@ -361,14 +356,7 @@ fn styled_file_line<'a>(
     if let Some(folder) = folder {
         spans.push(Span::styled(format!("  {folder}"), Style::default().fg(ui::DIM)));
     }
-    let line = Line::from(spans);
-    if selected && focused {
-        line.style(Style::default().bg(ui::SELECTED_BG).add_modifier(Modifier::BOLD))
-    } else if selected {
-        line.style(Style::default().bg(ui::SELECTED_BG))
-    } else {
-        line
-    }
+    ui::selected(Line::from(spans), selected, focused)
 }
 
 #[cfg(test)]

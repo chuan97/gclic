@@ -561,12 +561,7 @@ impl GraphPanel {
             return Action::None;
         };
         if let Some(stash) = self.stash_at(self.selected) {
-            let action = match key.code {
-                KeyCode::Char('a') => Some(StashAction::Apply),
-                KeyCode::Char('p') => Some(StashAction::Pop),
-                KeyCode::Char('d') => Some(StashAction::Drop),
-                _ => None,
-            };
+            let action = StashAction::from_key(key.code);
             if let Some(action) = action {
                 return Action::Stash(action, stash.clone());
             }
@@ -838,12 +833,7 @@ impl GraphPanel {
             }
         }
 
-        let line = Line::from(spans);
-        if selected {
-            line.style(Style::default().bg(ui::SELECTED_BG))
-        } else {
-            line
-        }
+        ui::selected(Line::from(spans), selected, focused)
     }
 
     /// A file in the drop-down, with the graph's lines carrying on beside it.
