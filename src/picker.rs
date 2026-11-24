@@ -239,7 +239,7 @@ impl Picker {
     }
 
     fn move_up(&mut self) {
-        self.cursor.up(self.matches.len());
+        self.cursor.up();
     }
 
     fn submit(&self) -> Outcome {
@@ -514,12 +514,13 @@ mod tests {
     }
 
     #[test]
-    fn moving_wraps_around_the_filtered_list() {
+    fn moving_stops_at_the_ends_of_the_filtered_list() {
         let mut picker = Picker::single("t", vec!["a".to_string(), "b".to_string()]);
         picker.handle_key(key(KeyCode::Char('k')));
-        assert_eq!(picker.highlighted().unwrap(), "b");
-        picker.handle_key(key(KeyCode::Char('j')));
         assert_eq!(picker.highlighted().unwrap(), "a");
+        picker.handle_key(key(KeyCode::Char('j')));
+        picker.handle_key(key(KeyCode::Char('j')));
+        assert_eq!(picker.highlighted().unwrap(), "b");
     }
 
     #[test]

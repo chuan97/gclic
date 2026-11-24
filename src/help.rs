@@ -22,7 +22,7 @@ const LEFT: &[Section] = &[
         title: "Everywhere",
         keys: &[
             ("h l", "previous/next pane"),
-            ("j k gg G", "move, wrapping around in lists"),
+            ("j k gg G", "move, stopping at the ends"),
             ("enter", "open; on a file, again to move into it"),
             ("esc", "go back, then close the diff or details"),
             ("o", "open the file in your editor, at the line"),
