@@ -1,5 +1,4 @@
 use super::*;
-use super::commands::fetched_ago;
 use super::layout::{accent_bar, fit_folder};
 use super::popups::render_text_box;
 use super::status_line::hint_spans;
@@ -8,17 +7,6 @@ use super::status_line::hint_spans;
 
 fn press(app: &mut App, code: KeyCode) {
     app.handle_key(KeyEvent::from(code));
-}
-
-#[test]
-fn the_fetch_note_says_how_long_ago() {
-    let minutes = |m: u64| fetched_ago(Duration::from_secs(m * 60));
-    assert_eq!(fetched_ago(Duration::from_secs(9)), "fetched just now");
-    assert_eq!(fetched_ago(Duration::from_secs(10)), "fetched 10s ago");
-    assert_eq!(fetched_ago(Duration::from_secs(59)), "fetched 50s ago");
-    assert_eq!(minutes(3), "fetched 3m ago");
-    assert_eq!(minutes(59), "fetched 59m ago");
-    assert_eq!(minutes(130), "fetched 2h ago");
 }
 
 #[test]

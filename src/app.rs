@@ -3,6 +3,7 @@
 
 mod commands;
 mod comments;
+mod fetcher;
 mod layout;
 mod popups;
 mod refresh;
@@ -11,6 +12,7 @@ mod status_line;
 mod tests;
 
 use comments::CommentBox;
+use fetcher::Fetcher;
 use commands::read_clipboard;
 use layout::project_location;
 use popups::{remember_yank, Modal, PickerUse};
@@ -40,13 +42,10 @@ use ratatui::widgets::{Clear, Paragraph, Wrap};
 use ratatui::{DefaultTerminal, Frame};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant};
 
 const AUTO_REFRESH: Duration = Duration::from_millis(500);
-/// How often the remotes the branches track are fetched in the background.
-const FETCH_EVERY: Duration = Duration::from_secs(60);
 /// How long to wait for a key before checking on the worker's results. Short,
 /// so colours appear soon after they're ready.
 const KEY_WAIT: Duration = Duration::from_millis(30);
@@ -276,14 +275,7 @@ pub struct App {
     /// or the same one in the terminal. The command line offers it, and tab
     /// takes it. Gone once any command runs.
     suggestion: Option<String>,
-    /// Whether the remotes are fetched every minute. On unless `:fetch off`.
-    auto_fetch: bool,
-    /// A fetch under way, on its own thread, as it can take seconds.
-    fetching: Option<Receiver<Result<()>>>,
-    /// When the last fetch started, to start the next a minute later.
-    fetch_started: Option<Instant>,
-    /// How the last fetch went: when it finished, or why it failed.
-    fetched: Option<Result<Instant, String>>,
+    fetcher: Fetcher,
     /// A `:!` command to run once the key that asked for it is handled, as
     /// it needs the terminal, which only the main loop has.
     shell_line: Option<String>,
@@ -316,10 +308,7 @@ impl App {
             search_root,
             running: None,
             suggestion: None,
-            auto_fetch: true,
-            fetching: None,
-            fetch_started: None,
-            fetched: None,
+            fetcher: Fetcher::new(),
             shell_line: None,
             editor_in_terminal: None,
             follow: editor::Follow::from_env(),
@@ -362,7 +351,7 @@ impl App {
         while !self.should_quit {
             self.take_worker_results();
             self.take_command_result();
-            self.keep_fetching();
+            self.fetcher.keep_fetching();
             self.branches.search_sha();
             terminal.draw(|frame| self.render(frame))?;
             if event::poll(KEY_WAIT)? {
