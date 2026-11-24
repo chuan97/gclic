@@ -6,7 +6,7 @@ use crate::ui;
 use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Clear;
 
@@ -362,12 +362,8 @@ impl Picker {
             }
             None => spans.push(Span::raw(item)),
         }
-        let line = Line::from(spans);
-        if selected {
-            line.style(Style::default().bg(ui::SELECTED_BG).add_modifier(Modifier::BOLD))
-        } else {
-            line
-        }
+        // A picker is focused whenever it shows.
+        ui::selected(Line::from(spans), selected, true)
     }
 }
 

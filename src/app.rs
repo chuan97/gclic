@@ -92,6 +92,18 @@ pub enum StashAction {
     Drop,
 }
 
+impl StashAction {
+    /// The stash keys, the same in the graph, the stash view and `:stash`.
+    pub fn from_key(key: KeyCode) -> Option<StashAction> {
+        match key {
+            KeyCode::Char('a') => Some(StashAction::Apply),
+            KeyCode::Char('p') => Some(StashAction::Pop),
+            KeyCode::Char('d') => Some(StashAction::Drop),
+            _ => None,
+        }
+    }
+}
+
 impl Action {
     /// The outcome of a git command that changed the repository.
     pub fn after_change(result: Result<()>) -> Action {
@@ -1327,12 +1339,7 @@ impl App {
         if let PickerUse::Stash(stashes) = &usage
             && !picker.is_typing()
         {
-            let action = match key.code {
-                KeyCode::Char('a') => Some(StashAction::Apply),
-                KeyCode::Char('p') => Some(StashAction::Pop),
-                KeyCode::Char('d') => Some(StashAction::Drop),
-                _ => None,
-            };
+            let action = StashAction::from_key(key.code);
             let highlighted = picker.highlighted();
             let stash = stashes.iter().find(|(label, _)| Some(label) == highlighted).map(|(_, stash)| stash.clone());
             if let (Some(action), Some(stash)) = (action, stash) {

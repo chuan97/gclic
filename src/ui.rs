@@ -8,6 +8,17 @@ use ratatui::widgets::{Block, BorderType, Borders};
 
 pub const SELECTED_BG: Color = Color::Indexed(237);
 pub const DIM: Color = Color::DarkGray;
+
+/// A list's row, highlighted if it's the selected one: on the selection's
+/// background, so the row stays marked when the list isn't focused, and bold
+/// while it is.
+pub fn selected(line: Line<'_>, selected: bool, focused: bool) -> Line<'_> {
+    match (selected, focused) {
+        (false, _) => line,
+        (true, false) => line.style(Style::default().bg(SELECTED_BG)),
+        (true, true) => line.style(Style::default().bg(SELECTED_BG).add_modifier(Modifier::BOLD)),
+    }
+}
 /// The colour of keys wherever they're listed: popups and the help.
 pub const KEY: Color = Color::Yellow;
 

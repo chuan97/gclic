@@ -623,6 +623,11 @@ pub fn resolve_all(refs: &[String]) -> Vec<Option<String>> {
     refs.iter().map(|reference| resolve(reference)).collect()
 }
 
+/// A sha as people write it: its first seven characters.
+pub fn short(sha: &str) -> &str {
+    &sha[..sha.len().min(7)]
+}
+
 /// The commit sha a ref points at, if it exists.
 pub fn resolve(reference: &str) -> Option<String> {
     if reference.starts_with('-') {

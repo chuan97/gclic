@@ -337,12 +337,9 @@ impl BranchesPanel {
             spans.push(Span::styled(format!("  in {elsewhere}"), Style::default().fg(ui::DIM)));
         }
 
-        let line = Line::from(spans);
-        if selected {
-            line.style(Style::default().bg(ui::SELECTED_BG))
-        } else {
-            line
-        }
+        // Only while focused, as the list shows just the checked-out
+        // branch otherwise: `selected` is false then.
+        ui::selected(Line::from(spans), selected, true)
     }
 }
 

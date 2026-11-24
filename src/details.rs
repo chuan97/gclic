@@ -1,6 +1,6 @@
 //! A commit's message and metadata, shown on the right like a diff.
 
-use crate::git::CommitDetails;
+use crate::git::{self, CommitDetails};
 use crate::ui;
 use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -67,7 +67,7 @@ impl DetailsPane {
         let max_scroll = total.saturating_sub(page);
         let scroll = self.scroll.min(max_scroll);
 
-        let short_sha = &self.details.sha[..self.details.sha.len().min(7)];
+        let short_sha = git::short(&self.details.sha);
         let position = if total > page {
             format!(" ({}/{total})", scroll + page)
         } else {
