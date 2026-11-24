@@ -130,16 +130,16 @@ pub enum Confirm {
     ClearReview,
 }
 
+/// The panes on the left. Each tab has its own: Branches, Changes and Graph
+/// on the Repo tab, and one each on the others.
 #[derive(Clone, Copy, PartialEq)]
-enum Focus {
+enum Pane {
     Branches,
     Changes,
     Graph,
     Compare,
     /// The Review tab's list of comments.
     Review,
-    /// The diff or the commit details on the right.
-    Preview,
 }
 
 /// The views. Repo is the panes; Compare shows how two refs differ; Review
@@ -151,25 +151,72 @@ enum Tab {
     Review,
 }
 
-/// What a tab keeps while another one shows: where the focus was and what
-/// was open on the right.
-struct TabState {
-    focus: Focus,
-    last_left_focus: Focus,
-    diff: Option<DiffPane>,
-    details: Option<DetailsPane>,
+/// The right-hand side: a diff or a commit's details, never both. Each stays
+/// in its mode: moving onto a commit leaves a diff alone, and moving onto a
+/// file leaves the details alone.
+enum Preview {
+    None,
+    Diff(DiffPane),
+    Details(DetailsPane),
+}
+
+/// What a tab shows, which it keeps while another tab shows.
+struct View {
+    /// The pane focused on the left, or the one esc goes back to from the
+    /// preview.
+    pane: Pane,
+    /// Whether the user moved into the preview.
+    in_preview: bool,
+    preview: Preview,
     zoomed: bool,
 }
 
-impl TabState {
+impl View {
     /// A tab as it first opens: on its own list, with nothing on the right.
-    fn fresh(tab: Tab) -> TabState {
-        let focus = match tab {
-            Tab::Repo => Focus::Changes,
-            Tab::Compare => Focus::Compare,
-            Tab::Review => Focus::Review,
+    fn fresh(tab: Tab) -> View {
+        let pane = match tab {
+            Tab::Repo => Pane::Changes,
+            Tab::Compare => Pane::Compare,
+            Tab::Review => Pane::Review,
         };
-        TabState { focus, last_left_focus: focus, diff: None, details: None, zoomed: false }
+        View { pane, in_preview: false, preview: Preview::None, zoomed: false }
+    }
+
+    /// Whether this pane has the focus, rather than another or the preview.
+    fn focused(&self, pane: Pane) -> bool {
+        !self.in_preview && self.pane == pane
+    }
+
+    fn diff(&self) -> Option<&DiffPane> {
+        match &self.preview {
+            Preview::Diff(diff) => Some(diff),
+            _ => None,
+        }
+    }
+
+    fn diff_mut(&mut self) -> Option<&mut DiffPane> {
+        match &mut self.preview {
+            Preview::Diff(diff) => Some(diff),
+            _ => None,
+        }
+    }
+
+    fn details(&self) -> Option<&DetailsPane> {
+        match &self.preview {
+            Preview::Details(details) => Some(details),
+            _ => None,
+        }
+    }
+
+    fn has_preview(&self) -> bool {
+        !matches!(self.preview, Preview::None)
+    }
+
+    /// Closes the diff, leaving any details open.
+    fn close_diff(&mut self) {
+        if matches!(self.preview, Preview::Diff(_)) {
+            self.preview = Preview::None;
+        }
     }
 }
 
@@ -210,8 +257,11 @@ enum Modal {
 
 pub struct App {
     tab: Tab,
-    /// The tabs not showing, each put aside until it shows again.
-    saved_tabs: Vec<(Tab, TabState)>,
+    /// The showing tab's focus and preview.
+    view: View,
+    /// The tabs not showing, by `Tab`, each put aside until it shows again.
+    /// None for a tab that opens fresh.
+    saved_views: [Option<View>; 3],
     branches: BranchesPanel,
     staging: StagingPanel,
     graph: GraphPanel,
@@ -219,18 +269,9 @@ pub struct App {
     /// Comments on diffs' lines, for whoever made the changes.
     review: Review,
     review_list: ReviewList,
-    /// The right-hand side shows a diff or a commit's details, never both.
-    /// Each stays in its mode: moving onto a commit leaves a diff alone, and
-    /// moving onto a file leaves the details alone.
-    diff: Option<DiffPane>,
-    details: Option<DetailsPane>,
     /// Diffs side by side or unified, once the user chooses with `s`. Until
     /// then it depends on the room there is.
     split: Option<bool>,
-    zoomed: bool,
-    focus: Focus,
-    /// The left-hand panel to return to when leaving the preview.
-    last_left_focus: Focus,
     modal: Modal,
     /// `g` was pressed, and the next key says what for: `gg` the top, `gc`
     /// and `gC` a comment.
@@ -306,19 +347,15 @@ impl App {
                 None => format!("o open in {}", editor::name(&editor::setting())),
             },
             tab: Tab::Repo,
-            saved_tabs: Vec::new(),
+            view: View::fresh(Tab::Repo),
+            saved_views: [None, None, None],
             review: Review::default(),
             review_list: ReviewList::new(),
             branches: BranchesPanel::new(),
             staging: StagingPanel::new(),
             graph: GraphPanel::new(),
             compare: None,
-            diff: None,
-            details: None,
             split: None,
-            zoomed: false,
-            focus: Focus::Changes,
-            last_left_focus: Focus::Changes,
             modal: Modal::None,
             pending_g: false,
             commit_draft: String::new(),
@@ -440,7 +477,7 @@ impl App {
             let name = root.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
             self.message = format!("Followed Neovim to {name}");
         }
-        let diff = self.diff.as_ref().map(|diff| diff.source.clone());
+        let diff = self.view.diff().map(|diff| diff.source.clone());
         self.worker.poll(self.generation, diff);
         // Collects the editor commands that have finished, so none linger.
         self.editor_commands.retain_mut(|child| matches!(child.try_wait(), Ok(None)));
@@ -485,15 +522,15 @@ impl App {
         }
         // While browsing Changes the diff follows the selection, which the new
         // status may have moved. Otherwise it takes the newer text, if any.
-        let current = self.diff.as_ref().map(|diff| diff.source.clone());
-        let follows = self.focus == Focus::Changes && current.as_ref().is_some_and(|s| s.is_working_tree());
+        let current = self.view.diff().map(|diff| diff.source.clone());
+        let follows = self.view.focused(Pane::Changes) && current.as_ref().is_some_and(|s| s.is_working_tree());
         let selected = self.staging.selected_source();
         if follows && selected != current {
             match selected {
                 Some(source) => self.show_diff(source),
-                None => self.diff = None,
+                None => self.view.close_diff(),
             }
-        } else if let Some(open) = &mut self.diff
+        } else if let Some(open) = self.view.diff_mut()
             && let Some((source, Ok(text))) = diff
             && open.source == source
         {
@@ -503,7 +540,7 @@ impl App {
     }
 
     fn apply_highlight(&mut self, view: DiffView, text: String, colored: Colored) {
-        if let Some(diff) = &mut self.diff
+        if let Some(diff) = self.view.diff_mut()
             && diff.source == view.source
             && diff.needs_colors()
         {
@@ -526,7 +563,7 @@ impl App {
     /// away. Asking again replaces what's still waiting.
     fn request_colors(&mut self) {
         let mut wanted = Vec::new();
-        if let Some(diff) = &mut self.diff {
+        if let Some(diff) = self.view.diff_mut() {
             let view = App::view_of(&diff.source);
             if diff.needs_colors() {
                 match self.colors.get(&view, diff.text()) {
@@ -542,14 +579,13 @@ impl App {
                 wanted.push(other);
             }
         }
-        let list = if self.focus == Focus::Preview { self.last_left_focus } else { self.focus };
-        let mut around = match list {
-            Focus::Changes => self.staging.sources_around(),
-            Focus::Graph => self.graph.file_sources_around(),
-            Focus::Compare => self.compare.as_ref().map(|c| c.sources_around()).unwrap_or_default(),
-            Focus::Branches | Focus::Review | Focus::Preview => Vec::new(),
+        let mut around = match self.view.pane {
+            Pane::Changes => self.staging.sources_around(),
+            Pane::Graph => self.graph.file_sources_around(),
+            Pane::Compare => self.compare.as_ref().map(|c| c.sources_around()).unwrap_or_default(),
+            Pane::Branches | Pane::Review => Vec::new(),
         };
-        if self.diff.is_none() {
+        if self.view.diff().is_none() {
             around.truncate(1);
         }
         for source in around {
@@ -564,16 +600,16 @@ impl App {
     /// Brings an open diff up to date. While browsing Changes it follows the
     /// selection, because staging a file moves the selection to another one.
     fn sync_diff(&mut self) {
-        if self.diff.is_none() {
+        if self.view.diff().is_none() {
             return;
         }
-        let shows_working_tree = self.diff.as_ref().is_some_and(|diff| diff.source.is_working_tree());
-        if self.focus == Focus::Changes && shows_working_tree {
+        let shows_working_tree = self.view.diff().is_some_and(|diff| diff.source.is_working_tree());
+        if self.view.focused(Pane::Changes) && shows_working_tree {
             match self.staging.selected_source() {
                 Some(source) => self.show_diff(source),
-                None => self.diff = None,
+                None => self.view.close_diff(),
             }
-        } else if let Some(diff) = &mut self.diff {
+        } else if let Some(diff) = self.view.diff_mut() {
             let result = diff.reload();
             self.report(result);
         }
@@ -582,28 +618,23 @@ impl App {
     /// Keeps the details on the graph's selected commit, or the commit that
     /// the selected file belongs to.
     fn sync_details(&mut self) {
-        let Some(details) = &self.details else {
+        let Some(details) = self.view.details() else {
             return;
         };
         let Some(sha) = self.graph.selected_sha() else {
-            self.details = None;
+            self.close_preview();
             return;
         };
         if details.sha() != sha {
             match git::commit_details(sha) {
-                Ok(details) => self.details = Some(DetailsPane::new(details)),
+                Ok(details) => self.view.preview = Preview::Details(DetailsPane::new(details)),
                 Err(error) => self.message = error.to_string(),
             }
         }
     }
 
-    fn has_preview(&self) -> bool {
-        self.diff.is_some() || self.details.is_some()
-    }
-
     fn close_preview(&mut self) {
-        self.diff = None;
-        self.details = None;
+        self.view.preview = Preview::None;
     }
 
     /// Scroll is kept when the diff is the same one, reloaded.
@@ -611,22 +642,18 @@ impl App {
     /// waiting for git. If the file has changed since, the next poll or
     /// refresh brings the newer version, as for any change made elsewhere.
     fn show_diff(&mut self, source: DiffSource) {
-        if let Some(diff) = &mut self.diff
+        if let Some(diff) = self.view.diff_mut()
             && diff.source == source {
                 let result = diff.reload();
                 self.report(result);
                 return;
             }
         if let Some((text, colored)) = self.colors.latest(&App::view_of(&source)) {
-            self.diff = Some(DiffPane::colored(source, text, colored));
-            self.details = None;
+            self.view.preview = Preview::Diff(DiffPane::colored(source, text, colored));
             return;
         }
         match DiffPane::load(source) {
-            Ok(diff) => {
-                self.diff = Some(diff);
-                self.details = None;
-            }
+            Ok(diff) => self.view.preview = Preview::Diff(diff),
             // A refresh can get here while a popup is open, such as the
             // command line while typing, which an error popup would replace.
             Err(error) if !matches!(self.modal, Modal::None) => self.message = error.to_string(),
@@ -689,7 +716,7 @@ impl App {
             // it would otherwise quit gclic.
             KeyCode::Char('c') if ctrl => self.modal = Modal::ConfirmQuit,
             // While searching branches, letters belong to the search.
-            _ if self.focus == Focus::Branches && self.branches.is_typing() => {
+            _ if self.view.focused(Pane::Branches) && self.branches.is_typing() => {
                 self.send_to_focused_panel(key);
             }
             // The key after g.
@@ -706,32 +733,32 @@ impl App {
             KeyCode::Char('q') => self.modal = Modal::ConfirmQuit,
             // h and l move between the Repo tab's panes. Elsewhere they're the
             // pane's own: a diff scrolls sideways, Compare's tree folds.
-            KeyCode::Char('h') if self.tab == Tab::Repo && self.focus != Focus::Preview => self.move_focus(false),
-            KeyCode::Char('l') if self.tab == Tab::Repo && self.focus != Focus::Preview => self.move_focus(true),
+            KeyCode::Char('h') if self.tab == Tab::Repo && !self.view.in_preview => self.move_focus(false),
+            KeyCode::Char('l') if self.tab == Tab::Repo && !self.view.in_preview => self.move_focus(true),
             KeyCode::Char('?') => self.modal = Modal::Help(HelpPopup::new(self.help_section())),
             KeyCode::Char(':') => self.modal = Modal::Command(String::new()),
             KeyCode::Char('o') => self.open_in_editor(),
             KeyCode::Char('r') if self.tab == Tab::Compare && self.compare.is_some() => self.swap_compare(),
             KeyCode::Tab => self.cycle_tab(true),
             KeyCode::BackTab => self.cycle_tab(false),
-            KeyCode::Char('e') if self.diff.is_some() => self.toggle_whole_files(),
+            KeyCode::Char('e') if self.view.diff().is_some() => self.toggle_whole_files(),
             // A diff on screen takes n and N from any pane, so its changes can
             // be stepped through while browsing files. The graph's own n and N,
             // between commits, work when there's no diff.
-            KeyCode::Char('n' | 'N') if self.focus != Focus::Preview && self.diff.is_some() => {
-                if let Some(diff) = &mut self.diff {
+            KeyCode::Char('n' | 'N') if !self.view.in_preview && self.view.diff().is_some() => {
+                if let Some(diff) = self.view.diff_mut() {
                     diff.handle_key(key);
                 }
             }
-            KeyCode::Char('s') if self.diff.is_some() => {
-                self.split = self.diff.as_ref().map(|diff| !diff.is_split());
+            KeyCode::Char('s') if self.view.diff().is_some() => {
+                self.split = self.view.diff().map(|diff| !diff.is_split());
             }
             // On the Compare tab, c starts a new comparison, as c compares from
             // where the user is in the other panes.
-            KeyCode::Char('c') if self.focus == Focus::Compare => self.open_compare_picker(),
-            KeyCode::Char('z') if self.has_preview() => {
-                self.zoomed = !self.zoomed;
-                if self.zoomed {
+            KeyCode::Char('c') if self.view.focused(Pane::Compare) => self.open_compare_picker(),
+            KeyCode::Char('z') if self.view.has_preview() => {
+                self.view.zoomed = !self.view.zoomed;
+                if self.view.zoomed {
                     self.focus_preview();
                 }
             }
@@ -1105,52 +1132,55 @@ impl App {
     }
 
     fn handle_escape(&mut self) {
-        match self.focus {
-            Focus::Preview => {
-                self.zoomed = false;
-                self.focus = self.last_left_focus;
-                if let Some(diff) = &mut self.diff {
-                    diff.reset_shift();
-                }
+        if self.view.in_preview {
+            self.view.zoomed = false;
+            self.view.in_preview = false;
+            if let Some(diff) = self.view.diff_mut() {
+                diff.reset_shift();
             }
-            _ if self.has_preview() => self.close_preview(),
-            Focus::Compare if self.compare.is_none() => self.go_to_tab(Tab::Repo),
-            _ => self.send_to_focused_panel(KeyEvent::from(KeyCode::Esc)),
+        } else if self.view.has_preview() {
+            self.close_preview();
+        } else if self.view.pane == Pane::Compare && self.compare.is_none() {
+            self.go_to_tab(Tab::Repo);
+        } else {
+            self.send_to_focused_panel(KeyEvent::from(KeyCode::Esc));
         }
     }
 
     fn send_to_focused_panel(&mut self, key: KeyEvent) {
-        let action = match self.focus {
-            Focus::Branches => self.branches.handle_key(key),
-            Focus::Changes => self.staging.handle_key(key),
-            Focus::Graph => self.graph.handle_key(key),
-            Focus::Compare => match &mut self.compare {
-                Some(compare) => compare.handle_key(key),
-                None => Action::None,
-            },
-            Focus::Review => {
-                let action = self.review_list.handle_key(&self.review, key);
-                self.act_on_review(action);
-                Action::None
-            }
-            Focus::Preview => {
-                if let Some(diff) = &mut self.diff {
+        let action = if self.view.in_preview {
+            match &mut self.view.preview {
+                Preview::Diff(diff) => {
                     diff.handle_key(key);
                     Action::None
-                } else if let Some(details) = &mut self.details {
-                    if key.code == KeyCode::Char('y') {
-                        Action::Copy(details.sha().to_string())
-                    } else {
-                        details.handle_key(key);
-                        Action::None
-                    }
-                } else {
+                }
+                Preview::Details(details) if key.code == KeyCode::Char('y') => {
+                    Action::Copy(details.sha().to_string())
+                }
+                Preview::Details(details) => {
+                    details.handle_key(key);
+                    Action::None
+                }
+                Preview::None => Action::None,
+            }
+        } else {
+            match self.view.pane {
+                Pane::Branches => self.branches.handle_key(key),
+                Pane::Changes => self.staging.handle_key(key),
+                Pane::Graph => self.graph.handle_key(key),
+                Pane::Compare => match &mut self.compare {
+                    Some(compare) => compare.handle_key(key),
+                    None => Action::None,
+                },
+                Pane::Review => {
+                    let action = self.review_list.handle_key(&self.review, key);
+                    self.act_on_review(action);
                     Action::None
                 }
             }
         };
         self.apply(action);
-        if self.focus == Focus::Graph {
+        if self.view.focused(Pane::Graph) {
             self.sync_details();
         }
     }
@@ -1159,14 +1189,14 @@ impl App {
         match action {
             Action::None => {}
             Action::OpenDiff(source) => {
-                if self.diff.as_ref().is_some_and(|diff| diff.source == source) {
+                if self.view.diff().is_some_and(|diff| diff.source == source) {
                     self.focus_preview();
                 } else {
                     self.show_diff(source);
                 }
             }
             Action::PreviewDiff(source) => {
-                if self.diff.is_some() {
+                if self.view.diff().is_some() {
                     self.show_diff(source);
                 }
             }
@@ -1177,11 +1207,10 @@ impl App {
             Action::OpenCommitBox => self.modal = Modal::CommitBox,
             Action::OpenGraphPicker => self.open_graph_picker(),
             Action::OpenDetails(details) => {
-                if self.details.as_ref().is_some_and(|shown| shown.sha() == details.sha) {
+                if self.view.details().is_some_and(|shown| shown.sha() == details.sha) {
                     self.focus_preview();
                 } else {
-                    self.details = Some(DetailsPane::new(details));
-                    self.diff = None;
+                    self.view.preview = Preview::Details(DetailsPane::new(details));
                 }
             }
             // Closing a comparison goes back to the Repo tab, as esc does.
@@ -1218,11 +1247,11 @@ impl App {
         // By the tab showing: a comparison kept on the Compare tab mustn't
         // take over h and l on the Repo tab.
         let order = match self.tab {
-            Tab::Compare => vec![Focus::Compare],
-            Tab::Review => vec![Focus::Review],
-            Tab::Repo => vec![Focus::Branches, Focus::Changes, Focus::Graph],
+            Tab::Compare => vec![Pane::Compare],
+            Tab::Review => vec![Pane::Review],
+            Tab::Repo => vec![Pane::Branches, Pane::Changes, Pane::Graph],
         };
-        let current = order.iter().position(|f| *f == self.focus).unwrap_or(0);
+        let current = order.iter().position(|pane| *pane == self.view.pane).unwrap_or(0);
         let next = if forward {
             ui::next_index(current, order.len())
         } else {
@@ -1234,17 +1263,14 @@ impl App {
     }
 
     fn focus_preview(&mut self) {
-        if self.focus != Focus::Preview {
-            self.last_left_focus = self.focus;
-            self.focus = Focus::Preview;
-        }
+        self.view.in_preview = true;
     }
 
-    /// Moves to a left-hand panel, which must be on screen, so zoom ends.
-    fn focus_left(&mut self, panel: Focus) {
-        self.zoomed = false;
-        self.focus = panel;
-        self.last_left_focus = panel;
+    /// Moves to a left-hand pane, which must be on screen, so zoom ends.
+    fn focus_left(&mut self, pane: Pane) {
+        self.view.zoomed = false;
+        self.view.in_preview = false;
+        self.view.pane = pane;
     }
 
     // -------------------------------------------------------------- modals
@@ -1431,9 +1457,9 @@ impl App {
         self.go_to_tab(Tab::Compare);
         // Whatever was open on the right belonged to the old comparison.
         self.close_preview();
-        self.zoomed = false;
+        self.view.zoomed = false;
         self.compare = Some(compare);
-        self.focus_left(Focus::Compare);
+        self.focus_left(Pane::Compare);
     }
 
     /// Closing a comparison goes back to the Repo tab, as esc does elsewhere.
@@ -1445,7 +1471,7 @@ impl App {
         if self.tab == Tab::Compare {
             self.go_to_tab(Tab::Repo);
         }
-        self.saved_tabs.retain(|(tab, _)| *tab != Tab::Compare);
+        self.saved_views[Tab::Compare as usize] = None;
     }
 
     /// Switches every diff between the whole file and just the changes. It
@@ -1454,7 +1480,7 @@ impl App {
         git::set_whole_files(!git::whole_files());
         // The cache keeps both kinds, so the other one, prefetched, shows
         // coloured at once.
-        if let Some(diff) = &mut self.diff {
+        if let Some(diff) = self.view.diff_mut() {
             let result = diff.reload();
             self.report(result);
         }
@@ -1486,27 +1512,12 @@ impl App {
         if tab == self.tab {
             return;
         }
-        let showing = TabState {
-            focus: self.focus,
-            last_left_focus: self.last_left_focus,
-            diff: self.diff.take(),
-            details: self.details.take(),
-            zoomed: self.zoomed,
-        };
-        self.saved_tabs.retain(|(saved, _)| *saved != self.tab);
-        self.saved_tabs.push((self.tab, showing));
-        let state = match self.saved_tabs.iter().position(|(saved, _)| *saved == tab) {
-            Some(index) => self.saved_tabs.remove(index).1,
-            None => TabState::fresh(tab),
-        };
-        self.focus = state.focus;
-        self.last_left_focus = state.last_left_focus;
-        self.diff = state.diff;
-        self.details = state.details;
-        self.zoomed = state.zoomed;
+        let view = self.saved_views[tab as usize].take().unwrap_or_else(|| View::fresh(tab));
+        let showing = std::mem::replace(&mut self.view, view);
+        self.saved_views[self.tab as usize] = Some(showing);
         self.tab = tab;
         // The Review tab opens on its selected comment's line.
-        if tab == Tab::Review && self.diff.is_none() {
+        if tab == Tab::Review && self.view.diff().is_none() {
             self.show_selected_comment();
         }
     }
@@ -1517,11 +1528,11 @@ impl App {
     /// already on it. From another pane too, once n or N shows the active
     /// line there, so a change can be commented on without entering it.
     fn comment_on_line(&mut self) {
-        let Some(diff) = &self.diff else {
+        let Some(diff) = self.view.diff() else {
             self.message = "Open a diff to comment on its lines".to_string();
             return;
         };
-        if !diff.shows_active_line(self.focus == Focus::Preview) {
+        if !diff.shows_active_line(self.view.in_preview) {
             self.message = "Step to a change with n, or enter the diff, to comment on a line".to_string();
             return;
         }
@@ -1539,7 +1550,7 @@ impl App {
 
     /// gC: writes a comment on the whole file in the diff, or edits it.
     fn comment_on_file(&mut self) {
-        let Some(diff) = &self.diff else {
+        let Some(diff) = self.view.diff() else {
             self.message = "Open a file's diff to comment on it".to_string();
             return;
         };
@@ -1596,10 +1607,10 @@ impl App {
             ListAction::None => {}
             ListAction::Moved => self.show_selected_comment(),
             ListAction::Enter => {
-                if self.diff.is_none() {
+                if self.view.diff().is_none() {
                     self.show_selected_comment();
                 }
-                if self.diff.is_some() {
+                if self.view.diff().is_some() {
                     self.focus_preview();
                 }
             }
@@ -1632,7 +1643,7 @@ impl App {
         let anchor = comment.anchor.clone();
         let source = self.review_source(comment);
         self.show_diff(source);
-        if let Some(diff) = &mut self.diff {
+        if let Some(diff) = self.view.diff_mut() {
             diff.go_to(anchor.as_ref());
         }
     }
@@ -1655,7 +1666,7 @@ impl App {
         if self.tab == Tab::Review {
             self.go_to_tab(Tab::Repo);
         }
-        self.saved_tabs.retain(|(tab, _)| *tab != Tab::Review);
+        self.saved_views[Tab::Review as usize] = None;
         self.review_list = ReviewList::new();
     }
 
@@ -1696,7 +1707,7 @@ impl App {
         self.render_accent_bar(frame, bar);
         self.render_tabs(frame, tabs);
 
-        match (self.has_preview(), self.zoomed) {
+        match (self.view.has_preview(), self.view.zoomed) {
             (false, _) => self.render_left(frame, main),
             (true, true) => self.render_preview(frame, main),
             (true, false) => {
@@ -1785,11 +1796,11 @@ impl App {
 
     fn render_left(&mut self, frame: &mut Frame, area: Rect) {
         if self.tab == Tab::Review {
-            self.review_list.render(frame, area, self.focus == Focus::Review, &self.review);
+            self.review_list.render(frame, area, self.view.focused(Pane::Review), &self.review);
             return;
         }
         if self.tab == Tab::Compare {
-            let focused = self.focus == Focus::Compare;
+            let focused = self.view.focused(Pane::Compare);
             match &mut self.compare {
                 Some(compare) => compare.render(frame, area, focused),
                 None => render_empty_compare(frame, area, focused),
@@ -1800,10 +1811,10 @@ impl App {
         // height, and the graph gets the rest. Borders add two rows to each.
         let fit = |rows: u16, max_percent: u16| (rows + 2).min(area.height * max_percent / 100).max(3);
         let branches_height = fit(
-            self.branches.wanted_height(self.focus == Focus::Branches),
+            self.branches.wanted_height(self.view.focused(Pane::Branches)),
             BRANCHES_MAX_PERCENT,
         );
-        let changes_max = if self.focus == Focus::Changes {
+        let changes_max = if self.view.focused(Pane::Changes) {
             CHANGES_FOCUSED_MAX_PERCENT
         } else {
             CHANGES_MAX_PERCENT
@@ -1816,19 +1827,19 @@ impl App {
         ])
         .areas(area);
         let note = self.fetch_note();
-        self.branches.render(frame, branches, self.focus == Focus::Branches, note.as_deref());
-        self.staging.render(frame, changes, self.focus == Focus::Changes);
-        self.graph.render(frame, graph, self.focus == Focus::Graph);
+        self.branches.render(frame, branches, self.view.focused(Pane::Branches), note.as_deref());
+        self.staging.render(frame, changes, self.view.focused(Pane::Changes));
+        self.graph.render(frame, graph, self.view.focused(Pane::Graph));
 
         // The panes that h and l lead to say so next to their title, in place
         // of a hint. With three panes and wrapping, those are the two not focused.
         let changes_title = self.staging.title();
         let panes = [
-            (Focus::Branches, branches, crate::branches::TITLE),
-            (Focus::Changes, changes, changes_title.as_str()),
-            (Focus::Graph, graph, crate::graph::TITLE),
+            (Pane::Branches, branches, crate::branches::TITLE),
+            (Pane::Changes, changes, changes_title.as_str()),
+            (Pane::Graph, graph, crate::graph::TITLE),
         ];
-        if let Some(current) = panes.iter().position(|(pane, ..)| *pane == self.focus) {
+        if let Some(current) = panes.iter().position(|(pane, ..)| self.view.focused(*pane)) {
             let (_, previous, title) = panes[(current + 2) % 3];
             mark_key(frame, previous, title, "h");
             let (_, next, title) = panes[(current + 1) % 3];
@@ -1837,12 +1848,14 @@ impl App {
     }
 
     fn render_preview(&mut self, frame: &mut Frame, area: Rect) {
-        let focused = self.focus == Focus::Preview;
-        if let Some(diff) = &mut self.diff {
-            diff.set_comments(self.review.on_diff(&diff.source));
-            diff.render(frame, area, focused, self.split);
-        } else if let Some(details) = &mut self.details {
-            details.render(frame, area, focused);
+        let focused = self.view.in_preview;
+        match &mut self.view.preview {
+            Preview::Diff(diff) => {
+                diff.set_comments(self.review.on_diff(&diff.source));
+                diff.render(frame, area, focused, self.split);
+            }
+            Preview::Details(details) => details.render(frame, area, focused),
+            Preview::None => {}
         }
     }
 
@@ -1903,7 +1916,7 @@ impl App {
         };
         // The keys that work everywhere follow, set apart from the pane's own.
         // While typing a branch search, ? and q are typed into it instead.
-        if !(self.focus == Focus::Branches && self.branches.is_typing()) {
+        if !(self.view.focused(Pane::Branches) && self.branches.is_typing()) {
             if !empty {
                 spans.push(Span::styled("   │   ", dim));
             }
@@ -1918,106 +1931,105 @@ impl App {
         let mut hints: Vec<&str> = Vec::new();
         // What esc does in the focused pane, unless an open diff takes it.
         let mut esc = None;
-        match self.focus {
-            Focus::Branches if self.branches.is_typing() => {
-                // Every other key is typed into the search, ? and q included.
-                // The search box says what esc does.
-                return "type to filter · enter check out".to_string();
+        if self.view.in_preview {
+            if self.view.diff().is_some() {
+                hints.extend(self.comment_hints());
+                hints.extend(self.diff_view_hints());
+            } else {
+                hints.push("y copy sha");
             }
-            Focus::Branches => {
-                hints.extend(["enter check out", "c compare", "space remotes", "i search"]);
-                if self.branches.is_searching() {
-                    esc = Some("esc clear search");
+            hints.push(if self.view.zoomed { "z unzoom" } else { "z zoom" });
+            esc = Some("esc back");
+        } else {
+            match self.view.pane {
+                Pane::Branches if self.branches.is_typing() => {
+                    // Every other key is typed into the search, ? and q included.
+                    // The search box says what esc does.
+                    return "type to filter · enter check out".to_string();
                 }
-            }
-            Focus::Changes => {
-                let source = self.staging.selected_source();
-                match &source {
-                    Some(DiffSource::Staged(_)) => hints.push("space unstage"),
-                    Some(DiffSource::Conflict(_)) => hints.push("space mark resolved"),
-                    Some(_) => hints.push("space stage"),
-                    None => {}
+                Pane::Branches => {
+                    hints.extend(["enter check out", "c compare", "space remotes", "i search"]);
+                    if self.branches.is_searching() {
+                        esc = Some("esc clear search");
+                    }
                 }
-                if source.is_some() {
-                    hints.push("a/A stage/unstage all");
+                Pane::Changes => {
+                    let source = self.staging.selected_source();
+                    match &source {
+                        Some(DiffSource::Staged(_)) => hints.push("space unstage"),
+                        Some(DiffSource::Conflict(_)) => hints.push("space mark resolved"),
+                        Some(_) => hints.push("space stage"),
+                        None => {}
+                    }
+                    if source.is_some() {
+                        hints.push("a/A stage/unstage all");
+                    }
+                    hints.extend(self.enter_diff_hint(source.clone()));
+                    if self.staging.can_restore() {
+                        hints.push("d restore");
+                    }
+                    let (restore, delete) = self.staging.discardable();
+                    if !restore.is_empty() || !delete.is_empty() {
+                        hints.push("D discard all");
+                    }
+                    if self.staging.has_staged() {
+                        hints.push("c commit");
+                    }
                 }
-                hints.extend(self.enter_diff_hint(source.clone()));
-                if self.staging.can_restore() {
-                    hints.push("d restore");
-                }
-                let (restore, delete) = self.staging.discardable();
-                if !restore.is_empty() || !delete.is_empty() {
-                    hints.push("D discard all");
-                }
-                if self.staging.has_staged() {
-                    hints.push("c commit");
-                }
-            }
-            Focus::Graph if self.graph.is_on_file() => {
-                hints.extend(self.enter_diff_hint(self.graph.selected_file_source()));
-                if self.diff.is_none() {
-                    hints.push("n/N commit");
-                }
-                hints.extend([self.details_hint(), "y copy sha"]);
-                esc = Some("esc collapse");
-            }
-            Focus::Graph => {
-                let expanded = self.graph.is_selected_expanded();
-                hints.push(if expanded { "enter collapse" } else { "enter expand" });
-                if self.graph.is_on_stash() {
-                    hints.extend(["a apply", "p pop", "d drop"]);
-                }
-                hints.extend([self.details_hint(), "c compare", "y copy sha", "b choose branches"]);
-                // Only worth it when open commits' files are in the way.
-                if self.graph.has_expanded() && self.diff.is_none() {
-                    hints.push("n/N commit");
-                }
-                if expanded {
+                Pane::Graph if self.graph.is_on_file() => {
+                    hints.extend(self.enter_diff_hint(self.graph.selected_file_source()));
+                    if self.view.diff().is_none() {
+                        hints.push("n/N commit");
+                    }
+                    hints.extend([self.details_hint(), "y copy sha"]);
                     esc = Some("esc collapse");
-                } else if self.graph.has_expanded() {
-                    esc = Some("esc collapse all");
+                }
+                Pane::Graph => {
+                    let expanded = self.graph.is_selected_expanded();
+                    hints.push(if expanded { "enter collapse" } else { "enter expand" });
+                    if self.graph.is_on_stash() {
+                        hints.extend(["a apply", "p pop", "d drop"]);
+                    }
+                    hints.extend([self.details_hint(), "c compare", "y copy sha", "b choose branches"]);
+                    // Only worth it when open commits' files are in the way.
+                    if self.graph.has_expanded() && self.view.diff().is_none() {
+                        hints.push("n/N commit");
+                    }
+                    if expanded {
+                        esc = Some("esc collapse");
+                    } else if self.graph.has_expanded() {
+                        esc = Some("esc collapse all");
+                    }
+                }
+                Pane::Compare if self.compare.is_none() => {
+                    hints.push("c choose two refs");
+                    esc = Some("esc back to Repo");
+                }
+                Pane::Compare => {
+                    let source = self.compare.as_ref().and_then(|compare| compare.selected_source());
+                    hints.extend(self.enter_diff_hint(source));
+                    if self.compare.as_ref().is_some_and(|compare| compare.stash_shown().is_some()) {
+                        hints.extend(["h/l fold", "a apply", "p pop", "d drop"]);
+                        esc = Some("esc back to stashes");
+                    } else {
+                        hints.extend(["h/l fold", "r swap from and to", "c new comparison"]);
+                        esc = Some("esc close compare");
+                    }
+                }
+                Pane::Review => {
+                    hints.extend(["enter focus diff", "c edit", "d delete", "y copy all", "D clear"]);
                 }
             }
-            Focus::Compare if self.compare.is_none() => {
-                hints.push("c choose two refs");
-                esc = Some("esc back to Repo");
-            }
-            Focus::Compare => {
-                let source = self.compare.as_ref().and_then(|compare| compare.selected_source());
-                hints.extend(self.enter_diff_hint(source));
-                if self.compare.as_ref().is_some_and(|compare| compare.stash_shown().is_some()) {
-                    hints.extend(["h/l fold", "a apply", "p pop", "d drop"]);
-                    esc = Some("esc back to stashes");
-                } else {
-                    hints.extend(["h/l fold", "r swap from and to", "c new comparison"]);
-                    esc = Some("esc close compare");
-                }
-            }
-            Focus::Review => {
-                hints.extend(["enter focus diff", "c edit", "d delete", "y copy all", "D clear"]);
-            }
-            Focus::Preview => {
-                if self.diff.is_some() {
-                    hints.extend(self.comment_hints());
-                    hints.extend(self.diff_view_hints());
-                } else {
-                    hints.push("y copy sha");
-                }
-                hints.push(if self.zoomed { "z unzoom" } else { "z zoom" });
-                esc = Some("esc back");
-            }
-        }
-        if self.focus != Focus::Preview {
             hints.extend(self.comment_hints());
             hints.extend(self.diff_view_hints());
         }
         if self.focused_file().is_some() {
             hints.push(self.editor_hint.as_str());
         }
-        if self.focus != Focus::Preview {
-            if self.diff.is_some() {
+        if !self.view.in_preview {
+            if self.view.diff().is_some() {
                 esc = Some("esc close diff");
-            } else if self.details.is_some() {
+            } else if self.view.details().is_some() {
                 esc = Some("esc close details");
             }
         }
@@ -2028,35 +2040,38 @@ impl App {
     /// The file under the cursor: the focused diff's, or the one selected in
     /// the focused pane.
     fn focused_file(&self) -> Option<DiffSource> {
-        match self.focus {
-            Focus::Branches => None,
-            Focus::Changes => self.staging.selected_source(),
-            Focus::Graph => self.graph.selected_file_source(),
-            Focus::Compare => self.compare.as_ref().and_then(|compare| compare.selected_source()),
-            Focus::Review => {
+        if self.view.in_preview {
+            return self.view.diff().map(|diff| diff.source.clone());
+        }
+        match self.view.pane {
+            Pane::Branches => None,
+            Pane::Changes => self.staging.selected_source(),
+            Pane::Graph => self.graph.selected_file_source(),
+            Pane::Compare => self.compare.as_ref().and_then(|compare| compare.selected_source()),
+            Pane::Review => {
                 let comment = self.review_list.selected(&self.review).and_then(|index| self.review.get(index));
                 comment.map(|comment| self.review_source(comment))
             }
-            Focus::Preview => self.diff.as_ref().map(|diff| diff.source.clone()),
         }
     }
 
     /// The help section for where the user is, which help marks.
     fn help_section(&self) -> &'static str {
-        match self.focus {
-            Focus::Branches => "Branches",
-            Focus::Changes => "Changes",
-            Focus::Graph => "Graph",
-            Focus::Compare => "Compare",
-            Focus::Review => "Review",
-            Focus::Preview if self.diff.is_some() => "Diff",
-            Focus::Preview => "Commit details",
+        if self.view.in_preview {
+            return if self.view.diff().is_some() { "Diff" } else { "Commit details" };
+        }
+        match self.view.pane {
+            Pane::Branches => "Branches",
+            Pane::Changes => "Changes",
+            Pane::Graph => "Graph",
+            Pane::Compare => "Compare",
+            Pane::Review => "Review",
         }
     }
 
     /// i shows the selected commit's details, or moves into them if they show.
     fn details_hint(&self) -> &'static str {
-        let showing = self.details.as_ref().map(|details| details.sha());
+        let showing = self.view.details().map(|details| details.sha());
         if showing.is_some() && showing == self.graph.selected_sha() {
             "i focus details"
         } else {
@@ -2072,7 +2087,7 @@ impl App {
         let Some(source) = self.focused_file() else {
             return;
         };
-        let line = match &self.diff {
+        let line = match self.view.diff() {
             Some(diff) if diff.source == source => diff.active_line(),
             _ => DiffPane::load(source.clone()).ok().and_then(|diff| diff.active_line()),
         };
@@ -2119,14 +2134,14 @@ impl App {
     /// gc and gC, where they'd comment: on the diff's active line when it
     /// shows, and on its file whenever there's one to comment on.
     fn comment_hints(&self) -> Vec<&'static str> {
-        let Some(diff) = &self.diff else {
+        let Some(diff) = self.view.diff() else {
             return Vec::new();
         };
         if review::Place::of(&diff.source).is_none() {
             return Vec::new();
         }
         let mut hints = Vec::new();
-        let on_line = diff.shows_active_line(self.focus == Focus::Preview) && diff.active_anchor().is_some();
+        let on_line = diff.shows_active_line(self.view.in_preview) && diff.active_anchor().is_some();
         if on_line {
             hints.push(if diff.comment_at_active().is_some() { "gc edit comment" } else { "gc comment" });
         }
@@ -2137,7 +2152,7 @@ impl App {
 
     /// The keys that work on a diff on screen, from any pane.
     fn diff_view_hints(&self) -> Vec<&'static str> {
-        let Some(diff) = &self.diff else {
+        let Some(diff) = self.view.diff() else {
             return Vec::new();
         };
         vec![
@@ -2150,7 +2165,7 @@ impl App {
     /// Enter on a file shows its diff, or moves into the diff if it's showing.
     fn enter_diff_hint(&self, source: Option<DiffSource>) -> Option<&'static str> {
         let source = source?;
-        let showing = self.diff.as_ref().is_some_and(|diff| diff.source == source);
+        let showing = self.view.diff().is_some_and(|diff| diff.source == source);
         Some(if showing { "enter focus diff" } else { "enter diff" })
     }
 
@@ -2582,11 +2597,11 @@ mod tests {
     #[test]
     fn each_tab_keeps_its_own_focus() {
         let mut app = App::new(PathBuf::new());
-        app.focus_left(Focus::Graph);
+        app.focus_left(Pane::Graph);
         press(&mut app, KeyCode::Tab);
-        assert!(app.tab == Tab::Compare && app.focus == Focus::Compare);
+        assert!(app.tab == Tab::Compare && app.view.focused(Pane::Compare));
         press(&mut app, KeyCode::Tab);
-        assert!(app.tab == Tab::Repo && app.focus == Focus::Graph);
+        assert!(app.tab == Tab::Repo && app.view.focused(Pane::Graph));
     }
 
     #[test]
@@ -2595,11 +2610,11 @@ mod tests {
         app.start_compare("HEAD~1".to_string(), "HEAD".to_string());
         press(&mut app, KeyCode::Tab);
         assert!(app.tab == Tab::Repo && app.compare.is_some());
-        app.focus_left(Focus::Changes);
+        app.focus_left(Pane::Changes);
         press(&mut app, KeyCode::Char('l'));
-        assert!(app.focus == Focus::Graph);
+        assert!(app.view.focused(Pane::Graph));
         press(&mut app, KeyCode::Char('h'));
-        assert!(app.focus == Focus::Changes);
+        assert!(app.view.focused(Pane::Changes));
     }
 
     #[test]
@@ -2652,7 +2667,7 @@ mod tests {
     fn starting_a_comparison_switches_to_its_tab() {
         let mut app = App::new(PathBuf::new());
         app.start_compare("HEAD~1".to_string(), "HEAD".to_string());
-        assert!(app.tab == Tab::Compare && app.focus == Focus::Compare);
+        assert!(app.tab == Tab::Compare && app.view.focused(Pane::Compare));
         assert!(app.compare.as_ref().is_some_and(|c| c.refs() == "HEAD~1 → HEAD"));
         // Closing it asks first, and esc cancels.
         press(&mut app, KeyCode::Esc);
@@ -2674,9 +2689,9 @@ mod tests {
         app.show_diff(last_commit_diff());
         // As popping the stash shown on the Compare tab does, from the graph.
         app.close_compare();
-        assert!(app.tab == Tab::Repo && app.compare.is_none() && app.diff.is_some());
+        assert!(app.tab == Tab::Repo && app.compare.is_none() && app.view.diff().is_some());
         press(&mut app, KeyCode::Tab);
-        assert!(app.tab == Tab::Compare && app.focus == Focus::Compare && app.diff.is_none());
+        assert!(app.tab == Tab::Compare && app.view.focused(Pane::Compare) && app.view.diff().is_none());
     }
 
     fn type_text(app: &mut App, text: &str) {
@@ -2715,8 +2730,8 @@ mod tests {
         // Tab leads to Compare, then Review, which shows the comment's diff.
         press(&mut app, KeyCode::Tab);
         press(&mut app, KeyCode::Tab);
-        assert!(app.tab == Tab::Review && app.focus == Focus::Review);
-        assert!(app.diff.as_ref().is_some_and(|diff| diff.source == source));
+        assert!(app.tab == Tab::Review && app.view.focused(Pane::Review));
+        assert!(app.view.diff().is_some_and(|diff| diff.source == source));
 
         // Deleting asks first, and esc keeps it.
         press(&mut app, KeyCode::Char('d'));
@@ -2744,16 +2759,16 @@ mod tests {
         press(&mut app, KeyCode::Char('g'));
         assert!(app.pending_g);
         press(&mut app, KeyCode::Char('g'));
-        assert!(!app.pending_g && app.diff.as_ref().unwrap().active_anchor().is_none(), "on the first heading");
+        assert!(!app.pending_g && app.view.diff().unwrap().active_anchor().is_none(), "on the first heading");
         press(&mut app, KeyCode::Char('g'));
         press(&mut app, KeyCode::Esc);
-        assert!(!app.pending_g && app.focus == Focus::Preview);
+        assert!(!app.pending_g && app.view.in_preview);
     }
 
     #[test]
     fn gc_from_a_list_needs_n_to_show_the_active_line_and_gc_upper_takes_the_file() {
         let mut app = App::new(PathBuf::new());
-        app.focus_left(Focus::Graph);
+        app.focus_left(Pane::Graph);
         app.show_diff(last_commit_diff());
         press(&mut app, KeyCode::Char('g'));
         press(&mut app, KeyCode::Char('c'));
@@ -2769,7 +2784,7 @@ mod tests {
         type_text(&mut app, "Split it.");
         app.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
         assert_eq!(app.review.len(), 1);
-        assert!(app.review.find(&app.diff.as_ref().unwrap().source, None).is_some());
+        assert!(app.review.find(&app.view.diff().unwrap().source, None).is_some());
     }
 
     #[test]
