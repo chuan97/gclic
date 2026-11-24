@@ -54,7 +54,6 @@ const GLOBAL_HINTS: &str = ": command · ? help · q quit";
 /// The keys shown on the pickers that choose refs to compare.
 const STASH_PICKER_KEYS: [(&str, &str); 6] =
     [("enter", "files"), ("a", "apply"), ("p", "pop"), ("d", "drop"), ("i", "search"), ("esc", "close")];
-const REPO_PICKER_KEYS: [(&str, &str); 3] = [("i", "type"), ("enter", "open"), ("esc", "close")];
 const COMPARE_PICKER_KEYS: [(&str, &str); 4] =
     [("i", "type"), ("p", "paste"), ("enter", "choose"), ("esc", "close")];
 /// The preview's share of the width, focused or not. Zooming gives it all of it.
@@ -772,46 +771,6 @@ impl App {
         }
     }
 
-}
-
-/// Picks the repo to open, for when gclic starts outside one: the same list
-/// as `:cd`, on its own. Returns the repo, and the search folder, which `..`
-/// may have moved. None if the user leaves without picking.
-pub fn choose_repo(terminal: &mut DefaultTerminal, mut root: PathBuf) -> Result<Option<(PathBuf, PathBuf)>> {
-    let finder = |root: &Path| {
-        let repos = repos::entries(root);
-        let labels = repos.iter().map(|(label, _)| label.clone()).collect();
-        let title = format!("Open a repo, in {}", repos::tilde(root));
-        (Picker::single(&title, labels).with_hints(&REPO_PICKER_KEYS), repos)
-    };
-    let (mut picker, mut repos) = finder(&root);
-    loop {
-        terminal.draw(|frame| picker.render(frame, frame.area()))?;
-        let Event::Key(key) = event::read()? else {
-            continue;
-        };
-        if key.kind != KeyEventKind::Press {
-            continue;
-        }
-        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
-            return Ok(None);
-        }
-        match picker.handle_key(key) {
-            Outcome::Open => {}
-            Outcome::Cancelled => return Ok(None),
-            Outcome::Picked(picked) => {
-                let picked = picked.first();
-                match repos.iter().find(|(label, _)| Some(label) == picked) {
-                    Some((label, parent)) if label == repos::UP => {
-                        root = parent.clone();
-                        (picker, repos) = finder(&root);
-                    }
-                    Some((_, repo)) => return Ok(Some((repo.clone(), root))),
-                    None => {}
-                }
-            }
-        }
-    }
 }
 
 /// On Linux the copy may only last while gclic runs, as there the program

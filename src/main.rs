@@ -21,8 +21,10 @@ mod worker;
 
 use anyhow::Result;
 use app::App;
+use picker::{Outcome, Picker};
 use ratatui::DefaultTerminal;
-use std::path::PathBuf;
+use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use std::path::{Path, PathBuf};
 
 fn main() -> Result<()> {
     let start = std::env::current_dir()?;
@@ -75,7 +77,7 @@ fn print_color(repo_root: Option<PathBuf>) -> ! {
 fn run(terminal: &mut DefaultTerminal, repo_root: Option<PathBuf>, search_root: PathBuf) -> Result<()> {
     let (repo, search_root) = match repo_root {
         Some(root) => (root, search_root),
-        None => match app::choose_repo(terminal, search_root)? {
+        None => match choose_repo(terminal, search_root)? {
             Some(found) => found,
             None => return Ok(()),
         },
@@ -83,4 +85,44 @@ fn run(terminal: &mut DefaultTerminal, repo_root: Option<PathBuf>, search_root: 
     // Paths from `git status` are relative to the repo root, so run from there.
     std::env::set_current_dir(repo)?;
     App::new(search_root).run(terminal)
+}
+
+/// Picks the repo to open, for when gclic starts outside one: the same list
+/// as `:cd`, on its own. Returns the repo, and the search folder, which `..`
+/// may have moved. None if the user leaves without picking.
+fn choose_repo(terminal: &mut DefaultTerminal, mut root: PathBuf) -> Result<Option<(PathBuf, PathBuf)>> {
+    let finder = |root: &Path| {
+        let repos = repos::entries(root);
+        let labels = repos.iter().map(|(label, _)| label.clone()).collect();
+        let title = format!("Open a repo, in {}", repos::tilde(root));
+        (Picker::single(&title, labels).with_hints(&repos::PICKER_KEYS), repos)
+    };
+    let (mut picker, mut repos) = finder(&root);
+    loop {
+        terminal.draw(|frame| picker.render(frame, frame.area()))?;
+        let Event::Key(key) = event::read()? else {
+            continue;
+        };
+        if key.kind != KeyEventKind::Press {
+            continue;
+        }
+        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            return Ok(None);
+        }
+        match picker.handle_key(key) {
+            Outcome::Open => {}
+            Outcome::Cancelled => return Ok(None),
+            Outcome::Picked(picked) => {
+                let picked = picked.first();
+                match repos.iter().find(|(label, _)| Some(label) == picked) {
+                    Some((label, parent)) if label == repos::UP => {
+                        root = parent.clone();
+                        (picker, repos) = finder(&root);
+                    }
+                    Some((_, repo)) => return Ok(Some((repo.clone(), root))),
+                    None => {}
+                }
+            }
+        }
+    }
 }
