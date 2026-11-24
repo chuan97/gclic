@@ -120,8 +120,6 @@ fn read_all(pipe: Option<impl Read>) -> Vec<u8> {
     bytes
 }
 
-/// What a `:git` command printed, in a popup to scroll through. Red when the
-/// command failed.
 /// A command to run next, after one that failed, as typed after `:`.
 enum Advice {
     /// The same command, in the terminal, as it asked for something.
@@ -130,6 +128,8 @@ enum Advice {
     Git(String),
 }
 
+/// What a `:git` command printed, in a popup to scroll through. Red when the
+/// command failed.
 pub struct OutputPopup {
     title: String,
     lines: Vec<String>,

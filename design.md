@@ -43,41 +43,60 @@ Two tabs, `Repo` and `Compare`, switched with `tab`. A hint bar at the bottom li
 
 ### Modules
 
-| File | Lines | What it does |
-|---|---|---|
-| `main.rs` | 35 | Finds the repo root, sets up the terminal, runs the app |
-| `app.rs` | 1357 | `App`: all state, layout, key routing, popups, hints, tabs, the worker's results |
-| `commands.rs` | 414 | The command line's `:git` and `:!`: running in the background or in the terminal, and the output popup |
-| `repos.rs` | 203 | Finding the repos `:cd` switches between |
-| `editor.rs` | 214 | Opening a file in the user's editor at a line, or in the Neovim gclic runs in |
-| `git.rs` | 661 | Every git call, returning typed data, plus the parsers |
-| `worker.rs` | 195 | The background thread for slow reads |
-| `diff.rs` | 1562 | Unified diff and conflict parsing into side-by-side rows, line pairing, word marks, the diff pane (side by side or unified, with its minimap and change counter), the colour cache |
-| `highlight.rs` | 139 | Syntax highlighting with syntect |
-| `graph.rs` | 1176 | Lane layout (a pure function), colours, the Graph pane |
-| `branches.rs` | 436 | The Branches pane |
-| `staging.rs` | 286 | The Changes pane |
-| `compare.rs` | 278 | The Compare view, of two refs or of a stash |
-| `review.rs` | 406 | Review comments on diffs' lines, the text they're copied as, and the Review tab's list |
-| `file_list.rs` | 117 | Compare's file list, and the file row shared with other panes |
-| `details.rs` | 150 | The commit details preview |
-| `picker.rs` | 520 | The fuzzy-searchable list behind the Branches pane and the pickers |
-| `help.rs` | 300 | The help popup, as data |
-| `theme.rs` | 231 | The editor's colours for diffs inside Neovim, and gclic's own, VS Code's |
-| `ui.rs` | 150 | Shared drawing helpers, colours and key hints |
+Modules nest where one has grown parts of its own: `app.rs` declares `app/`'s, and `diff.rs` declares `diff/`'s.
+
+| File | What it does |
+|---|---|
+| `main.rs` | Finds the repo, or offers the ones under where gclic started, sets up the terminal, runs the app |
+| `app.rs` | `App`: all state, the run loop, key routing, `apply`, focus, tabs and each tab's view |
+| `app/refresh.rs` | Reading the repo again, the worker's results, the diff colours to ask for, keeping the open diff and details current |
+| `app/commands.rs` | The command line: the commands, their hints and completion, and what each runs, with the stash, fetch, repo and editor actions |
+| `app/popups.rs` | The popups: confirmations, the commit box, the pickers and what a pick does |
+| `app/comments.rs` | Writing review comments, and the Review tab's actions |
+| `app/fetcher.rs` | Fetching the tracked remotes every minute, in the background |
+| `app/status_line.rs` | The keys at the bottom that apply where the user is |
+| `app/layout.rs` | Drawing the screen: the colour bar, the tabs, the panes and the preview |
+| `app/tests.rs` | The app's tests, run on gclic's own repo |
+| `git.rs` | Every git call, returning typed data, plus the parsers |
+| `worker.rs` | The background thread for slow reads |
+| `running.rs` | A `:git` command in the background, and the popup of what it printed |
+| `terminal.rs` | Handing the terminal to `:!` and terminal editors, and the keyboard flags |
+| `ansi.rs` | A command's colour codes as styles, and redrawn progress reduced to its end |
+| `args.rs` | Splitting a command line into arguments |
+| `repos.rs` | Finding the repos `:cd` switches between |
+| `editor.rs` | Opening a file in the user's editor at a line, or in the Neovim gclic runs in |
+| `diff.rs` | The diff, used by every feature; declares and re-exports its parts |
+| `diff/parse.rs` | Diff and conflict parsing into side-by-side rows, line pairing, word marks, syntax colours on the rows |
+| `diff/cache.rs` | The cache of coloured diffs |
+| `diff/pane.rs` | The diff pane: side by side or unified, the active line, the minimap and change counter, comments under their lines |
+| `highlight.rs` | Syntax highlighting with syntect |
+| `graph.rs` | Lane layout (a pure function), colours, the Graph pane |
+| `branches.rs` | The Branches pane |
+| `staging.rs` | The Changes pane |
+| `compare.rs` | The Compare view, of two refs or of a stash |
+| `file_list.rs` | Compare's file list, and the file row shared with other panes |
+| `review.rs` | Review comments on diffs' lines, the text they're copied as, and the Review tab's list |
+| `details.rs` | The commit details preview |
+| `picker.rs` | The fuzzy-searchable list behind the Branches pane and the pickers |
+| `help.rs` | The help popup, as data |
+| `accent.rs` | Each repo's colour, for the bar at the top |
+| `theme.rs` | The editor's colours for diffs inside Neovim, and gclic's own, VS Code's |
+| `ui.rs` | Shared pieces: colours, key hints, the list `Cursor`, the text `Scroll`, popups of text |
 
 Dependencies: `ratatui` (with crossterm), `anyhow`, and `syntect`, with its pure-Rust regex engine. Dependencies are optimised even in debug builds, since highlighting is too slow otherwise. The theme, `assets/vscode-dark-modern.tmTheme`, holds VS Code's Dark Modern colours, as Zed's "VSCode Dark Modern" theme has them.
 
 ### Patterns worth keeping
 
 - **Panels return actions.** Each pane has `handle_key(key) -> Action` and `render(frame, area, focused)`. Panes never touch each other: they return an `Action` (`OpenDiff`, `PreviewDiff`, `Refresh`, `Compare`…), and `App::apply` carries it out. This avoided most fights with the borrow checker.
-- **`git.rs` is the only place that knows git is a subprocess.** Everything else gets typed data. Git runs with no stdin, so nothing can wait for hidden input, and with `GIT_OPTIONAL_LOCKS=0`, so reads don't take the index lock.
+- **`git.rs` is the only place that knows git is a subprocess.** Everything else gets typed data. Its commands are made in one place, `command`, and run by `output`: with no stdin, so nothing can wait for hidden input, and with `GIT_OPTIONAL_LOCKS=0`, so reads don't take the index lock. Only the commands typed after `:git` are set up otherwise, as they take locks as git normally does.
+- **Each pane gives its own key hints**, as (key, action) pairs next to its `handle_key`, and a test checks each one is in the help.
+- **Lists and text share their movement:** `ui::Cursor` for every list but the graph's, and `ui::Scroll` for the help, `:git` output and commit details.
 - **`DiffSource`** names where a diff comes from (unstaged, staged, untracked, conflict, a commit, two refs), so one diff pane serves every feature.
 - **Pure functions for the hard parts**, unit tested without a terminal: the graph's lane layout, diff parsing, line pairing, word marks, conflict parsing, the fuzzy matcher.
 
 ### Concurrency
 
-- **The worker thread** (`worker.rs`) does the slow reads: the 500 ms auto-refresh poll (the refs fingerprint, `git status`, the open diff), which carries on under popups, as they only cover part of the screen, and syntax highlighting. The UI hands it jobs through a small queue and picks up results from a channel every 30 ms, so keys never wait for it.
+- **The worker thread** (`worker.rs`) does the slow reads: the 500 ms auto-refresh poll (the refs fingerprint, `git status`, the open diff), which carries on under popups, as they only cover part of the screen, and syntax highlighting. The UI hands it jobs through a small queue and picks up results from a channel every 30 ms, so keys never wait for it. The screen is drawn only when something changed, a key, a result, a command or fetch ending, and at least once a second.
 - **Only reads happen on it.** Anything that changes the repo, and the full refresh after it, stays on the UI thread, in order, so a change shows at once.
 - **Stale results are dropped:** each full refresh bumps a generation counter, and a poll asked for before the latest refresh is ignored. Colours only apply to the exact diff text they were made from.
 - **Short-lived parallelism** with `std::thread::scope`: the panes' refreshes, the graph's log and unpushed check, a poll's git calls, a comparison's refresh, and the two file versions read for highlighting all run at once.
@@ -142,6 +161,6 @@ The measuring scripts lived in the git-ignored `target/bench/`. `docs/screenshot
 
 ## Notes for the rewrite
 
-- **`app.rs` has become the place everything lands:** focus, tabs, the preview, popups, hints, the worker's results. It could split into tab state, the preview and popups.
+- **Every git call runs in the process's working directory**, which `:cd` changes. Tests therefore run on gclic's own repo and can't set up what they test, such as popping a stash: #70 proposes the repo as a value.
 - **Keep:** the `Action` pattern, `git.rs` with typed results, the worker with tagged results, and the pure, tested layout and parsing functions.
 - **Open questions:** should Compare's file list stay the direct difference (`git diff A B`), or be PR-style (`A...B`)? Should the commit box gain a cursor, or open an editor? Should the graph keep 500 commits, or stop where the shown branches meet?

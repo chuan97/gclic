@@ -1,5 +1,6 @@
-//! Owns all state, lays out the screen and routes keys. Panels never touch
-//! each other: they return an `Action` and `apply` carries it out here.
+//! Owns all state and routes keys. Panels never touch each other: they
+//! return an `Action` and `apply` carries it out here. The modules below
+//! draw the screen, refresh, run commands and handle popups and comments.
 
 mod commands;
 mod comments;
@@ -55,9 +56,10 @@ const KEY_WAIT: Duration = Duration::from_millis(30);
 /// changed without saying so.
 const REDRAW_EVERY: Duration = Duration::from_secs(1);
 const GLOBAL_HINTS: [ui::Hint; 3] = [(":", "command"), ("?", "help"), ("q", "quit")];
-/// The keys shown on the pickers that choose refs to compare.
+/// The keys shown on `:stash`'s list.
 const STASH_PICKER_KEYS: [(&str, &str); 6] =
     [("enter", "files"), ("a", "apply"), ("p", "pop"), ("d", "drop"), ("i", "search"), ("esc", "close")];
+/// The keys shown on the pickers that choose refs to compare.
 const COMPARE_PICKER_KEYS: [(&str, &str); 4] =
     [("i", "type"), ("p", "paste"), ("enter", "choose"), ("esc", "close")];
 /// The preview's share of the width, focused or not. Zooming gives it all of it.
@@ -269,7 +271,8 @@ pub struct App {
     last_refresh: Instant,
     /// How refs and HEAD looked at the last full reload.
     refs_fingerprint: String,
-    /// `zed` commands still running, which hand the file to Zed and exit.
+    /// Editors, and messages to Neovim, started in the background and still
+    /// running, collected once they end.
     editor_commands: Vec<Child>,
     /// The background thread doing slow reads: auto-refresh and colouring.
     worker: Worker,
