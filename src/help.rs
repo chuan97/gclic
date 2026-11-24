@@ -79,7 +79,7 @@ const LEFT: &[Section] = &[
     },
     Section {
         title: "Commands",
-        keys: &crate::commands::COMMAND_HELP,
+        keys: &crate::app::COMMAND_HELP,
     },
 ];
 

@@ -1,7 +1,8 @@
 mod accent;
+mod ansi;
 mod app;
+mod args;
 mod branches;
-mod commands;
 mod compare;
 mod details;
 mod diff;
@@ -14,7 +15,9 @@ mod highlight;
 mod picker;
 mod repos;
 mod review;
+mod running;
 mod staging;
+mod terminal;
 mod theme;
 mod ui;
 mod worker;
@@ -47,9 +50,9 @@ fn main() -> Result<()> {
     }
 
     let mut terminal = ratatui::init();
-    commands::enhance_keys()?;
+    terminal::enhance_keys()?;
     let result = run(&mut terminal, repo_root, search_root);
-    commands::plain_keys();
+    terminal::plain_keys();
     ratatui::restore();
     result
 }

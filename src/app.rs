@@ -14,13 +14,14 @@ mod tests;
 use comments::CommentBox;
 use fetcher::Fetcher;
 use commands::read_clipboard;
+pub(crate) use commands::COMMAND_HELP;
 use layout::project_location;
 use popups::{remember_yank, Modal, PickerUse};
 
 use crate::accent::{self, Accent};
 use crate::branches::BranchesPanel;
 use crate::compare::ComparePanel;
-use crate::commands::{OutputPopup, Running};
+use crate::running::{OutputPopup, Running};
 use crate::details::DetailsPane;
 use crate::editor::{self, Launch};
 use crate::repos;
@@ -374,14 +375,14 @@ impl App {
             {
                 self.handle_key(key);
                 if let Some(line) = self.shell_line.take() {
-                    let note = crate::commands::run_in_terminal(terminal, &line)?;
+                    let note = crate::terminal::run_in_terminal(terminal, &line)?;
                     self.refresh();
                     if let Some(note) = note {
                         self.message = note;
                     }
                 }
                 if let Some((shown, name, command)) = self.editor_in_terminal.take() {
-                    let note = crate::commands::hand_terminal(terminal, &shown, &name, vec![command])?;
+                    let note = crate::terminal::hand_terminal(terminal, &shown, &name, vec![command])?;
                     // The file may have changed.
                     self.refresh();
                     if let Some(note) = note {

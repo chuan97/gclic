@@ -23,7 +23,7 @@ impl App {
                 // What the commands are, or the one being typed takes, in the
                 // room left after the cursor.
                 let used = 2 + line.chars().count();
-                let (ghost, hint) = crate::commands::command_hint(line, (area.width as usize).saturating_sub(used + 3));
+                let (ghost, hint) = commands::command_hint(line, (area.width as usize).saturating_sub(used + 3));
                 if !hint.is_empty() || !ghost.is_empty() {
                     spans.push(Span::styled(ghost, dim));
                     spans.push(Span::styled(format!("  {hint}"), dim));
