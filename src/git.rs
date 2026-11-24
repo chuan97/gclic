@@ -813,6 +813,21 @@ fn parse_track(track: &str) -> Option<(usize, usize)> {
     Some((count("ahead "), count("behind ")))
 }
 
+/// The branches, local and remote, whose history holds this commit, by
+/// their short names. None if `sha` isn't a commit.
+pub fn branches_containing(sha: &str) -> Option<Vec<String>> {
+    let commit = resolve(sha)?;
+    let text = try_run(&[
+        "for-each-ref",
+        "--format=%(refname:short)",
+        "--contains",
+        commit.as_str(),
+        "refs/heads",
+        "refs/remotes",
+    ])?;
+    Some(text.lines().map(str::to_string).collect())
+}
+
 pub fn tags() -> Result<Vec<String>> {
     let text = run(&["for-each-ref", "--format=%(refname:short)", "refs/tags"])?;
     Ok(text.lines().map(str::to_string).collect())

@@ -39,7 +39,7 @@ const LEFT: &[Section] = &[
             ("enter", "check out"),
             ("c", "compare with the checked-out branch"),
             ("space", "show its remotes"),
-            ("i", "search; esc stops typing"),
+            ("i", "search, or type a sha for the branches with it"),
             ("esc", "clear the search"),
         ],
     },

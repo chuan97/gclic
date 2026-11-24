@@ -35,6 +35,9 @@ pub struct BranchesPanel {
     current: Option<String>,
     drop_downs: Vec<DropDown>,
     scroll: usize,
+    /// The search last looked up as a sha, and whether it was a commit, so
+    /// that only a changed search runs git again.
+    sha_search: Option<(String, bool)>,
 }
 
 /// The remote branches belonging to a local one: those with its name, plus
@@ -71,6 +74,7 @@ impl BranchesPanel {
             current: None,
             drop_downs: Vec::new(),
             scroll: 0,
+            sha_search: None,
         }
     }
 
@@ -86,6 +90,9 @@ impl BranchesPanel {
     pub fn refresh(&mut self) -> Result<()> {
         self.branches = git::branches()?;
         self.picker.set_items(listed_names(&self.branches));
+        // The branches may have moved, so a searched sha is looked up again.
+        self.sha_search = None;
+        self.search_sha();
 
         // The cursor goes to the new branch, however the switch happened.
         let current = git::current_branch();
@@ -125,7 +132,30 @@ impl BranchesPanel {
         (!remotes.is_empty()).then(|| DropDown { branch: name.to_string(), remotes })
     }
 
+    /// A search that's a commit's sha lists the branches holding that commit,
+    /// rather than the names it fuzzy matches.
+    fn search_sha(&mut self) {
+        let query = self.picker.query().to_string();
+        if self.sha_search.as_ref().is_some_and(|(searched, _)| *searched == query) {
+            return;
+        }
+        let containing = git::looks_like_sha(&query).then(|| git::branches_containing(&query)).flatten();
+        self.sha_search = Some((query, containing.is_some()));
+        self.picker.set_only(containing);
+    }
+
+    /// Whether the search is a commit's sha, listing the branches holding it.
+    fn is_sha_search(&self) -> bool {
+        self.sha_search.as_ref().is_some_and(|(_, is_commit)| *is_commit)
+    }
+
     pub fn handle_key(&mut self, key: KeyEvent) -> Action {
+        let action = self.handle_key_inner(key);
+        self.search_sha();
+        action
+    }
+
+    fn handle_key_inner(&mut self, key: KeyEvent) -> Action {
         if !self.picker.is_typing() {
             match key.code {
                 KeyCode::Char(' ') => return self.toggle_drop_down(),
@@ -225,14 +255,25 @@ impl BranchesPanel {
 
         // The search line only takes up room while it's in use.
         if self.picker.is_searching() && list.height > 0 {
-            self.picker.render_query(frame, Rect { height: 1, ..list });
+            let query = Rect { height: 1, ..list };
+            self.picker.render_query(frame, query);
+            if self.is_sha_search() {
+                let note = Line::styled("branches with this commit ", Style::default().fg(ui::DIM));
+                frame.render_widget(note.right_aligned(), query);
+            }
             list.y += 1;
             list.height -= 1;
         }
 
         let (lines, selected_line) = self.list_lines(focused);
         if lines.is_empty() {
-            let note = if self.branches.is_empty() { "No branches yet" } else { "No match" };
+            let note = if self.branches.is_empty() {
+                "No branches yet"
+            } else if self.is_sha_search() {
+                "No branch has this commit"
+            } else {
+                "No match"
+            };
             frame.render_widget(Line::styled(note, Style::default().fg(ui::DIM)), list);
             return;
         }
