@@ -7,7 +7,7 @@
 //! commands do, and gclic comes back when they quit. Inside Neovim, where
 //! `$NVIM` says how to reach it, the file opens in that Neovim instead.
 
-use crate::commands::split_args;
+use crate::args::split_args;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::SystemTime;
