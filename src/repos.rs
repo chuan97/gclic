@@ -4,6 +4,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// The keys of the list of repos, at startup and for `:cd`.
+pub const PICKER_KEYS: [(&str, &str); 3] = [("i", "type"), ("enter", "open"), ("esc", "close")];
+
 /// How many folders down from the search folder a repo can be.
 const MAX_DEPTH: usize = 5;
 /// Folders that hold dependencies or build output, never a repo worth opening,
