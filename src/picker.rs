@@ -69,6 +69,9 @@ pub struct Picker {
     typing: bool,
     /// Items are paths: the folders leading to the last name are dimmed.
     dim_folders: bool,
+    /// When set, the items listed instead of the query's fuzzy matches, e.g.
+    /// the branches holding a commit whose sha was searched.
+    only: Option<Vec<String>>,
 }
 
 impl Picker {
@@ -87,6 +90,7 @@ impl Picker {
             free_text: false,
             typing: false,
             dim_folders: false,
+            only: None,
         }
     }
 
@@ -116,6 +120,19 @@ impl Picker {
         self.query = query;
         self.typing = false;
         self.update_matches();
+    }
+
+    pub fn query(&self) -> &str {
+        &self.query
+    }
+
+    /// Lists just these items, in the list's order, whatever the query, or
+    /// with None goes back to matching the query.
+    pub fn set_only(&mut self, only: Option<Vec<String>>) {
+        if only != self.only {
+            self.only = only;
+            self.update_matches();
+        }
     }
 
     pub fn is_typing(&self) -> bool {
@@ -164,6 +181,12 @@ impl Picker {
     }
 
     fn update_matches(&mut self) {
+        self.selected = 0;
+        self.scroll = 0;
+        if let Some(only) = &self.only {
+            self.matches = (0..self.items.len()).filter(|&i| only.contains(&self.items[i])).collect();
+            return;
+        }
         let mut scored: Vec<(i32, usize)> = self
             .items
             .iter()
@@ -173,8 +196,6 @@ impl Picker {
         // Stable sort, so equal scores keep the original order.
         scored.sort_by_key(|&(score, _)| std::cmp::Reverse(score));
         self.matches = scored.into_iter().map(|(_, i)| i).collect();
-        self.selected = 0;
-        self.scroll = 0;
     }
 
     pub fn highlighted(&self) -> Option<&String> {
@@ -558,6 +579,18 @@ mod tests {
         assert_eq!(picker.query, "main");
         assert!(!picker.typing);
         assert_eq!(picker.matches, [0]);
+    }
+
+    #[test]
+    fn set_only_lists_those_items_whatever_the_query() {
+        let items = vec!["main".to_string(), "feature".to_string(), "other".to_string()];
+        let mut picker = Picker::single("t", items);
+        type_text(&mut picker, "abc1234");
+        assert!(picker.matches.is_empty());
+        picker.set_only(Some(vec!["other".to_string(), "main".to_string()]));
+        assert_eq!(picker.matched_items(), ["main", "other"]);
+        picker.set_only(None);
+        assert!(picker.matches.is_empty());
     }
 
     #[test]

@@ -332,9 +332,24 @@ impl App {
             self.take_worker_results();
             self.take_command_result();
             self.keep_fetching();
+            self.branches.search_sha();
             terminal.draw(|frame| self.render(frame))?;
-            if event::poll(KEY_WAIT)?
-                && let Event::Key(key) = event::read()?
+            if event::poll(KEY_WAIT)? {
+                self.handle_waiting_keys(terminal)?;
+            }
+            // Popups included, as they only cover part of the screen.
+            if self.last_refresh.elapsed() >= AUTO_REFRESH {
+                self.auto_refresh();
+            }
+        }
+        Ok(())
+    }
+
+    /// Handles every key already waiting before the next draw. A paste comes
+    /// as one key per letter, so it then shows at once, not letter by letter.
+    fn handle_waiting_keys(&mut self, terminal: &mut DefaultTerminal) -> Result<()> {
+        loop {
+            if let Event::Key(key) = event::read()?
                 && key.kind == KeyEventKind::Press
             {
                 self.handle_key(key);
@@ -354,12 +369,10 @@ impl App {
                     }
                 }
             }
-            // Popups included, as they only cover part of the screen.
-            if self.last_refresh.elapsed() >= AUTO_REFRESH {
-                self.auto_refresh();
+            if self.should_quit || !event::poll(Duration::ZERO)? {
+                return Ok(());
             }
         }
-        Ok(())
     }
 
     // --------------------------------------------------------- refreshing
