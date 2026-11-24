@@ -230,9 +230,8 @@ impl Review {
 
 /// The Review tab's list: the comments under their places' headings.
 pub struct ReviewList {
-    /// A position in `Review::ordered`.
-    selected: usize,
-    scroll: usize,
+    /// Over the positions in `Review::ordered`.
+    cursor: ui::Cursor,
 }
 
 /// What a key in the list asks the app for.
@@ -250,13 +249,13 @@ pub enum ListAction {
 
 impl ReviewList {
     pub fn new() -> ReviewList {
-        ReviewList { selected: 0, scroll: 0 }
+        ReviewList { cursor: ui::Cursor::default() }
     }
 
     /// The selected comment, as an index into the review.
     pub fn selected(&self, review: &Review) -> Option<usize> {
         let order = review.ordered();
-        order.get(self.selected.min(order.len().saturating_sub(1))).copied()
+        order.get(self.cursor.index.min(order.len().saturating_sub(1))).copied()
     }
 
     /// The keys, for the status line.
@@ -269,22 +268,20 @@ impl ReviewList {
         if len == 0 {
             return ListAction::None;
         }
-        self.selected = self.selected.min(len - 1);
-        let before = self.selected;
+        self.cursor.clamp(len);
+        let before = self.cursor.index;
         let selected = self.selected(review);
         match key.code {
-            KeyCode::Char('j') | KeyCode::Down => self.selected = ui::next_index(self.selected, len),
-            KeyCode::Char('k') | KeyCode::Up => self.selected = ui::previous_index(self.selected, len),
-            KeyCode::Char('g') => self.selected = 0,
-            KeyCode::Char('G') => self.selected = len - 1,
             KeyCode::Enter => return ListAction::Enter,
             KeyCode::Char('c') => return selected.map_or(ListAction::None, ListAction::Edit),
             KeyCode::Char('d') => return selected.map_or(ListAction::None, ListAction::Delete),
             KeyCode::Char('y') => return ListAction::Copy,
             KeyCode::Char('D') => return ListAction::Clear,
-            _ => {}
+            _ => {
+                self.cursor.handle_key(key, len);
+            }
         }
-        if self.selected == before { ListAction::None } else { ListAction::Moved }
+        if self.cursor.index == before { ListAction::None } else { ListAction::Moved }
     }
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool, review: &Review) {
@@ -297,7 +294,7 @@ impl ReviewList {
         frame.render_widget(block, area);
 
         let order = review.ordered();
-        self.selected = self.selected.min(order.len().saturating_sub(1));
+        self.cursor.clamp(order.len());
         let mut lines = Vec::new();
         let mut selected_line = 0;
         let mut heading = None;
@@ -310,7 +307,7 @@ impl ReviewList {
                 let style = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
                 lines.push(Line::styled(comment.heading.clone(), style));
             }
-            if position == self.selected {
+            if position == self.cursor.index {
                 selected_line = lines.len();
             }
             let first = comment.body.lines().next().unwrap_or_default().to_string();
@@ -320,15 +317,15 @@ impl ReviewList {
                 Span::raw("  "),
                 Span::raw(first),
             ]);
-            lines.push(ui::selected(line, position == self.selected, focused));
+            lines.push(ui::selected(line, position == self.cursor.index, focused));
         }
         let height = inner.height as usize;
-        self.scroll = ui::keep_visible(self.scroll, selected_line, height);
+        let mut scroll = self.cursor.scroll_to(selected_line, height);
         // The heading above the first comment under it shows with it.
-        if self.scroll == selected_line && headings.contains(&selected_line.wrapping_sub(1)) {
-            self.scroll -= 1;
+        if scroll == selected_line && headings.contains(&selected_line.wrapping_sub(1)) {
+            scroll = self.cursor.scroll_to(selected_line - 1, height);
         }
-        let shown = lines.into_iter().skip(self.scroll).collect();
+        let shown = lines.into_iter().skip(scroll).collect();
         ui::render_lines(frame, inner, shown);
     }
 }

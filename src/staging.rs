@@ -27,14 +27,13 @@ pub struct StagingPanel {
     status: Status,
     /// A merge, rebase or the like that stopped halfway, shown in the title.
     operation: Option<&'static str>,
-    /// Index into the conflicted, staged and unstaged files, one after another.
-    selected: usize,
-    scroll: usize,
+    /// Over the conflicted, staged and unstaged files, one after another.
+    cursor: ui::Cursor,
 }
 
 impl StagingPanel {
     pub fn new() -> StagingPanel {
-        StagingPanel { status: Status::default(), operation: None, selected: 0, scroll: 0 }
+        StagingPanel { status: Status::default(), operation: None, cursor: ui::Cursor::default() }
     }
 
     fn has_staged(&self) -> bool {
@@ -88,7 +87,7 @@ impl StagingPanel {
     }
 
     fn selection(&self) -> Option<(Section, &FileEntry)> {
-        self.entry_at(self.selected)
+        self.entry_at(self.cursor.index)
     }
 
     /// `index` counts the conflicted files, then the staged, then the unstaged.
@@ -103,12 +102,12 @@ impl StagingPanel {
     }
 
     pub fn selected_source(&self) -> Option<DiffSource> {
-        self.source_at(self.selected)
+        self.source_at(self.cursor.index)
     }
 
     /// The diffs one key away, most likely first, for prefetching.
     pub fn sources_around(&self) -> Vec<DiffSource> {
-        let positions = ui::one_key_away(self.selected, self.total());
+        let positions = self.cursor.one_key_away(self.total());
         positions.into_iter().filter_map(|index| self.source_at(index)).collect()
     }
 
@@ -164,12 +163,12 @@ impl StagingPanel {
                 Section::Changes => &self.status.unstaged,
             };
             if let Some(position) = list.iter().position(|e| e.path == path) {
-                self.selected = new_offset + position;
+                self.cursor.index = new_offset + position;
             } else if !list.is_empty() {
-                self.selected = new_offset + (self.selected - old_offset).min(list.len() - 1);
+                self.cursor.index = new_offset + (self.cursor.index - old_offset).min(list.len() - 1);
             }
         }
-        self.selected = self.selected.min(self.total().saturating_sub(1));
+        self.cursor.clamp(self.total());
     }
 
     pub fn refresh(&mut self) -> Result<()> {
@@ -178,13 +177,8 @@ impl StagingPanel {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Action {
-        let last = self.total().saturating_sub(1);
-        let before = self.selected;
+        let before = self.cursor.index;
         match key.code {
-            KeyCode::Char('j') | KeyCode::Down => self.selected = ui::next_index(self.selected, self.total()),
-            KeyCode::Char('k') | KeyCode::Up => self.selected = ui::previous_index(self.selected, self.total()),
-            KeyCode::Char('g') => self.selected = 0,
-            KeyCode::Char('G') => self.selected = last,
             KeyCode::Enter => {
                 return match self.selected_source() {
                     Some(source) => Action::OpenDiff(source),
@@ -203,9 +197,11 @@ impl StagingPanel {
                     Action::OpenCommitBox
                 };
             }
-            _ => {}
+            _ => {
+                self.cursor.handle_key(key, self.total());
+            }
         }
-        if self.selected == before {
+        if self.cursor.index == before {
             return Action::None;
         }
         match self.selected_source() {
@@ -302,14 +298,14 @@ impl StagingPanel {
         let (mut row, mut index, mut selected_row) = (0, 0, 0);
         for (_, files) in self.headings() {
             row += 1;
-            if (index..index + files.len()).contains(&self.selected) {
-                selected_row = row + self.selected - index;
+            if (index..index + files.len()).contains(&self.cursor.index) {
+                selected_row = row + self.cursor.index - index;
                 break;
             }
             row += files.len();
             index += files.len();
         }
-        self.scroll = ui::keep_visible(self.scroll, selected_row, inner.height as usize);
+        let scroll = self.cursor.scroll_to(selected_row, inner.height as usize);
 
         let heading = Style::default().fg(ui::DIM).add_modifier(Modifier::BOLD);
         let mut lines = Vec::new();
@@ -322,11 +318,11 @@ impl StagingPanel {
             };
             lines.push(Line::styled(format!("{name} ({})", files.len()), heading));
             for entry in files {
-                lines.push(file_line(entry, index == self.selected, focused));
+                lines.push(file_line(entry, index == self.cursor.index, focused));
                 index += 1;
             }
         }
-        let lines = lines.into_iter().skip(self.scroll).collect();
+        let lines = lines.into_iter().skip(scroll).collect();
         ui::render_lines(frame, inner, lines);
     }
 }
@@ -347,12 +343,13 @@ mod tests {
     }
 
     fn panel(staged: &[&str], unstaged: &[&str], selected: usize) -> StagingPanel {
-        StagingPanel {
+        let mut panel = StagingPanel {
             status: Status { staged: entries(staged), unstaged: entries(unstaged), ..Status::default() },
             operation: None,
-            selected,
-            scroll: 0,
-        }
+            cursor: ui::Cursor::default(),
+        };
+        panel.cursor.index = selected;
+        panel
     }
 
     fn selected_path(panel: &StagingPanel) -> &str {

@@ -28,8 +28,7 @@ pub struct FileList {
     /// The folders folded away, by path. All start open.
     collapsed: HashSet<String>,
     /// The row under the cursor, among the visible ones.
-    cursor: usize,
-    scroll: usize,
+    cursor: ui::Cursor,
 }
 
 impl FileList {
@@ -48,8 +47,7 @@ impl FileList {
             files: Vec::new(),
             rows: Vec::new(),
             collapsed: HashSet::new(),
-            cursor: 0,
-            scroll: 0,
+            cursor: ui::Cursor::default(),
         };
         list.set_files(files);
         list
@@ -60,13 +58,13 @@ impl FileList {
     /// comparison's is until it loads, puts the cursor on the first file, so
     /// enter opens a diff at once.
     pub fn set_files(&mut self, files: Vec<FileEntry>) {
-        let here = self.visible().get(self.cursor).map(|row| self.row_key(row));
+        let here = self.visible().get(self.cursor.index).map(|row| self.row_key(row));
         (self.files, self.rows) = tree(files);
         let visible = self.visible();
-        self.cursor = match here {
+        self.cursor.index = match here {
             Some(key) => {
                 let found = visible.iter().position(|row| self.row_key(row) == key);
-                found.unwrap_or(self.cursor).min(visible.len().saturating_sub(1))
+                found.unwrap_or(self.cursor.index).min(visible.len().saturating_sub(1))
             }
             None => visible.iter().position(|row| matches!(row, TreeRow::File { .. })).unwrap_or(0),
         };
@@ -120,7 +118,7 @@ impl FileList {
 
     /// The file under the cursor. None on a folder.
     fn selected_file(&self) -> Option<usize> {
-        match self.visible().get(self.cursor) {
+        match self.visible().get(self.cursor.index) {
             Some(TreeRow::File { index, .. }) => Some(*index),
             _ => None,
         }
@@ -133,7 +131,7 @@ impl FileList {
     /// The diffs one key away, most likely first, for prefetching.
     pub fn sources_around(&self) -> Vec<DiffSource> {
         let visible = self.visible();
-        let positions = ui::one_key_away(self.cursor, visible.len());
+        let positions = self.cursor.one_key_away(visible.len());
         positions
             .into_iter()
             .filter_map(|position| match visible[position] {
@@ -156,12 +154,8 @@ impl FileList {
     /// folder a row is in; `l` unfolds a folder, or goes into an open one.
     pub fn handle_key(&mut self, key: KeyEvent) -> Action {
         let visible_len = self.visible().len();
-        let before = self.cursor;
+        let before = self.cursor.index;
         match key.code {
-            KeyCode::Char('j') | KeyCode::Down => self.cursor = ui::next_index(self.cursor, visible_len),
-            KeyCode::Char('k') | KeyCode::Up => self.cursor = ui::previous_index(self.cursor, visible_len),
-            KeyCode::Char('g') => self.cursor = 0,
-            KeyCode::Char('G') => self.cursor = visible_len.saturating_sub(1),
             KeyCode::Char('h') | KeyCode::Left => self.fold_or_go_up(),
             KeyCode::Char('l') | KeyCode::Right => self.unfold_or_go_in(),
             KeyCode::Enter => {
@@ -174,9 +168,11 @@ impl FileList {
                     None => Action::None,
                 };
             }
-            _ => {}
+            _ => {
+                self.cursor.handle_key(key, visible_len);
+            }
         }
-        if self.cursor == before {
+        if self.cursor.index == before {
             return Action::None;
         }
         // On a folder the diff stays on the last file.
@@ -187,7 +183,7 @@ impl FileList {
     }
 
     fn folder_under_cursor(&self) -> Option<String> {
-        match self.visible().get(self.cursor) {
+        match self.visible().get(self.cursor.index) {
             Some(TreeRow::Folder { path, .. }) => Some(path.clone()),
             _ => None,
         }
@@ -208,12 +204,12 @@ impl FileList {
         }
         // Up to the nearest folder above that holds this row.
         let visible = self.visible();
-        let Some(depth) = visible.get(self.cursor).map(|row| row.depth()) else {
+        let Some(depth) = visible.get(self.cursor.index).map(|row| row.depth()) else {
             return;
         };
-        let parent = (0..self.cursor).rev().find(|&i| visible[i].depth() < depth);
+        let parent = (0..self.cursor.index).rev().find(|&i| visible[i].depth() < depth);
         if let Some(parent) = parent {
-            self.cursor = parent;
+            self.cursor.index = parent;
         }
     }
 
@@ -223,7 +219,7 @@ impl FileList {
         };
         if !self.collapsed.remove(&path) {
             // Already open: into its first row.
-            self.cursor = ui::next_index(self.cursor, self.visible().len());
+            self.cursor.down(self.visible().len());
         }
     }
 
@@ -238,7 +234,7 @@ impl FileList {
             .into_iter()
             .enumerate()
             .map(|(row_number, row)| {
-                let selected = row_number == self.cursor;
+                let selected = row_number == self.cursor.index;
                 match row {
                     TreeRow::Folder { name, path, depth } => {
                         let arrow = if self.collapsed.contains(path) { '▶' } else { '▼' };
@@ -254,8 +250,8 @@ impl FileList {
                 }
             })
             .collect();
-        self.scroll = ui::keep_visible(self.scroll, self.cursor, area.height as usize);
-        ui::render_lines(frame, area, lines.into_iter().skip(self.scroll).collect());
+        let scroll = self.cursor.scroll_to(self.cursor.index, area.height as usize);
+        ui::render_lines(frame, area, lines.into_iter().skip(scroll).collect());
     }
 }
 
@@ -431,13 +427,13 @@ mod tests {
     #[test]
     fn h_on_a_file_goes_up_to_its_folder_and_l_goes_in() {
         let mut list = list(&["src/a.rs", "src/b.rs"]);
-        assert_eq!(list.cursor, 1); // the first file
+        assert_eq!(list.cursor.index, 1); // the first file
         press(&mut list, 'j');
-        assert_eq!(list.cursor, 2); // src/b.rs
+        assert_eq!(list.cursor.index, 2); // src/b.rs
         press(&mut list, 'h');
-        assert_eq!(list.cursor, 0); // src/
+        assert_eq!(list.cursor.index, 0); // src/
         press(&mut list, 'l');
-        assert_eq!(list.cursor, 1); // into src/, onto a.rs
+        assert_eq!(list.cursor.index, 1); // into src/, onto a.rs
     }
 
     #[test]
@@ -453,7 +449,7 @@ mod tests {
     fn a_list_that_was_empty_starts_on_its_first_file() {
         let mut list = list(&[]);
         list.set_files(files(&["src/a.rs"]));
-        assert_eq!(shown(&list)[list.cursor], "src/a.rs");
+        assert_eq!(shown(&list)[list.cursor.index], "src/a.rs");
     }
 
     #[test]
@@ -463,10 +459,10 @@ mod tests {
         press(&mut list, 'h'); // and folded
         press(&mut list, 'j');
         press(&mut list, 'j');
-        assert_eq!(shown(&list)[list.cursor], "src/a.rs");
+        assert_eq!(shown(&list)[list.cursor.index], "src/a.rs");
         list.set_files(files(&["docs/x.md", "docs/y.md", "src/a.rs", "src/b.rs"]));
         assert_eq!(shown(&list), ["docs/", "src/", "src/a.rs", "src/b.rs"]);
-        assert_eq!(shown(&list)[list.cursor], "src/a.rs");
+        assert_eq!(shown(&list)[list.cursor.index], "src/a.rs");
     }
 
     #[test]
