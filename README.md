@@ -54,7 +54,7 @@ The Changes pane lists staged and unstaged files, each name followed by its fold
 
 ## Branch graph
 
-The graph shows the checked-out branch and its upstream by default, or any branches you pick with `b`. Commits not yet pushed are hollow. `enter` opens a commit's files, with the lines each adds and removes, and the commit's in all, `i` shows its details on the right, `y` copies its sha, and `n`/`N` jump between commits.
+The graph shows the checked-out branch and its upstream by default, or any branches you pick with `b`. Commits not yet pushed are hollow. `enter` opens a commit's files, with the lines each adds and removes, and the commit's total after its message, `i` shows its details on the right, `y` copies its sha, and `n`/`N` jump between commits.
 
 ![The graph with a commit's files open and its details on the right](docs/images/graph.svg)
 
@@ -74,7 +74,7 @@ From any pane, while a diff is showing, `n`/`N` jump between its changes, `e` sw
 
 ## Compare
 
-The Compare tab, reached with `tab`, shows how two refs differ, going *from* one *to* the other, a trip through the commit graph rather than an order in time: how far the to is ahead of and behind the from, their common ancestor, and the files that differ, in a tree of their folders, each with its diff and the lines it adds and removes, and each folder with its files' in all. `c` starts a comparison, from the Branches pane, the graph, or the tab itself, and `r` swaps from and to.
+The Compare tab, reached with `tab`, shows how two refs differ, going *from* one *to* the other, a trip through the commit graph rather than an order in time: how far the to is ahead of and behind the from, their common ancestor, and the files that differ, in a tree of their folders, each with its diff and the lines it adds and removes. `c` starts a comparison, from the Branches pane, the graph, or the tab itself, and `r` swaps from and to.
 
 ![Comparing main with hourly](docs/images/compare.svg)
 
