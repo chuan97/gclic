@@ -210,6 +210,19 @@ def fetch_hourly(city: str, hours: int = 12) -> list[Forecast]:
     # A branch that only exists on the remote.
     demo.git("push", "-q", "origin", "main:docs")
 
+    # Two stashes, the newer with a file not yet tracked.
+    demo.write("README.md", "# skycast\n\nWeather forecasts in your terminal.\n\n    skycast Oslo\n")
+    demo.git("stash", "push", "-q", "-m", "Usage in the README")
+    demo.write("skycast/cli.py", CLI.replace("import sys\n", "import argparse\n").replace(
+        '    city = sys.argv[1] if len(sys.argv) > 1 else "Madrid"\n',
+        '    parser = argparse.ArgumentParser(prog="skycast")\n'
+        '    parser.add_argument("city", nargs="?", default="Madrid")\n'
+        '    parser.add_argument("--units", choices=["C", "F"], default="C")\n'
+        "    city = parser.parse_args().city\n",
+    ))
+    demo.write("skycast/units.py", 'def to_fahrenheit(celsius: float) -> float:\n    return celsius * 9 / 5 + 32\n')
+    demo.git("stash", "push", "-q", "-u", "-m", "Try a --units flag")
+
     # Work in progress: one change staged, one not, and a new file.
     demo.write("skycast/cli.py", CLI.replace('"Madrid"', '"Lisbon"'))
     demo.git("add", "skycast/cli.py")
@@ -227,6 +240,10 @@ def fetch_hourly(city: str, hours: int = 12) -> list[Forecast]:
     conflict.write("skycast/models.py", (repos / "skycast" / "skycast" / "models.py").read_text().replace("°{self.units}", " °{self.units}"))
     conflict.commit("Space before the degree sign")
     subprocess.run(["git", "merge", "-q", "rounding"], cwd=conflict.path, env=GIT_ENV, capture_output=True)
+
+    # More repos beside the demo, some in folders, for :cd to list.
+    for name in ("skycast-web", "clients/skycast-ios", "clients/skycast-android", "tools/dotfiles"):
+        subprocess.run(["git", "init", "-q", "-b", "main", str(repos / name)], env=GIT_ENV, check=True)
     return demo.path, conflict.path
 
 
@@ -412,7 +429,7 @@ def text_element(text, col, y, fill, bold):
 
 # ---------------------------------------------------------------- shots
 
-ENTER, ESC, TAB = "\r", "\x1b", "\t"
+ENTER, ESC, TAB, CTRL_S = "\r", "\x1b", "\t", "\x13"
 
 
 def main():
@@ -434,6 +451,19 @@ def main():
         "conflict": (conflict, [ENTER]),
         # The help, opened from the graph.
         "help": (repo, ["l", "?"]),
+        # A stash's files, with a file's diff.
+        "stash": (repo, [":", *"stash", ENTER, ENTER, ENTER]),
+        # The Review tab, after a comment on a line a commit removed, and one
+        # on an uncommitted change, which is the one shown.
+        "review": (repo, [
+            "l", ENTER, "j", ENTER, "n", "g", "c", *"Worth a test for a response without hours.", CTRL_S,
+            "h", "j", ENTER, "n", ENTER, "j", "j", "g", "c", *"Does the API take 24? Its docs say 12 hours at most.", CTRL_S,
+            TAB, TAB, "j",
+        ]),
+        # A git command's output.
+        "command": (repo, [":", *"git status", ENTER]),
+        # :cd, with a search typed.
+        "switch": (repo, [":", *"cd", ENTER, "i", *"sky"]),
     }
     IMAGES.mkdir(parents=True, exist_ok=True)
     for name, (path, keys) in shots.items():

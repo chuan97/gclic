@@ -88,6 +88,8 @@ While a merge, rebase or cherry-pick is stopped on conflicts, the Changes pane s
 
 `:stash` lists your stashes. `enter` shows a stash's files, untracked ones included, each with its diff, as a comparison does. `a` applies it, with every change back unstaged, `p` pops it, and `d` drops it after asking. The graph shows each stash too, hanging off the commit it was made on, with the same keys. Making one is left to `:git stash`, which has the options for what goes in it.
 
+![A stash's files, with one's diff](docs/images/stash.svg)
+
 ## Review comments
 
 `gc` writes a comment on the diff's active line: in the Changes pane, a commit's files, a comparison or a stash. That works from inside the diff, or from the list beside it once `n` has stepped to a change, so a change can be commented on without entering the diff. `gC` writes a comment on the whole file the diff shows. A comment shows under its line, which gets a mark beside its number, or at the top of the diff for the whole file, and `gc` or `gC` there again edits it. A removed line takes comments too, as in "why did this go?". Saving a comment left empty removes it.
@@ -96,15 +98,21 @@ The first comment adds a Review tab, which `tab` goes to. It lists the comments 
 
 Comments last until cleared, or until gclic quits, which says how many would be lost.
 
+![The Review tab, with a comment on a commit and one on uncommitted changes](docs/images/review.svg)
+
 ## Running commands
 
 `:git …` runs a git command in the background, in the repo gclic shows, which refreshes once it ends. A line of output goes to the message line, and more to a popup, red if it failed. `ctrl-c` stops it. It has no terminal to ask anything on, so a command that would open an editor or ask for a password fails at once, and says to run it with `:!` instead. Keys in an SSH agent still work. When a command fails and git suggests one to run instead, such as `git push --set-upstream origin main`, the next `:` offers it, and `tab` fills it in.
 
 `:!…` runs any command in your shell, with the terminal to itself, gclic stepping aside meanwhile: an editor, `git add -p`, `git rebase -i`, or `gclic` itself. If it printed something, gclic waits for enter so you can read it, and otherwise, as when quitting vim, comes straight back.
 
+![The output of :git status](docs/images/command.svg)
+
 ## Switching repos
 
 `:` opens a command line at the bottom, for things done now and then rather than all the time. `:cd` lists the git repos in the folder holding the current one, to fuzzy find one and switch to it, with `..` first to search a folder up. `:cd name` switches straight to the repo `name` can only mean, its folder's name or the only one it matches, and otherwise starts the search with `name` typed in. `:cd ..` searches a folder up. Started outside a repo, say in `~/Code`, gclic lists the repos under it to open one, and `:cd` keeps searching there.
+
+![Searching for a repo to switch to with :cd](docs/images/switch.svg)
 
 ## Your editor
 
