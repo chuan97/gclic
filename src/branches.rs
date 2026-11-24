@@ -133,8 +133,9 @@ impl BranchesPanel {
     }
 
     /// A search that's a commit's sha lists the branches holding that commit,
-    /// rather than the names it fuzzy matches.
-    fn search_sha(&mut self) {
+    /// rather than the names it fuzzy matches. It's looked up before each draw,
+    /// rather than for each letter, so that a pasted sha runs git once.
+    pub fn search_sha(&mut self) {
         let query = self.picker.query().to_string();
         if self.sha_search.as_ref().is_some_and(|(searched, _)| *searched == query) {
             return;
@@ -150,12 +151,11 @@ impl BranchesPanel {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Action {
-        let action = self.handle_key_inner(key);
-        self.search_sha();
-        action
-    }
-
-    fn handle_key_inner(&mut self, key: KeyEvent) -> Action {
+        // Whatever acts on the list, like enter, sees it as it is for the search.
+        let edits_search = self.picker.is_typing() && matches!(key.code, KeyCode::Char(_) | KeyCode::Backspace);
+        if !edits_search {
+            self.search_sha();
+        }
         if !self.picker.is_typing() {
             match key.code {
                 KeyCode::Char(' ') => return self.toggle_drop_down(),
