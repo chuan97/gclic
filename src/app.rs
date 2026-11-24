@@ -1430,10 +1430,15 @@ impl App {
     }
 
     /// Closing a comparison goes back to the Repo tab, as esc does elsewhere.
+    /// From the Repo tab, as when popping the stash shown, the Repo tab stays
+    /// as it is. Either way the Compare tab opens empty next time, without
+    /// the old comparison's diff.
     fn close_compare(&mut self) {
         self.compare = None;
-        self.close_preview();
-        self.go_to_tab(Tab::Repo);
+        if self.tab == Tab::Compare {
+            self.go_to_tab(Tab::Repo);
+        }
+        self.saved_tabs.retain(|(tab, _)| *tab != Tab::Compare);
     }
 
     /// Switches every diff between the whole file and just the changes. It
@@ -2651,6 +2656,20 @@ mod tests {
         press(&mut app, KeyCode::Esc);
         press(&mut app, KeyCode::Enter);
         assert!(app.tab == Tab::Repo && app.compare.is_none());
+    }
+
+    #[test]
+    fn closing_a_comparison_from_the_repo_tab_leaves_the_repo_tab_alone() {
+        let mut app = App::new(PathBuf::new());
+        app.start_compare("HEAD~1".to_string(), "HEAD".to_string());
+        app.show_diff(last_commit_diff());
+        press(&mut app, KeyCode::Tab);
+        app.show_diff(last_commit_diff());
+        // As popping the stash shown on the Compare tab does, from the graph.
+        app.close_compare();
+        assert!(app.tab == Tab::Repo && app.compare.is_none() && app.diff.is_some());
+        press(&mut app, KeyCode::Tab);
+        assert!(app.tab == Tab::Compare && app.focus == Focus::Compare && app.diff.is_none());
     }
 
     fn type_text(app: &mut App, text: &str) {
