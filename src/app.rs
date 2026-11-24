@@ -50,6 +50,10 @@ const AUTO_REFRESH: Duration = Duration::from_millis(500);
 /// How long to wait for a key before checking on the worker's results. Short,
 /// so colours appear soon after they're ready.
 const KEY_WAIT: Duration = Duration::from_millis(30);
+/// The screen is drawn when something changed, and at least this often, for
+/// what ticks on its own, such as "fetched 10s ago", and for anything that
+/// changed without saying so.
+const REDRAW_EVERY: Duration = Duration::from_secs(1);
 const GLOBAL_HINTS: [ui::Hint; 3] = [(":", "command"), ("?", "help"), ("q", "quit")];
 /// The keys shown on the pickers that choose refs to compare.
 const STASH_PICKER_KEYS: [(&str, &str); 6] =
@@ -349,14 +353,23 @@ impl App {
     }
 
     pub fn run(mut self, terminal: &mut DefaultTerminal) -> Result<()> {
+        // Drawing is most of what gclic does while idle, so it only draws
+        // after a key, a resize, or news from the worker, a command or a fetch.
+        let mut changed = true;
+        let mut drawn = Instant::now();
         while !self.should_quit {
-            self.take_worker_results();
-            self.take_command_result();
-            self.fetcher.keep_fetching();
+            changed |= self.take_worker_results();
+            changed |= self.take_command_result();
+            changed |= self.fetcher.keep_fetching();
             self.branches.search_sha();
-            terminal.draw(|frame| self.render(frame))?;
+            if changed || drawn.elapsed() >= REDRAW_EVERY {
+                terminal.draw(|frame| self.render(frame))?;
+                changed = false;
+                drawn = Instant::now();
+            }
             if event::poll(KEY_WAIT)? {
                 self.handle_waiting_keys(terminal)?;
+                changed = true;
             }
             // Popups included, as they only cover part of the screen.
             if self.last_refresh.elapsed() >= AUTO_REFRESH {

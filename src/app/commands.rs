@@ -375,13 +375,13 @@ impl App {
     /// Picks up a `:git` command that has ended. gclic refreshes, as it may
     /// have changed anything. A line or less of output, after it worked,
     /// goes to the message line, and anything else to a popup, unless another
-    /// popup is open, which it isn't worth taking over.
-    pub(super) fn take_command_result(&mut self) {
+    /// popup is open, which it isn't worth taking over. Whether one ended.
+    pub(super) fn take_command_result(&mut self) -> bool {
         let Some(finished) = self.running.as_ref().and_then(Running::finished) else {
-            return;
+            return false;
         };
         let Some(Running { label, stopped, .. }) = self.running.take() else {
-            return;
+            return false;
         };
         self.refresh();
         if stopped {
@@ -397,6 +397,7 @@ impl App {
             let outcome = if finished.succeeded() { "finished" } else { "failed" };
             self.message = format!("{label} {outcome}");
         }
+        true
     }
 
     /// `:cd`: on its own, the finder. With `..`, the finder a folder up. With
