@@ -636,6 +636,8 @@ fn minimap(rows: &[Row], file_lines: usize, height: usize, visible: &[usize]) ->
 
 pub struct DiffPane {
     pub source: DiffSource,
+    /// The whole file, or just the changes, as its text was loaded.
+    pub whole: bool,
     /// The diff as git printed it, to tell whether a reload changed anything.
     text: String,
     rows: Vec<Row>,
@@ -736,23 +738,25 @@ fn longest_line(rows: &[Row]) -> usize {
 impl DiffPane {
     /// Loads without syntax colours, which can take a moment for a big file.
     /// They come from the cache or the worker thread, via `apply_colors`.
-    pub fn load(source: DiffSource) -> Result<DiffPane> {
-        let text = git::diff(&source)?;
-        let rows = rows_for(&source, &text);
-        Ok(DiffPane::new(source, text, Colored { rows, file_lines: 0 }, false))
+    pub fn load(view: DiffView) -> Result<DiffPane> {
+        let text = git::diff(&view.source, view.whole)?;
+        let rows = rows_for(&view.source, &text);
+        Ok(DiffPane::new(view, text, Colored { rows, file_lines: 0 }, false))
     }
 
     /// A diff already coloured, as the cache keeps them, without asking git.
-    pub fn colored(source: DiffSource, text: String, colored: Colored) -> DiffPane {
-        DiffPane::new(source, text, colored, true)
+    pub fn colored(view: DiffView, text: String, colored: Colored) -> DiffPane {
+        DiffPane::new(view, text, colored, true)
     }
 
-    fn new(source: DiffSource, text: String, colored: Colored, is_colored: bool) -> DiffPane {
+    fn new(view: DiffView, text: String, colored: Colored, is_colored: bool) -> DiffPane {
+        let DiffView { source, whole } = view;
         let Colored { rows, file_lines } = colored;
         let rebasing = matches!(source, DiffSource::Conflict(_)) && git::operation_in_progress() == Some("rebasing");
         DiffPane {
             rebasing,
             source,
+            whole,
             text,
             items: layout(&rows, true),
             rows,
@@ -793,8 +797,21 @@ impl DiffPane {
 
     /// Fetches the diff again, for files that changed while it was on screen.
     pub fn reload(&mut self) -> Result<()> {
-        self.set_text(git::diff(&self.source)?);
+        self.set_text(git::diff(&self.source, self.whole)?);
         Ok(())
+    }
+
+    /// Fetches it again as the whole file, or just the changes.
+    pub fn reload_as(&mut self, whole: bool) -> Result<()> {
+        let text = git::diff(&self.source, whole)?;
+        self.whole = whole;
+        self.set_text(text);
+        Ok(())
+    }
+
+    /// The diff as the cache and the worker know it.
+    pub fn view(&self) -> DiffView {
+        DiffView { source: self.source.clone(), whole: self.whole }
     }
 
     /// Takes a newer version of the diff, which needs colouring again. Nothing
@@ -963,7 +980,7 @@ impl DiffPane {
             DiffSource::Stash { path, .. } => format!(" {path} (stashed, untracked) "),
         };
         // A new file or a conflict shows whole anyway.
-        let whole = git::whole_files()
+        let whole = self.whole
             && !matches!(self.source, DiffSource::Untracked(_) | DiffSource::Conflict(_));
         if whole { format!("{title}· whole file ") } else { title }
     }
@@ -1299,7 +1316,7 @@ mod tests {
 
     fn pane_of(rows: Vec<Row>) -> DiffPane {
         let source = DiffSource::Unstaged("f".to_string());
-        DiffPane::colored(source, String::new(), Colored { rows, file_lines: 0 })
+        DiffPane::colored(DiffView { source, whole: false }, String::new(), Colored { rows, file_lines: 0 })
     }
 
     fn colored(rows: Vec<Row>) -> Colored {
