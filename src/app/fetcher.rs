@@ -52,8 +52,10 @@ impl Fetcher {
 
     /// Picks up a fetch that has ended, and starts the next when it's due. A
     /// fetch that brought anything moves the remote refs, which the next poll
-    /// sees, refreshing everything.
-    pub(super) fn keep_fetching(&mut self) {
+    /// sees, refreshing everything. Whether one ended or started, which
+    /// changes the note.
+    pub(super) fn keep_fetching(&mut self) -> bool {
+        let before = self.running.is_some();
         if let Some(running) = &self.running {
             match running.try_recv() {
                 Ok(result) => {
@@ -68,9 +70,12 @@ impl Fetcher {
             }
         }
         let due = self.started.is_none_or(|started| started.elapsed() >= FETCH_EVERY);
+        let ended = before && self.running.is_none();
         if self.auto && self.running.is_none() && due {
             self.start();
+            return true;
         }
+        ended
     }
 
     /// What the Branches title says about fetching: how long ago it last

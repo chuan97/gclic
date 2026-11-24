@@ -62,8 +62,10 @@ impl App {
         self.last_refresh = Instant::now();
     }
 
-    pub(super) fn take_worker_results(&mut self) {
+    /// Takes in the worker's results. Whether there were any.
+    pub(super) fn take_worker_results(&mut self) -> bool {
         let (results, alive) = self.worker.receive();
+        let any = !results.is_empty() || !alive;
         for done in results {
             match done {
                 Done::Poll { generation, fingerprint, status, diff } => {
@@ -76,6 +78,7 @@ impl App {
             self.worker = Worker::start();
             self.message = "The background worker stopped, so it was restarted".to_string();
         }
+        any
     }
 
     /// Takes in what a poll found. The graph only reloads, with everything
