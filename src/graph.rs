@@ -415,6 +415,12 @@ impl GraphPanel {
         self.stashes.iter().find(|stash| stash.sha == *sha)
     }
 
+    /// Whether git had more commits than the graph reads. The stashes are
+    /// among `commits`, but not among the ones git returned.
+    fn has_more_history(&self) -> bool {
+        self.commits.len() - self.stashes.len() == COMMIT_LIMIT
+    }
+
     pub fn is_on_stash(&self) -> bool {
         self.stash_at(self.selected).is_some()
     }
@@ -773,7 +779,7 @@ impl GraphPanel {
             })
             .collect();
         let at_end = self.scroll + lines.len() == display.len();
-        if at_end && self.commits.len() == COMMIT_LIMIT {
+        if at_end && self.has_more_history() {
             lines.push(Line::styled("┊", Style::default().fg(ui::DIM)));
         }
         ui::render_lines(frame, area, lines);
@@ -913,6 +919,18 @@ mod tests {
         assert_eq!(order, ["c", "s0", "s1", "b", "a"]);
         assert_eq!(commits[1].parents, ["b"]);
         assert_eq!(shown.len(), 2);
+    }
+
+    #[test]
+    fn a_full_history_has_more_with_stashes_shown_too() {
+        let commits: Vec<Commit> = (0..COMMIT_LIMIT)
+            .map(|i| commit(&i.to_string(), &[&(i + 1).to_string()]))
+            .collect();
+        let mut graph = GraphPanel::new();
+        (graph.commits, graph.stashes) = with_stashes(commits, vec![stash("s0", "3")]);
+        assert!(graph.has_more_history());
+        graph.commits.pop();
+        assert!(!graph.has_more_history());
     }
 
     #[test]
