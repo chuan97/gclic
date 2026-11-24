@@ -2,7 +2,7 @@
 //! the file row shared with the other panels' flat lists.
 
 use crate::app::Action;
-use crate::git::{DiffSource, FileEntry, Lines};
+use crate::git::{DiffSource, FileEntry};
 use crate::ui;
 use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
@@ -187,19 +187,6 @@ impl FileList {
         &self.files
     }
 
-    /// The lines a row's change adds and removes: a file's own, or for a
-    /// folder, those of every file in it.
-    fn row_lines(&self, row: &TreeRow) -> Lines {
-        match row {
-            TreeRow::File { index, .. } => self.files[*index].lines,
-            TreeRow::Folder { path, .. } => {
-                let inside = format!("{path}/");
-                let files = self.files.iter().filter(|file| file.path.starts_with(&inside));
-                ui::total_lines(files.map(|file| file.lines))
-            }
-        }
-    }
-
     fn folder_under_cursor(&self) -> Option<String> {
         match self.visible().get(self.cursor.index) {
             Some(TreeRow::Folder { path, .. }) => Some(path.clone()),
@@ -248,14 +235,13 @@ impl FileList {
             return;
         }
         let scroll = self.cursor.scroll_to(self.cursor.index, area.height as usize);
-        // Each row with its lines, a folder's being those of the files in it.
         let lines: Vec<Line> = self
             .visible()
             .into_iter()
             .enumerate()
             .map(|(row_number, row)| {
                 let selected = row_number == self.cursor.index;
-                let line = match row {
+                match row {
                     TreeRow::Folder { name, path, depth } => {
                         let arrow = if self.collapsed.contains(path) { '▶' } else { '▼' };
                         let indent = "  ".repeat(*depth);
@@ -265,10 +251,10 @@ impl FileList {
                     TreeRow::File { index, depth } => {
                         let file = &self.files[*index];
                         let indent = "  ".repeat(*depth);
-                        styled_file_line(file, name_of(&file.path), None, indent, selected, focused)
+                        let line = styled_file_line(file, name_of(&file.path), None, indent, selected, focused);
+                        ui::with_line_counts(line, file.lines)
                     }
-                };
-                ui::with_line_counts(line, self.row_lines(row))
+                }
             })
             .collect();
         ui::render_lines(frame, area, lines.into_iter().skip(scroll).collect());
