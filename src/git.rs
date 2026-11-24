@@ -8,11 +8,22 @@ use std::process::{Command, Stdio};
 use std::sync::Mutex;
 use std::thread;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct FileEntry {
     /// Status letter: M, A, D, ... plus `?` for untracked and `U` for conflicts.
     pub status: char,
     pub path: String,
+    pub lines: Lines,
+}
+
+/// How many lines a file's change adds and removes, where it's known: for a
+/// commit's, a stash's or a comparison's files, not the working tree's.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum Lines {
+    #[default]
+    Unknown,
+    Binary,
+    Counted { added: usize, removed: usize },
 }
 
 #[derive(Debug, Default, PartialEq)]
@@ -289,15 +300,15 @@ fn parse_status(text: &str) -> Status {
         let path = entry[3..].to_string();
         let conflicted = x == 'U' || y == 'U' || (x == y && (x == 'A' || x == 'D'));
         if conflicted {
-            status.conflicted.push(FileEntry { status: 'U', path });
+            status.conflicted.push(FileEntry { status: 'U', path, ..Default::default() });
         } else if x == '?' {
-            status.unstaged.push(FileEntry { status: '?', path });
+            status.unstaged.push(FileEntry { status: '?', path, ..Default::default() });
         } else if x != '!' {
             if x != ' ' {
-                status.staged.push(FileEntry { status: x, path: path.clone() });
+                status.staged.push(FileEntry { status: x, path: path.clone(), ..Default::default() });
             }
             if y != ' ' {
-                status.unstaged.push(FileEntry { status: y, path });
+                status.unstaged.push(FileEntry { status: y, path, ..Default::default() });
             }
         }
     }
@@ -466,6 +477,7 @@ fn parse_name_status(text: &str) -> Vec<FileEntry> {
         files.push(FileEntry {
             status: letter.chars().next().unwrap_or('?'),
             path: path.to_string(),
+            ..Default::default()
         });
     }
     files
@@ -657,16 +669,46 @@ pub fn commit_details(sha: &str) -> Result<CommitDetails> {
 }
 
 pub fn commit_files(sha: &str) -> Result<Vec<FileEntry>> {
-    let text = run(&[
-        "show",
-        "--format=",
-        "--name-status",
-        "--no-renames",
-        "--diff-merges=first-parent",
-        "-z",
-        sha,
-    ])?;
-    Ok(parse_name_status(&text))
+    let show = ["show", "--format=", "--no-renames", "--diff-merges=first-parent", "-z", sha];
+    files_with_lines(&show)
+}
+
+/// The files a diff command lists, with how many lines each adds and
+/// removes. Git won't give both in one go, so it's asked twice, at once.
+fn files_with_lines(diff: &[&str]) -> Result<Vec<FileEntry>> {
+    // Right after the subcommand, as a diff's arguments can end with `--`.
+    let with = |option: &'static str| [&diff[..1], &[option], &diff[1..]].concat();
+    let (files, numstat) = thread::scope(|scope| {
+        let numstat = scope.spawn(|| run(&with("--numstat")));
+        (run(&with("--name-status")), numstat.join())
+    });
+    let mut files = parse_name_status(&files?);
+    if let Ok(Ok(numstat)) = numstat {
+        add_lines(&mut files, &numstat);
+    }
+    Ok(files)
+}
+
+/// Fills in each file's lines from `--numstat -z` output: `3\t1\tpath\0`, with
+/// `-` for both counts on a binary file.
+fn add_lines(files: &mut [FileEntry], numstat: &str) {
+    let mut counts = std::collections::HashMap::new();
+    for entry in numstat.split('\0').filter(|entry| !entry.is_empty()) {
+        let mut fields = entry.splitn(3, '\t');
+        let (Some(added), Some(removed), Some(path)) = (fields.next(), fields.next(), fields.next()) else {
+            continue;
+        };
+        let lines = match (added.parse(), removed.parse()) {
+            (Ok(added), Ok(removed)) => Lines::Counted { added, removed },
+            _ => Lines::Binary,
+        };
+        counts.insert(path, lines);
+    }
+    for file in files {
+        if let Some(lines) = counts.get(file.path.as_str()) {
+            file.lines = *lines;
+        }
+    }
 }
 
 // ----------------------------------------------------------------- stashes
@@ -718,9 +760,13 @@ pub fn stash_files(stash: &Stash) -> Result<Vec<FileEntry>> {
     // A stash is a merge, which commit_files shows against its first parent.
     let mut files = commit_files(&stash.sha)?;
     if stash.has_untracked {
-        let untracked = run(&["ls-tree", "-r", "--name-only", "-z", &format!("{}^3", stash.sha)])?;
-        let untracked = untracked.split('\0').filter(|path| !path.is_empty());
-        files.extend(untracked.map(|path| FileEntry { status: '?', path: path.to_string() }));
+        // Its untracked files, as added to nothing.
+        let untracked = format!("{}^3", stash.sha);
+        let mut added = files_with_lines(&["diff", "--no-renames", "-z", EMPTY_TREE, &untracked, "--"])?;
+        for file in &mut added {
+            file.status = '?';
+        }
+        files.extend(added);
     }
     Ok(files)
 }
@@ -849,8 +895,7 @@ pub fn merge_base(a: &str, b: &str) -> Option<String> {
 }
 
 pub fn changed_files(a: &str, b: &str) -> Result<Vec<FileEntry>> {
-    let text = run(&["diff", "--name-status", "--no-renames", "-z", a, b, "--"])?;
-    Ok(parse_name_status(&text))
+    files_with_lines(&["diff", "--no-renames", "-z", a, b, "--"])
 }
 
 #[cfg(test)]
@@ -858,7 +903,7 @@ mod tests {
     use super::*;
 
     fn entry(status: char, path: &str) -> FileEntry {
-        FileEntry { status, path: path.to_string() }
+        FileEntry { status, path: path.to_string(), ..Default::default() }
     }
 
     #[test]
@@ -1019,5 +1064,22 @@ mod tests {
         let (old, new) = file_versions(&source);
         assert!(old.is_some_and(|text| text.contains("[package]")));
         assert!(new.is_some_and(|text| text.contains("[package]")));
+    }
+
+    #[test]
+    fn a_commit_s_files_come_with_their_lines() {
+        // The latest commit of gclic's own history.
+        let files = commit_files("HEAD").unwrap();
+        assert!(!files.is_empty());
+        assert!(files.iter().all(|file| file.lines != Lines::Unknown), "{files:?}");
+    }
+
+    #[test]
+    fn numstat_counts_lines_and_marks_binary_files() {
+        let mut files = vec![entry('M', "a.rs"), entry('A', "logo.png"), entry('M', "b.rs")];
+        add_lines(&mut files, "3\t1\ta.rs\0-\t-\tlogo.png\0");
+        assert_eq!(files[0].lines, Lines::Counted { added: 3, removed: 1 });
+        assert_eq!(files[1].lines, Lines::Binary);
+        assert_eq!(files[2].lines, Lines::Unknown);
     }
 }

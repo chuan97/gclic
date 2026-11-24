@@ -365,6 +365,9 @@ struct Expanded {
 enum Display {
     /// An index into `commits`.
     Commit(usize),
+    /// What an expanded commit changes in all, under it, which the cursor
+    /// passes over.
+    Summary(usize),
     /// A file of an expanded commit, as indexes into `commits` and its files.
     File { commit: usize, file: usize },
 }
@@ -793,6 +796,7 @@ impl GraphPanel {
                     *commit == self.selected && self.selected_file == Some(*file)
                 }
                 Display::Commit(index) => self.selected_file.is_none() && *index == self.selected,
+                Display::Summary(_) => false,
             })
             .unwrap_or(0);
 
@@ -801,18 +805,21 @@ impl GraphPanel {
         if self.selected_file.is_none()
             && let Some(expanded) = self.expanded_at(self.selected)
         {
-            let files = expanded.files.len();
-            self.scroll = ui::keep_visible(self.scroll, selected_line + files, height);
+            // Its summary, then its files.
+            let rows = 1 + expanded.files.len();
+            self.scroll = ui::keep_visible(self.scroll, selected_line + rows, height);
         }
         self.scroll = ui::keep_visible(self.scroll, selected_line, height);
 
+        let width = area.width as usize;
         let mut lines: Vec<Line> = display
             .iter()
             .skip(self.scroll)
             .take(height)
             .map(|row| match row {
                 Display::Commit(index) => self.commit_line(*index, focused),
-                Display::File { commit, file } => self.file_row_line(*commit, *file, focused),
+                Display::Summary(commit) => self.summary_line(*commit),
+                Display::File { commit, file } => self.file_row_line(*commit, *file, focused, width),
             })
             .collect();
         let at_end = self.scroll + lines.len() == display.len();
@@ -828,6 +835,7 @@ impl GraphPanel {
         for commit in 0..self.rows.len() {
             display.push(Display::Commit(commit));
             if let Some(expanded) = self.expanded_at(commit) {
+                display.push(Display::Summary(commit));
                 display.extend((0..expanded.files.len()).map(|file| Display::File { commit, file }));
             }
         }
@@ -881,20 +889,43 @@ impl GraphPanel {
     /// A file in the drop-down, with the graph's lines carrying on beside it.
     /// The files line up with their commit's message, or further right if
     /// lines pass beside them.
-    fn file_row_line(&self, commit: usize, file: usize, focused: bool) -> Line<'_> {
+    /// A file of an expanded commit, with the lines it adds and removes at
+    /// the right of the `width` columns, lined up with its neighbours'.
+    fn file_row_line(&self, commit: usize, file: usize, focused: bool, width: usize) -> Line<'_> {
         let Some(expanded) = self.expanded_at(commit) else {
             return Line::default();
         };
         let selected = commit == self.selected && self.selected_file == Some(file);
         let mut line = file_line(&expanded.files[file], selected, focused);
+        let mut spans = self.lines_below(commit);
+        spans.append(&mut line.spans);
+        line.spans = spans;
+        let widths = ui::count_widths(expanded.files.iter().map(|file| file.lines));
+        ui::with_right(line, ui::line_count_spans(expanded.files[file].lines, widths), width)
+    }
+
+    /// What an expanded commit changes in all, `+34 −41 · 2 files`, lined up
+    /// with its files' names.
+    fn summary_line(&self, commit: usize) -> Line<'_> {
+        let Some(expanded) = self.expanded_at(commit) else {
+            return Line::default();
+        };
+        let mut spans = self.lines_below(commit);
+        // Past the status letter, where the files' names start.
+        spans.push(Span::raw("   "));
+        spans.extend(ui::files_summary(&expanded.files));
+        Line::from(spans)
+    }
+
+    /// The graph's lines carrying on below a commit, then the gap to where
+    /// its message starts, for the rows under it.
+    fn lines_below(&self, commit: usize) -> Vec<Span<'_>> {
         let row = &self.rows[commit];
         let (below, message_at) = (&row.below[..drawn_width(&row.below)], drawn_width(&row.glyphs));
         let mut spans: Vec<Span> = below.iter().map(|g| self.glyph_span(g)).collect();
         spans.push(Span::raw(" ".repeat(message_at.saturating_sub(below.len()))));
         spans.push(Span::raw(GAP));
-        spans.append(&mut line.spans);
-        line.spans = spans;
-        line
+        spans
     }
 }
 
@@ -1252,7 +1283,7 @@ mod tests {
                 sha: sha.to_string(),
                 files: files
                     .iter()
-                    .map(|path| FileEntry { status: 'M', path: path.to_string() })
+                    .map(|path| FileEntry { status: 'M', path: path.to_string(), ..Default::default() })
                     .collect(),
             });
         }

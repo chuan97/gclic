@@ -158,6 +158,13 @@ impl ComparePanel {
         self.files.handle_key(key)
     }
 
+    /// `line`, then what the files change in all: `· +34 −41 · 2 files`.
+    fn with_summary<'a>(&self, mut line: Line<'a>) -> Line<'a> {
+        line.spans.push(Span::styled(" · ", Style::default().fg(ui::DIM)));
+        line.spans.extend(ui::files_summary(self.files.files()));
+        line
+    }
+
     pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
         let block = ui::panel(format!(" {} ", self.title()), focused);
         let inner = block.inner(area);
@@ -185,13 +192,13 @@ impl ComparePanel {
                         Span::raw(" "),
                         Span::styled(from.as_str(), bold),
                     ]),
-                    Line::styled(base, dim),
+                    self.with_summary(Line::styled(base, dim)),
                     Line::default(),
                 ]
             }
             Subject::Stash(stash) => vec![
                 Line::styled(stash.message.as_str(), bold),
-                Line::styled(format!("made on {} · {}", git::short(&stash.base), stash.age), dim),
+                self.with_summary(Line::styled(format!("made on {} · {}", git::short(&stash.base), stash.age), dim)),
                 Line::default(),
             ],
         };
@@ -208,9 +215,9 @@ mod tests {
     fn panel() -> ComparePanel {
         // Already in the order the list sorts files in.
         let files = vec![
-            FileEntry { status: 'M', path: "edited".to_string() },
-            FileEntry { status: 'D', path: "gone".to_string() },
-            FileEntry { status: 'A', path: "new".to_string() },
+            FileEntry { status: 'M', path: "edited".to_string(), ..Default::default() },
+            FileEntry { status: 'D', path: "gone".to_string(), ..Default::default() },
+            FileEntry { status: 'A', path: "new".to_string(), ..Default::default() },
         ];
         ComparePanel {
             subject: Subject::Refs {
@@ -266,8 +273,8 @@ mod tests {
             age: "2 hours ago".to_string(),
         };
         let files = vec![
-            FileEntry { status: 'M', path: "edited".to_string() },
-            FileEntry { status: '?', path: "new".to_string() },
+            FileEntry { status: 'M', path: "edited".to_string(), ..Default::default() },
+            FileEntry { status: '?', path: "new".to_string(), ..Default::default() },
         ];
         ComparePanel { files: FileList::stash(stash.sha.clone(), files), subject: Subject::Stash(stash) }
     }

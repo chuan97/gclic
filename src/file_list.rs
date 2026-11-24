@@ -2,7 +2,7 @@
 //! the file row shared with the other panels' flat lists.
 
 use crate::app::Action;
-use crate::git::{DiffSource, FileEntry};
+use crate::git::{DiffSource, FileEntry, Lines};
 use crate::ui;
 use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
@@ -182,6 +182,24 @@ impl FileList {
         }
     }
 
+    /// The files, in the order git listed them.
+    pub fn files(&self) -> &[FileEntry] {
+        &self.files
+    }
+
+    /// The lines a row's change adds and removes: a file's own, or for a
+    /// folder, those of every file in it.
+    fn row_lines(&self, row: &TreeRow) -> Lines {
+        match row {
+            TreeRow::File { index, .. } => self.files[*index].lines,
+            TreeRow::Folder { path, .. } => {
+                let inside = format!("{path}/");
+                let files = self.files.iter().filter(|file| file.path.starts_with(&inside));
+                ui::total_lines(files.map(|file| file.lines))
+            }
+        }
+    }
+
     fn folder_under_cursor(&self) -> Option<String> {
         match self.visible().get(self.cursor.index) {
             Some(TreeRow::Folder { path, .. }) => Some(path.clone()),
@@ -229,13 +247,19 @@ impl FileList {
             frame.render_widget(note, area);
             return;
         }
-        let lines: Vec<Line> = self
-            .visible()
+        let visible = self.visible();
+        // Each row's lines, a folder's being those of the files in it, put in
+        // a column on the right.
+        let counts: Vec<Lines> = visible.iter().map(|row| self.row_lines(row)).collect();
+        let widths = ui::count_widths(counts.iter().copied());
+        let width = area.width as usize;
+        let lines: Vec<Line> = visible
             .into_iter()
+            .zip(counts)
             .enumerate()
-            .map(|(row_number, row)| {
+            .map(|(row_number, (row, lines))| {
                 let selected = row_number == self.cursor.index;
-                match row {
+                let line = match row {
                     TreeRow::Folder { name, path, depth } => {
                         let arrow = if self.collapsed.contains(path) { '▶' } else { '▼' };
                         let indent = "  ".repeat(*depth);
@@ -247,7 +271,8 @@ impl FileList {
                         let indent = "  ".repeat(*depth);
                         styled_file_line(file, name_of(&file.path), None, indent, selected, focused)
                     }
-                }
+                };
+                ui::with_right(line, ui::line_count_spans(lines, widths), width)
             })
             .collect();
         let scroll = self.cursor.scroll_to(self.cursor.index, area.height as usize);
@@ -360,7 +385,7 @@ mod tests {
     use super::*;
 
     fn files(paths: &[&str]) -> Vec<FileEntry> {
-        paths.iter().map(|path| FileEntry { status: 'M', path: path.to_string() }).collect()
+        paths.iter().map(|path| FileEntry { status: 'M', path: path.to_string(), ..Default::default() }).collect()
     }
 
     /// The tree's rows as text, indented by depth.
