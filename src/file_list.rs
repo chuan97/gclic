@@ -247,17 +247,13 @@ impl FileList {
             frame.render_widget(note, area);
             return;
         }
-        let visible = self.visible();
-        // Each row's lines, a folder's being those of the files in it, put in
-        // a column on the right.
-        let counts: Vec<Lines> = visible.iter().map(|row| self.row_lines(row)).collect();
-        let widths = ui::count_widths(counts.iter().copied());
-        let width = area.width as usize;
-        let lines: Vec<Line> = visible
+        let scroll = self.cursor.scroll_to(self.cursor.index, area.height as usize);
+        // Each row with its lines, a folder's being those of the files in it.
+        let lines: Vec<Line> = self
+            .visible()
             .into_iter()
-            .zip(counts)
             .enumerate()
-            .map(|(row_number, (row, lines))| {
+            .map(|(row_number, row)| {
                 let selected = row_number == self.cursor.index;
                 let line = match row {
                     TreeRow::Folder { name, path, depth } => {
@@ -272,10 +268,9 @@ impl FileList {
                         styled_file_line(file, name_of(&file.path), None, indent, selected, focused)
                     }
                 };
-                ui::with_right(line, ui::line_count_spans(lines, widths), width)
+                ui::with_line_counts(line, self.row_lines(row))
             })
             .collect();
-        let scroll = self.cursor.scroll_to(self.cursor.index, area.height as usize);
         ui::render_lines(frame, area, lines.into_iter().skip(scroll).collect());
     }
 }

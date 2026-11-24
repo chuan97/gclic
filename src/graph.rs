@@ -811,7 +811,6 @@ impl GraphPanel {
         }
         self.scroll = ui::keep_visible(self.scroll, selected_line, height);
 
-        let width = area.width as usize;
         let mut lines: Vec<Line> = display
             .iter()
             .skip(self.scroll)
@@ -819,7 +818,7 @@ impl GraphPanel {
             .map(|row| match row {
                 Display::Commit(index) => self.commit_line(*index, focused),
                 Display::Summary(commit) => self.summary_line(*commit),
-                Display::File { commit, file } => self.file_row_line(*commit, *file, focused, width),
+                Display::File { commit, file } => self.file_row_line(*commit, *file, focused),
             })
             .collect();
         let at_end = self.scroll + lines.len() == display.len();
@@ -889,9 +888,8 @@ impl GraphPanel {
     /// A file in the drop-down, with the graph's lines carrying on beside it.
     /// The files line up with their commit's message, or further right if
     /// lines pass beside them.
-    /// A file of an expanded commit, with the lines it adds and removes at
-    /// the right of the `width` columns, lined up with its neighbours'.
-    fn file_row_line(&self, commit: usize, file: usize, focused: bool, width: usize) -> Line<'_> {
+    /// A file of an expanded commit, with the lines it adds and removes.
+    fn file_row_line(&self, commit: usize, file: usize, focused: bool) -> Line<'_> {
         let Some(expanded) = self.expanded_at(commit) else {
             return Line::default();
         };
@@ -900,8 +898,7 @@ impl GraphPanel {
         let mut spans = self.lines_below(commit);
         spans.append(&mut line.spans);
         line.spans = spans;
-        let widths = ui::count_widths(expanded.files.iter().map(|file| file.lines));
-        ui::with_right(line, ui::line_count_spans(expanded.files[file].lines, widths), width)
+        ui::with_line_counts(line, expanded.files[file].lines)
     }
 
     /// What an expanded commit changes in all, `+34 −41 · 2 files`, lined up
