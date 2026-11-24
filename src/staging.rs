@@ -37,8 +37,36 @@ impl StagingPanel {
         StagingPanel { status: Status::default(), operation: None, selected: 0, scroll: 0 }
     }
 
-    pub fn has_staged(&self) -> bool {
+    fn has_staged(&self) -> bool {
         !self.status.staged.is_empty()
+    }
+
+    /// The keys that do something now, for the status line. Enter's depends
+    /// on whether the selected file's diff is the one `shown`.
+    pub fn hints(&self, shown: Option<&DiffSource>) -> Vec<ui::Hint<'static>> {
+        let mut hints = Vec::new();
+        let source = self.selected_source();
+        match &source {
+            Some(DiffSource::Staged(_)) => hints.push(("space", "unstage")),
+            Some(DiffSource::Conflict(_)) => hints.push(("space", "mark resolved")),
+            Some(_) => hints.push(("space", "stage")),
+            None => {}
+        }
+        if source.is_some() {
+            hints.push(("a/A", "stage/unstage all"));
+        }
+        hints.extend(ui::enter_diff_hint(source, shown));
+        if self.can_restore() {
+            hints.push(("d", "restore"));
+        }
+        let (restore, delete) = self.discardable();
+        if !restore.is_empty() || !delete.is_empty() {
+            hints.push(("D", "discard all"));
+        }
+        if self.has_staged() {
+            hints.push(("c", "commit"));
+        }
+        hints
     }
 
     /// Each list with its files, in the order they're shown.
@@ -197,14 +225,14 @@ impl StagingPanel {
 
     /// Whether d can restore the selected file: a change not yet staged, other
     /// than a submodule, which restoring doesn't handle.
-    pub fn can_restore(&self) -> bool {
+    fn can_restore(&self) -> bool {
         matches!(self.selection(), Some((Section::Changes, entry)) if !is_folder(&entry.path))
     }
 
     /// What D would discard: as d does it, file by file, the changed files to
     /// restore and the untracked ones to delete. Submodules are left to git,
     /// and conflicts and staged changes aren't in the list.
-    pub fn discardable(&self) -> (Vec<String>, Vec<String>) {
+    fn discardable(&self) -> (Vec<String>, Vec<String>) {
         let files = self.status.unstaged.iter().filter(|entry| !is_folder(&entry.path));
         let (delete, restore): (Vec<&FileEntry>, Vec<&FileEntry>) = files.partition(|entry| entry.status == '?');
         let paths = |entries: Vec<&FileEntry>| entries.into_iter().map(|entry| entry.path.clone()).collect();

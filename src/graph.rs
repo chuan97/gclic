@@ -421,7 +421,7 @@ impl GraphPanel {
         self.commits.len() - self.stashes.len() == COMMIT_LIMIT
     }
 
-    pub fn is_on_stash(&self) -> bool {
+    fn is_on_stash(&self) -> bool {
         self.stash_at(self.selected).is_some()
     }
 
@@ -444,7 +444,7 @@ impl GraphPanel {
         result
     }
 
-    pub fn is_on_file(&self) -> bool {
+    fn is_on_file(&self) -> bool {
         self.selected_file.is_some()
     }
 
@@ -453,12 +453,54 @@ impl GraphPanel {
         self.commits.get(self.selected).map(|commit| commit.sha.as_str())
     }
 
-    pub fn is_selected_expanded(&self) -> bool {
+    fn is_selected_expanded(&self) -> bool {
         self.expanded_at(self.selected).is_some()
     }
 
-    pub fn has_expanded(&self) -> bool {
+    fn has_expanded(&self) -> bool {
         !self.expanded.is_empty()
+    }
+
+    /// The keys that do something now, for the status line. Some depend on
+    /// what's open on the right: the diff `shown`, and the commit whose
+    /// details show.
+    pub fn hints(&self, shown: Option<&DiffSource>, details: Option<&str>) -> Vec<ui::Hint<'static>> {
+        // i shows the selected commit's details, or moves into them if they show.
+        let details = if details.is_some() && details == self.selected_sha() {
+            ("i", "focus details")
+        } else {
+            ("i", "details")
+        };
+        let mut hints = Vec::new();
+        if self.is_on_file() {
+            hints.extend(ui::enter_diff_hint(self.selected_file_source(), shown));
+            if shown.is_none() {
+                hints.push(("n/N", "commit"));
+            }
+            hints.extend([details, ("y", "copy sha")]);
+            return hints;
+        }
+        hints.push(if self.is_selected_expanded() { ("enter", "collapse") } else { ("enter", "expand") });
+        if self.is_on_stash() {
+            hints.extend([("a", "apply"), ("p", "pop"), ("d", "drop")]);
+        }
+        hints.extend([details, ("c", "compare"), ("y", "copy sha"), ("b", "choose branches")]);
+        // Only worth it when open commits' files are in the way.
+        if self.has_expanded() && shown.is_none() {
+            hints.push(("n/N", "commit"));
+        }
+        hints
+    }
+
+    /// What esc does, if anything.
+    pub fn esc_hint(&self) -> Option<&'static str> {
+        if self.is_on_file() || self.is_selected_expanded() {
+            Some("collapse")
+        } else if self.has_expanded() {
+            Some("collapse all")
+        } else {
+            None
+        }
     }
 
     /// The drop-down of the commit at `index`, if it is open.

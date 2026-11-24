@@ -83,8 +83,23 @@ impl BranchesPanel {
     }
 
     /// Whether a search is filtering the list, typed or not.
-    pub fn is_searching(&self) -> bool {
+    fn is_searching(&self) -> bool {
         self.picker.is_searching()
+    }
+
+    /// The keys that do something now, for the status line. While typing a
+    /// search, every other key is typed into it, ? and q included, and the
+    /// search box says what esc does.
+    pub fn hints(&self) -> Vec<ui::Hint<'static>> {
+        if self.is_typing() {
+            return vec![("", "type to filter"), ("enter", "check out")];
+        }
+        vec![("enter", "check out"), ("c", "compare"), ("space", "remotes"), ("i", "search")]
+    }
+
+    /// What esc does, if anything.
+    pub fn esc_hint(&self) -> Option<&'static str> {
+        self.is_searching().then_some("clear search")
     }
 
     pub fn refresh(&mut self) -> Result<()> {
