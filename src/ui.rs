@@ -2,10 +2,11 @@
 
 use crate::git::DiffSource;
 use ratatui::Frame;
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders};
+use ratatui::widgets::{Block, BorderType, Borders, Clear};
 
 pub const SELECTED_BG: Color = Color::Indexed(237);
 pub const DIM: Color = Color::DarkGray;
@@ -20,6 +21,67 @@ pub fn selected(line: Line<'_>, selected: bool, focused: bool) -> Line<'_> {
         (true, true) => line.style(Style::default().bg(SELECTED_BG).add_modifier(Modifier::BOLD)),
     }
 }
+/// Scrolling through text taller than its area, as the help, a `:git`
+/// command's output and a commit's details do. How far it can go is known
+/// once drawn, from `fit`.
+#[derive(Default)]
+pub struct Scroll {
+    /// The first line shown.
+    offset: usize,
+    /// Rows of text on screen.
+    page: usize,
+    /// The furthest it can scroll.
+    max: usize,
+}
+
+impl Scroll {
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
+
+    /// Scrolls with j/k and the arrows, ctrl-d/u by half a page, and g/G to
+    /// the ends. False for any other key.
+    pub fn handle_key(&mut self, key: KeyEvent) -> bool {
+        let half_page = (self.page / 2).max(1);
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        match key.code {
+            KeyCode::Char('j') | KeyCode::Down => self.offset = (self.offset + 1).min(self.max),
+            KeyCode::Char('k') | KeyCode::Up => self.offset = self.offset.saturating_sub(1),
+            KeyCode::Char('d') if ctrl => self.offset = (self.offset + half_page).min(self.max),
+            KeyCode::Char('u') if ctrl => self.offset = self.offset.saturating_sub(half_page),
+            KeyCode::Char('g') => self.offset = 0,
+            KeyCode::Char('G') => self.offset = self.max,
+            _ => return false,
+        }
+        true
+    }
+
+    /// Takes the rows on screen, `page`, and the text's, `total`, as drawn,
+    /// keeping the offset within them.
+    pub fn fit(&mut self, page: usize, total: usize) {
+        self.page = page;
+        self.max = total.saturating_sub(page);
+        self.offset = self.offset.min(self.max);
+    }
+}
+
+/// A popup of text that scrolls when it doesn't fit, such as the help: drawn
+/// over what's at `popup`, in `block`, whose bottom border says how to
+/// scroll it and that any other key closes it.
+pub fn text_popup(frame: &mut Frame, popup: Rect, block: Block, lines: Vec<Line>, scroll: &mut Scroll) {
+    scroll.fit(popup.height.saturating_sub(2) as usize, lines.len());
+    let closing = if scroll.max > 0 {
+        key_hints(&[("j/k", "scroll"), ("any other key", "closes")], None)
+    } else {
+        key_hints(&[("any key", "closes")], None)
+    };
+    frame.render_widget(Clear, popup);
+    let block = block.title_bottom(closing);
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+    render_lines(frame, inner, lines.into_iter().skip(scroll.offset).collect());
+}
+
 /// The colour of keys wherever they're listed: popups and the help.
 pub const KEY: Color = Color::Yellow;
 

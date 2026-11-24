@@ -6,7 +6,7 @@ use crate::ui;
 use anyhow::Result;
 use ratatui::crossterm::cursor::{MoveTo, Show, position};
 use ratatui::crossterm::event::{
-    KeyCode, KeyEvent, KeyModifiers, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
+    KeyEvent, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
     PushKeyboardEnhancementFlags,
 };
 use ratatui::crossterm::execute;
@@ -16,7 +16,6 @@ use ratatui::crossterm::terminal::{
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::Clear;
 use ratatui::{DefaultTerminal, Frame};
 use std::io::{BufRead, Read};
 use std::process::{Child, Command, ExitStatus, Stdio};
@@ -636,9 +635,7 @@ pub struct OutputPopup {
     /// gclic's own advice, after the command's output, which is then dimmed
     /// to set the two apart.
     advice: Option<Advice>,
-    scroll: usize,
-    page: usize,
-    max_scroll: usize,
+    scroll: ui::Scroll,
 }
 
 impl OutputPopup {
@@ -655,7 +652,7 @@ impl OutputPopup {
         } else {
             suggested_command(&lines).map(Advice::Git)
         };
-        OutputPopup { title: format!(" {label} "), lines, failed, advice, scroll: 0, page: 0, max_scroll: 0 }
+        OutputPopup { title: format!(" {label} "), lines, failed, advice, scroll: ui::Scroll::default() }
     }
 
     /// The command its advice is to run, without the `:`, which the command
@@ -670,18 +667,7 @@ impl OutputPopup {
     /// Scrolls with the usual keys. Any other key closes the popup, which
     /// this returns false for.
     pub fn handle_key(&mut self, key: KeyEvent) -> bool {
-        let half_page = (self.page / 2).max(1);
-        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-        match key.code {
-            KeyCode::Char('j') | KeyCode::Down => self.scroll = (self.scroll + 1).min(self.max_scroll),
-            KeyCode::Char('k') | KeyCode::Up => self.scroll = self.scroll.saturating_sub(1),
-            KeyCode::Char('d') if ctrl => self.scroll = (self.scroll + half_page).min(self.max_scroll),
-            KeyCode::Char('u') if ctrl => self.scroll = self.scroll.saturating_sub(half_page),
-            KeyCode::Char('g') => self.scroll = 0,
-            KeyCode::Char('G') => self.scroll = self.max_scroll,
-            _ => return false,
-        }
-        true
+        self.scroll.handle_key(key)
     }
 
     /// The lines to show: the output, and after it any advice.
@@ -710,24 +696,12 @@ impl OutputPopup {
         let widest = lines.iter().map(Line::width).max().unwrap_or(0);
         let width = (widest.max(self.title.chars().count() + 4) as u16 + 2).clamp(40, area.width.saturating_sub(4).max(1));
         let height = (lines.len() as u16 + 2).min(area.height.saturating_sub(2));
-        self.page = height.saturating_sub(2) as usize;
-        self.max_scroll = lines.len().saturating_sub(self.page);
-        self.scroll = self.scroll.min(self.max_scroll);
-        let closing = if self.max_scroll > 0 {
-            ui::key_hints(&[("j/k", "scroll"), ("any other key", "closes")], None)
-        } else {
-            ui::key_hints(&[("any key", "closes")], None)
-        };
-
         let popup = ui::centered(area, width, height);
-        frame.render_widget(Clear, popup);
-        let mut block = ui::panel(self.title.clone(), true).title_bottom(closing);
+        let mut block = ui::panel(self.title.clone(), true);
         if self.failed {
             block = block.border_style(Style::default().fg(Color::Red));
         }
-        let inner = block.inner(popup);
-        frame.render_widget(block, popup);
-        ui::render_lines(frame, inner, lines.into_iter().skip(self.scroll).collect());
+        ui::text_popup(frame, popup, block, lines, &mut self.scroll);
     }
 }
 

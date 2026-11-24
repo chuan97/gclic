@@ -3,7 +3,7 @@
 use crate::git::{self, CommitDetails};
 use crate::ui;
 use ratatui::Frame;
-use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::crossterm::event::KeyEvent;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
@@ -11,16 +11,12 @@ use ratatui::widgets::{Paragraph, Wrap};
 
 pub struct DetailsPane {
     details: CommitDetails,
-    scroll: usize,
-    /// Rows of text on screen, known once drawn.
-    page: usize,
-    /// The furthest it can scroll, also known once drawn.
-    max_scroll: usize,
+    scroll: ui::Scroll,
 }
 
 impl DetailsPane {
     pub fn new(details: CommitDetails) -> DetailsPane {
-        DetailsPane { details, scroll: 0, page: 0, max_scroll: 0 }
+        DetailsPane { details, scroll: ui::Scroll::default() }
     }
 
     pub fn sha(&self) -> &str {
@@ -28,26 +24,11 @@ impl DetailsPane {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
-        let half_page = (self.page / 2).max(1);
-        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-        match key.code {
-            KeyCode::Char('d') if ctrl => {
-                self.scroll = (self.scroll + half_page).min(self.max_scroll);
-            }
-            KeyCode::Char('u') if ctrl => self.scroll = self.scroll.saturating_sub(half_page),
-            KeyCode::Char('j') | KeyCode::Down => {
-                self.scroll = (self.scroll + 1).min(self.max_scroll);
-            }
-            KeyCode::Char('k') | KeyCode::Up => self.scroll = self.scroll.saturating_sub(1),
-            KeyCode::Char('g') => self.scroll = 0,
-            KeyCode::Char('G') => self.scroll = self.max_scroll,
-            _ => {}
-        }
+        self.scroll.handle_key(key);
     }
 
-    fn lines(&self) -> Vec<Line<'_>> {
+    fn lines(details: &CommitDetails) -> Vec<Line<'_>> {
         let label = Style::default().fg(ui::DIM);
-        let details = &self.details;
         let mut lines = vec![
             Line::from(vec![Span::styled("sha    ", label), Span::raw(details.sha.as_str())]),
             Line::from(vec![Span::styled("author ", label), Span::raw(details.author.as_str())]),
@@ -60,12 +41,12 @@ impl DetailsPane {
     }
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
-        let paragraph = Paragraph::new(self.lines()).wrap(Wrap { trim: false });
+        let paragraph = Paragraph::new(DetailsPane::lines(&self.details)).wrap(Wrap { trim: false });
         // Borders take a row or column on each side.
         let total = paragraph.line_count(area.width.saturating_sub(2));
         let page = area.height.saturating_sub(2) as usize;
-        let max_scroll = total.saturating_sub(page);
-        let scroll = self.scroll.min(max_scroll);
+        self.scroll.fit(page, total);
+        let scroll = self.scroll.offset();
 
         let short_sha = git::short(&self.details.sha);
         let position = if total > page {
@@ -75,10 +56,6 @@ impl DetailsPane {
         };
         let block = ui::panel(format!(" Commit {short_sha}{position} "), focused);
         frame.render_widget(paragraph.block(block).scroll((scroll as u16, 0)), area);
-
-        self.page = page;
-        self.max_scroll = max_scroll;
-        self.scroll = scroll;
     }
 }
 
@@ -86,6 +63,7 @@ impl DetailsPane {
 mod tests {
     use super::*;
     use ratatui::Terminal;
+    use ratatui::crossterm::event::KeyCode;
     use ratatui::backend::TestBackend;
 
     fn popup(message: &str) -> DetailsPane {
@@ -112,13 +90,13 @@ mod tests {
         let mut popup = popup(&vec!["line"; 50].join("\n"));
         draw(&mut popup, 100, 14);
         press(&mut popup, 'k');
-        assert_eq!(popup.scroll, 0);
+        assert_eq!(popup.scroll.offset(), 0);
 
         press(&mut popup, 'G');
         draw(&mut popup, 100, 14);
         press(&mut popup, 'j');
         draw(&mut popup, 100, 14);
-        assert_eq!(popup.scroll, 54 - 12);
+        assert_eq!(popup.scroll.offset(), 54 - 12);
     }
 
     #[test]
@@ -128,7 +106,7 @@ mod tests {
         draw(&mut popup, 42, 14);
         press(&mut popup, 'G');
         draw(&mut popup, 42, 14);
-        assert!(popup.scroll > 4, "scroll was {}", popup.scroll);
+        assert!(popup.scroll.offset() > 4, "scroll was {}", popup.scroll.offset());
     }
 
     #[test]
@@ -137,7 +115,7 @@ mod tests {
         draw(&mut popup, 100, 30);
         press(&mut popup, 'j');
         draw(&mut popup, 100, 30);
-        assert_eq!(popup.scroll, 0);
+        assert_eq!(popup.scroll.offset(), 0);
     }
 
     #[test]
