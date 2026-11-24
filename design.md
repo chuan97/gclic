@@ -96,7 +96,8 @@ Dependencies: `ratatui` (with crossterm), `anyhow`, and `syntect`, with its pure
 
 ### Concurrency
 
-- **The worker thread** (`worker.rs`) does the slow reads: the 500 ms auto-refresh poll (the refs fingerprint, `git status`, the open diff), which carries on under popups, as they only cover part of the screen, and syntax highlighting. The UI hands it jobs through a small queue and picks up results from a channel every 30 ms, so keys never wait for it. The screen is drawn only when something changed, a key, a result, a command or fetch ending, and at least once a second.
+- **The worker thread** (`worker.rs`) does the slow reads: the auto-refresh poll (the refs fingerprint, `git status`, the open diff), which carries on under popups, as they only cover part of the screen, and syntax highlighting. The UI hands it jobs through a small queue and picks up results from a channel every 30 ms, so keys never wait for it. The screen is drawn only when something changed: a key, a result, a command or fetch ending, or the fetch note's "10s ago" moving on.
+- **Refreshing by key presses:** each poll starts a few git processes, about 30–50 ms of CPU, so gclic polls every second while in use and every 10 s once no key has been pressed for 30 s, and the first key after that polls at once. Idle, gclic and its git processes take about 0.5–0.7% of a core, a minute's fetch included, down from 7–11% polling every 500 ms (#68, #77).
 - **Only reads happen on it.** Anything that changes the repo, and the full refresh after it, stays on the UI thread, in order, so a change shows at once.
 - **Stale results are dropped:** each full refresh bumps a generation counter, and a poll asked for before the latest refresh is ignored. Colours only apply to the exact diff text they were made from.
 - **Short-lived parallelism** with `std::thread::scope`: the panes' refreshes, the graph's log and unpushed check, a poll's git calls, a comparison's refresh, and the two file versions read for highlighting all run at once.
@@ -156,7 +157,7 @@ The measuring scripts lived in the git-ignored `target/bench/`. `docs/screenshot
 - **Push, pull and fetch:** one command each with nothing to see. They need the network, can ask for credentials, and lead towards a complete client.
 - **Switching worktrees inside gclic:** your shell and editor would stay in the old folder. The model is one terminal tab and editor window per worktree, which is how VS Code does it too, a window per folder.
 - **A three-way merge editor:** resolving is for an editor. gclic shows the conflict and opens it in one. VS Code's merge editor works as `git mergetool`.
-- **Refreshing on terminal focus:** at 500 ms polling on the worker it adds nothing noticeable.
+- **Refreshing on terminal focus,** and polling less out of focus: past refreshing by key presses it saves a few tenths of a percent, and support varies, Neovim's terminal included. Its gain would be a screen that's current the moment you come back, rather than on the first key (#77).
 - **Manual pane resizing, a vim-style cursor in diffs, a fallback for terminals without the bead characters, a quick first highlighting pass, showing a diff3 base:** each deferred until it's actually missed.
 
 ## Notes for the rewrite

@@ -54,6 +54,13 @@ fn h_and_l_still_move_on_the_repo_tab_with_a_comparison_kept() {
 }
 
 #[test]
+fn the_repo_is_read_often_while_in_use_and_rarely_when_idle() {
+    assert_eq!(refresh_every(Duration::ZERO), REFRESH_IN_USE);
+    assert_eq!(refresh_every(IDLE_AFTER - Duration::from_millis(1)), REFRESH_IN_USE);
+    assert_eq!(refresh_every(IDLE_AFTER), REFRESH_IDLE);
+}
+
+#[test]
 fn hints_show_keys_in_the_key_colour() {
     let spans = hint_spans(&[("space", "stage"), ("a/A", "stage/unstage all"), ("", "type to filter")]);
     let text: Vec<(&str, Option<Color>)> = spans.iter().map(|s| (s.content.as_ref(), s.style.fg)).collect();
