@@ -34,8 +34,6 @@ impl App {
         self.render_modal(frame);
     }
 
-    /// A line in the repo's colour across the top, to tell apart repos open
-    /// side by side.
     /// The repo's colour, as a line across the top ending in the repo's
     /// folder and name, as Neovim's bar shows them with gclic's plugin.
     pub(super) fn render_accent_bar(&self, frame: &mut Frame, area: Rect) {
@@ -195,8 +193,6 @@ pub(super) fn render_empty_compare(frame: &mut Frame, area: Rect, focused: bool)
     frame.render_widget(line, inner);
 }
 
-/// The line at the top, `width` wide, with a column of margin either side,
-/// as the tab bar has.
 /// The colour bar in `width` columns: its line, and the folder and name after
 /// it, the folder shortened or left out where there's no room for it, and
 /// the name too, so that at least a short line shows. A column of margin at

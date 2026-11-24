@@ -468,9 +468,9 @@ impl App {
         *self = fresh;
     }
 
-    /// Opens the focused file in Zed, which comes to the front, while gclic
-    /// carries on. It opens at the diff's active line, or at the file's first
-    /// change without a diff. History opens the file as it is now, so the line
+    /// Opens the focused file in the user's editor, or in the Neovim gclic runs
+    /// in, while gclic carries on. It opens at the diff's active line, or at
+    /// the file's first change without a diff. History opens the file as it is now, so the line
     /// may have moved since.
     pub(super) fn open_in_editor(&mut self) {
         let Some(source) = self.focused_file() else {

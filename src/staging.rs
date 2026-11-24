@@ -133,10 +133,6 @@ impl StagingPanel {
         })
     }
 
-    /// Replaces the file lists, keeping the selection on the same file if it
-    /// is still there. If not (it was just staged, say) the selection stays at
-    /// the same position in its section, so pressing the stage key repeatedly
-    /// walks down the list.
     /// The pane's title, which says when a merge or the like is under way, as
     /// that's when conflicts turn up here.
     pub fn title(&self) -> String {
@@ -146,6 +142,10 @@ impl StagingPanel {
         }
     }
 
+    /// Replaces the file lists, keeping the selection on the same file if it
+    /// is still there. If not (it was just staged, say) the selection stays at
+    /// the same position in its section, so pressing the stage key repeatedly
+    /// walks down the list.
     pub fn set_status(&mut self, status: Status) {
         // Reading a few file names, so cheap enough for every refresh.
         self.operation = git::operation_in_progress();
