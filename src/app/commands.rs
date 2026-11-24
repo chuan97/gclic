@@ -213,62 +213,17 @@ impl App {
     /// minute on or off, for the session.
     pub(super) fn fetch_command(&mut self, setting: &str) {
         match setting {
-            "" if self.fetching.is_some() => self.message = "Already fetching".to_string(),
-            "" => self.start_fetch(),
+            "" if self.fetcher.is_fetching() => self.message = "Already fetching".to_string(),
+            "" => self.fetcher.start(),
             "on" => {
-                self.auto_fetch = true;
+                self.fetcher.auto = true;
                 self.message = "Fetching every minute".to_string();
             }
             "off" => {
-                self.auto_fetch = false;
+                self.fetcher.auto = false;
                 self.message = "Not fetching any more, until :fetch on".to_string();
             }
             _ => self.message = "Try :fetch, :fetch on or :fetch off".to_string(),
-        }
-    }
-
-    /// Fetches the remotes the branches track, on a thread of its own, as it
-    /// can take seconds, which would hold up the worker's refreshes.
-    pub(super) fn start_fetch(&mut self) {
-        let (send, receive) = mpsc::channel();
-        thread::spawn(move || {
-            let _ = send.send(git::background_fetch(&git::tracked_remotes()));
-        });
-        self.fetching = Some(receive);
-        self.fetch_started = Some(Instant::now());
-    }
-
-    /// Picks up a fetch that has ended, and starts the next when it's due. A
-    /// fetch that brought anything moves the remote refs, which the next poll
-    /// sees, refreshing everything.
-    pub(super) fn keep_fetching(&mut self) {
-        if let Some(fetching) = &self.fetching {
-            match fetching.try_recv() {
-                Ok(result) => {
-                    self.fetched = Some(result.map(|()| Instant::now()).map_err(|error| error.to_string()));
-                    self.fetching = None;
-                }
-                Err(TryRecvError::Empty) => {}
-                Err(TryRecvError::Disconnected) => {
-                    self.fetched = Some(Err("the fetch crashed".to_string()));
-                    self.fetching = None;
-                }
-            }
-        }
-        let due = self.fetch_started.is_none_or(|started| started.elapsed() >= FETCH_EVERY);
-        if self.auto_fetch && self.fetching.is_none() && due {
-            self.start_fetch();
-        }
-    }
-
-    /// What the Branches title says about fetching: how long ago it last
-    /// worked, or that it failed. Nothing before the first fetch ends.
-    pub(super) fn fetch_note(&self) -> Option<String> {
-        match &self.fetched {
-            None if self.fetching.is_some() => Some("fetching…".to_string()),
-            None => None,
-            Some(Ok(finished)) => Some(fetched_ago(finished.elapsed())),
-            Some(Err(_)) => Some("fetch failed".to_string()),
         }
     }
 
@@ -359,7 +314,7 @@ impl App {
             fresh.start_in_background("nvim", editor::cd_nvim(&address, repo));
         }
         fresh.split = self.split;
-        fresh.auto_fetch = self.auto_fetch;
+        fresh.fetcher.auto = self.fetcher.auto;
         // A command still running carries on, and its result shows here.
         fresh.running = self.running.take();
         fresh.follow = self.follow.take();
@@ -417,17 +372,6 @@ impl App {
             }
             Err(error) => self.modal = Modal::Error(format!("Couldn't run {name}: {error}")),
         }
-    }
-}
-
-/// How long ago, in minutes or hours, or under a minute in steps of ten
-/// seconds, so it doesn't tick away at the edge of the eye.
-pub(super) fn fetched_ago(elapsed: Duration) -> String {
-    match elapsed.as_secs() {
-        0..10 => "fetched just now".to_string(),
-        seconds @ 10..60 => format!("fetched {}s ago", seconds / 10 * 10),
-        seconds @ 60..3600 => format!("fetched {}m ago", seconds / 60),
-        seconds => format!("fetched {}h ago", seconds / 3600),
     }
 }
 

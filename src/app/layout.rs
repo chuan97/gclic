@@ -134,7 +134,7 @@ impl App {
             Constraint::Min(0),
         ])
         .areas(area);
-        let note = self.fetch_note();
+        let note = self.fetcher.note();
         self.branches.render(frame, branches, self.view.focused(Pane::Branches), note.as_deref());
         self.staging.render(frame, changes, self.view.focused(Pane::Changes));
         self.graph.render(frame, graph, self.view.focused(Pane::Graph));
