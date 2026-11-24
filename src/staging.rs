@@ -338,7 +338,7 @@ mod tests {
     fn entries(paths: &[&str]) -> Vec<FileEntry> {
         paths
             .iter()
-            .map(|path| FileEntry { status: 'M', path: path.to_string() })
+            .map(|path| FileEntry { status: 'M', path: path.to_string(), ..Default::default() })
             .collect()
     }
 
@@ -383,7 +383,7 @@ mod tests {
     }
 
     fn conflicts(paths: &[&str]) -> Vec<FileEntry> {
-        paths.iter().map(|path| FileEntry { status: 'U', path: path.to_string() }).collect()
+        paths.iter().map(|path| FileEntry { status: 'U', path: path.to_string(), ..Default::default() }).collect()
     }
 
     #[test]

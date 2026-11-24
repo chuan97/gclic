@@ -1,6 +1,6 @@
 //! Small drawing helpers shared by the panels.
 
-use crate::git::DiffSource;
+use crate::git::{DiffSource, FileEntry, Lines};
 use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
@@ -21,6 +21,75 @@ pub fn selected(line: Line<'_>, selected: bool, focused: bool) -> Line<'_> {
         (true, true) => line.style(Style::default().bg(SELECTED_BG).add_modifier(Modifier::BOLD)),
     }
 }
+/// What a set of changes adds and removes together: the files' counts summed,
+/// binary only if they all are, and unknown if none is known.
+pub fn total_lines(lines: impl IntoIterator<Item = Lines>) -> Lines {
+    let mut total = Lines::Unknown;
+    for lines in lines {
+        total = match (total, lines) {
+            (Lines::Counted { added, removed }, Lines::Counted { added: a, removed: r }) => {
+                Lines::Counted { added: added + a, removed: removed + r }
+            }
+            (Lines::Counted { .. }, _) => total,
+            (_, Lines::Counted { .. }) => lines,
+            (Lines::Binary, _) | (_, Lines::Binary) => Lines::Binary,
+            _ => Lines::Unknown,
+        };
+    }
+    total
+}
+
+/// How wide the added and removed counts are at their widest, so that counts
+/// in a column line up.
+pub fn count_widths(lines: impl IntoIterator<Item = Lines>) -> (usize, usize) {
+    let mut widths = (0, 0);
+    for lines in lines {
+        if let Lines::Counted { added, removed } = lines {
+            widths.0 = widths.0.max(added.to_string().len());
+            widths.1 = widths.1.max(removed.to_string().len());
+        }
+    }
+    widths
+}
+
+/// `+12 −3`, in green and red, each padded to `widths`. Nothing for lines not
+/// known, and "binary" for a binary file.
+pub fn line_count_spans(lines: Lines, widths: (usize, usize)) -> Vec<Span<'static>> {
+    match lines {
+        Lines::Unknown => Vec::new(),
+        Lines::Binary => vec![Span::styled("binary", Style::default().fg(DIM))],
+        Lines::Counted { added, removed } => vec![
+            Span::styled(format!("+{added:<0$}", widths.0), Style::default().fg(Color::Green)),
+            Span::raw(" "),
+            Span::styled(format!("−{removed:<0$}", widths.1), Style::default().fg(Color::Red)),
+        ],
+    }
+}
+
+/// A list of files' changes in all: `+34 −41 · 2 files`.
+pub fn files_summary(files: &[FileEntry]) -> Vec<Span<'static>> {
+    let mut spans = line_count_spans(total_lines(files.iter().map(|file| file.lines)), (0, 0));
+    if !spans.is_empty() {
+        spans.push(Span::styled(" · ", Style::default().fg(DIM)));
+    }
+    let noun = if files.len() == 1 { "file" } else { "files" };
+    spans.push(Span::styled(format!("{} {noun}", files.len()), Style::default().fg(DIM)));
+    spans
+}
+
+/// `line` with `right` at the right edge of `width` columns, or straight
+/// after it, a space apart, where there's no room.
+pub fn with_right<'a>(mut line: Line<'a>, right: Vec<Span<'a>>, width: usize) -> Line<'a> {
+    if right.is_empty() {
+        return line;
+    }
+    let right_width: usize = right.iter().map(Span::width).sum();
+    let gap = width.saturating_sub(line.width() + right_width + 1).max(1);
+    line.spans.push(Span::raw(" ".repeat(gap)));
+    line.spans.extend(right);
+    line
+}
+
 /// `gg` to go to the top, the same everywhere: the first g waits, kept in
 /// `pending`, and the second comes back as the one g to handle. Any other key
 /// after a g is dropped. None while there's no key to handle yet. The panes
@@ -350,6 +419,26 @@ mod tests {
             assert!(cursor.handle_key(KeyEvent::from(KeyCode::Char(key)), 0));
             assert_eq!(cursor.index, 0);
         }
+    }
+
+    #[test]
+    fn totals_add_the_known_counts_and_ignore_the_rest() {
+        let counted = |added, removed| Lines::Counted { added, removed };
+        assert_eq!(total_lines([counted(3, 1), Lines::Binary, counted(2, 0)]), counted(5, 1));
+        assert_eq!(total_lines([Lines::Binary, Lines::Unknown]), Lines::Binary);
+        assert_eq!(total_lines([]), Lines::Unknown);
+    }
+
+    #[test]
+    fn counts_line_up_at_the_right_edge() {
+        let text = |line: Line| line.spans.iter().map(|span| span.content.to_string()).collect::<String>();
+        let widths = count_widths([Lines::Counted { added: 12, removed: 3 }, Lines::Counted { added: 4, removed: 100 }]);
+        let spans = line_count_spans(Lines::Counted { added: 4, removed: 3 }, widths);
+        // A column of margin at the end, as at the start.
+        assert_eq!(text(with_right(Line::raw(" M a.rs"), spans, 20)), " M a.rs    +4  −3  ");
+        // No room: right after, a space apart.
+        let spans = line_count_spans(Lines::Binary, widths);
+        assert_eq!(text(with_right(Line::raw(" M a.rs"), spans, 5)), " M a.rs binary");
     }
 
     #[test]
