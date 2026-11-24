@@ -47,14 +47,19 @@ use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-const AUTO_REFRESH: Duration = Duration::from_millis(500);
+/// How often the repo is read again for changes made outside gclic, such
+/// as in an editor or another terminal: often while it's in use, and rarely
+/// once no key has been pressed for a while, as each time starts a few git
+/// processes. The first key after that reads it again at once.
+const REFRESH_IN_USE: Duration = Duration::from_secs(1);
+const REFRESH_IDLE: Duration = Duration::from_secs(10);
+const IDLE_AFTER: Duration = Duration::from_secs(30);
+/// How often to check whether Neovim moved to another repo, which only
+/// reads a file's date.
+const FOLLOW_EVERY: Duration = Duration::from_millis(500);
 /// How long to wait for a key before checking on the worker's results. Short,
 /// so colours appear soon after they're ready.
 const KEY_WAIT: Duration = Duration::from_millis(30);
-/// The screen is drawn when something changed, and at least this often, for
-/// what ticks on its own, such as "fetched 10s ago", and for anything that
-/// changed without saying so.
-const REDRAW_EVERY: Duration = Duration::from_secs(1);
 const GLOBAL_HINTS: [ui::Hint; 3] = [(":", "command"), ("?", "help"), ("q", "quit")];
 /// The keys shown on `:stash`'s list.
 const STASH_PICKER_KEYS: [(&str, &str); 6] =
@@ -356,27 +361,41 @@ impl App {
     }
 
     pub fn run(mut self, terminal: &mut DefaultTerminal) -> Result<()> {
-        // Drawing is most of what gclic does while idle, so it only draws
-        // after a key, a resize, or news from the worker, a command or a fetch.
+        // gclic only draws after a key, a resize, or news from the worker, a
+        // command or a fetch, and when the fetch note's "10s ago" moves on.
         let mut changed = true;
-        let mut drawn = Instant::now();
+        let mut fetch_note = None;
+        let mut last_key = Instant::now();
+        let mut followed = Instant::now();
         while !self.should_quit {
             changed |= self.take_worker_results();
             changed |= self.take_command_result();
             changed |= self.fetcher.keep_fetching();
             self.branches.search_sha();
-            if changed || drawn.elapsed() >= REDRAW_EVERY {
+            let note = self.fetcher.note();
+            changed |= note != fetch_note;
+            if changed {
                 terminal.draw(|frame| self.render(frame))?;
                 changed = false;
-                drawn = Instant::now();
+                fetch_note = note;
             }
             if event::poll(KEY_WAIT)? {
+                let was_idle = last_key.elapsed() >= IDLE_AFTER;
                 self.handle_waiting_keys(terminal)?;
                 changed = true;
+                last_key = Instant::now();
+                // Back after a while away: what changed meanwhile shows now.
+                if was_idle {
+                    self.poll_repo();
+                }
+            }
+            if followed.elapsed() >= FOLLOW_EVERY {
+                changed |= self.follow_neovim();
+                followed = Instant::now();
             }
             // Popups included, as they only cover part of the screen.
-            if self.last_refresh.elapsed() >= AUTO_REFRESH {
-                self.auto_refresh();
+            if self.last_refresh.elapsed() >= refresh_every(last_key.elapsed()) {
+                self.poll_repo();
             }
         }
         Ok(())
@@ -777,6 +796,11 @@ impl App {
         }
     }
 
+}
+
+/// How often to read the repo again, after `idle` without a key.
+fn refresh_every(idle: Duration) -> Duration {
+    if idle < IDLE_AFTER { REFRESH_IN_USE } else { REFRESH_IDLE }
 }
 
 /// On Linux the copy may only last while gclic runs, as there the program

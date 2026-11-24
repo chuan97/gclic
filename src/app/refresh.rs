@@ -44,9 +44,19 @@ impl App {
 
     /// Picks up what happened outside the app, such as git commands in another
     /// terminal. The worker does the reading, and `apply_poll` the rest.
-    pub(super) fn auto_refresh(&mut self) {
+    pub(super) fn poll_repo(&mut self) {
+        let diff = self.view.diff().map(DiffPane::view);
+        self.worker.poll(self.generation, diff);
+        self.last_refresh = Instant::now();
+    }
+
+    /// Switches to the repo Neovim moved to, if it did, and collects the
+    /// editor commands that have finished, so none linger: checks cheap
+    /// enough to make often, as they start no git. Whether it switched.
+    pub(super) fn follow_neovim(&mut self) -> bool {
+        self.editor_commands.retain_mut(|child| matches!(child.try_wait(), Ok(None)));
         // Not while a popup or the command line is open, which switching
-        // repos would throw away: it waits for the next poll after it.
+        // repos would throw away: it waits for the next check after it.
         if matches!(self.modal, Modal::None)
             && let Ok(current) = std::env::current_dir()
             && let Some(root) = self.follow.as_mut().and_then(|follow| follow.moved_to(&current))
@@ -54,12 +64,9 @@ impl App {
             self.switch_repo(&root, false);
             let name = root.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
             self.message = format!("Followed Neovim to {name}");
+            return true;
         }
-        let diff = self.view.diff().map(DiffPane::view);
-        self.worker.poll(self.generation, diff);
-        // Collects the editor commands that have finished, so none linger.
-        self.editor_commands.retain_mut(|child| matches!(child.try_wait(), Ok(None)));
-        self.last_refresh = Instant::now();
+        false
     }
 
     /// Takes in the worker's results. Whether there were any.
