@@ -15,7 +15,8 @@ struct Section {
     keys: &'static [(&'static str, &'static str)],
 }
 
-/// The left column: the panes on the left of the screen.
+/// The left column: the panes on the left of the screen, and the stashes and
+/// commands started from them.
 const LEFT: &[Section] = &[
     Section {
         title: "Everywhere",
@@ -66,6 +67,20 @@ const LEFT: &[Section] = &[
             ("esc", "collapse"),
         ],
     },
+    Section {
+        title: "Stashes",
+        keys: &[
+            (":stash", "list them; :git stash makes one"),
+            ("enter", "a stash's files and their diffs"),
+            ("a p", "apply it, or apply and drop it"),
+            ("d", "drop it, after asking"),
+            ("esc", "from its files, back to the list"),
+        ],
+    },
+    Section {
+        title: "Commands",
+        keys: &crate::commands::COMMAND_HELP,
+    },
 ];
 
 /// The right column: the right side of the screen, and the popups.
@@ -91,20 +106,6 @@ const RIGHT: &[Section] = &[
             ("d", "delete it, after asking"),
             ("y", "copy them all, ready to paste"),
             ("D", "clear the review, after asking"),
-        ],
-    },
-    Section {
-        title: "Commands",
-        keys: &crate::commands::COMMAND_HELP,
-    },
-    Section {
-        title: "Stashes",
-        keys: &[
-            (":stash", "list them; :git stash makes one"),
-            ("enter", "a stash's files and their diffs"),
-            ("a p", "apply it, or apply and drop it"),
-            ("d", "drop it, after asking"),
-            ("esc", "from its files, back to the list"),
         ],
     },
     Section {
