@@ -21,6 +21,57 @@ pub fn selected(line: Line<'_>, selected: bool, focused: bool) -> Line<'_> {
         (true, true) => line.style(Style::default().bg(SELECTED_BG).add_modifier(Modifier::BOLD)),
     }
 }
+/// A cursor in a list, and the scroll that keeps it on screen. j and k wrap
+/// around the ends, and g and G go to them, the same in every list.
+#[derive(Default)]
+pub struct Cursor {
+    pub index: usize,
+    /// The first row drawn.
+    scroll: usize,
+}
+
+impl Cursor {
+    pub fn down(&mut self, len: usize) {
+        self.index = next_index(self.index, len);
+    }
+
+    pub fn up(&mut self, len: usize) {
+        self.index = previous_index(self.index, len);
+    }
+
+    /// Moves with j/k and the arrows, wrapping, and g/G, in a list of `len`.
+    /// Whether the key was one of them.
+    pub fn handle_key(&mut self, key: KeyEvent, len: usize) -> bool {
+        match key.code {
+            KeyCode::Char('j') | KeyCode::Down => self.down(len),
+            KeyCode::Char('k') | KeyCode::Up => self.up(len),
+            KeyCode::Char('g') => self.index = 0,
+            KeyCode::Char('G') => self.index = len.saturating_sub(1),
+            _ => return false,
+        }
+        true
+    }
+
+    /// Keeps the cursor in a list of `len`, as after it got shorter.
+    pub fn clamp(&mut self, len: usize) {
+        self.index = self.index.min(len.saturating_sub(1));
+    }
+
+    /// The first row to draw, `height` rows high, for the cursor's `row` to
+    /// show, scrolling as little as possible. The row differs from the index
+    /// where headings go between the items.
+    pub fn scroll_to(&mut self, row: usize, height: usize) -> usize {
+        self.scroll = keep_visible(self.scroll, row, height);
+        self.scroll
+    }
+
+    /// The positions one key away in a list of `len`, most likely first: the
+    /// cursor's, then where j, k, g and G lead. Used to prefetch diffs.
+    pub fn one_key_away(&self, len: usize) -> Vec<usize> {
+        one_key_away(self.index, len)
+    }
+}
+
 /// Scrolling through text taller than its area, as the help, a `:git`
 /// command's output and a commit's details do. How far it can go is known
 /// once drawn, from `fit`.
@@ -154,7 +205,7 @@ pub fn previous_index(index: usize, len: usize) -> usize {
 
 /// The positions one key away in a list of `len`, most likely first: the
 /// selected one, then where j, k, g and G lead. Used to prefetch diffs.
-pub fn one_key_away(selected: usize, len: usize) -> Vec<usize> {
+fn one_key_away(selected: usize, len: usize) -> Vec<usize> {
     if len == 0 {
         return Vec::new();
     }
@@ -278,5 +329,24 @@ mod tests {
     fn moving_in_an_empty_list_stays_at_zero() {
         assert_eq!(next_index(0, 0), 0);
         assert_eq!(previous_index(0, 0), 0);
+        let mut cursor = Cursor::default();
+        for key in ['j', 'k', 'g', 'G'] {
+            assert!(cursor.handle_key(KeyEvent::from(KeyCode::Char(key)), 0));
+            assert_eq!(cursor.index, 0);
+        }
+    }
+
+    #[test]
+    fn a_cursor_wraps_with_j_and_k_and_takes_only_its_keys() {
+        let mut cursor = Cursor::default();
+        let mut press = |key| cursor.handle_key(KeyEvent::from(key), 3);
+        assert!(press(KeyCode::Char('k')));
+        assert!(press(KeyCode::Down));
+        assert!(!press(KeyCode::Enter));
+        assert_eq!(cursor.index, 0);
+        cursor.handle_key(KeyEvent::from(KeyCode::Char('G')), 3);
+        assert_eq!(cursor.index, 2);
+        cursor.clamp(1);
+        assert_eq!(cursor.index, 0);
     }
 }

@@ -58,8 +58,8 @@ pub struct Picker {
     query: String,
     /// Indexes into `items` that match the query, best first.
     matches: Vec<usize>,
-    selected: usize,
-    scroll: usize,
+    /// Over `matches`.
+    cursor: ui::Cursor,
     /// Multi-select mode: Space ticks names, Enter returns the ticked ones.
     multi: bool,
     ticked: Vec<String>,
@@ -83,8 +83,7 @@ impl Picker {
             items,
             query: String::new(),
             matches,
-            selected: 0,
-            scroll: 0,
+            cursor: ui::Cursor::default(),
             multi: false,
             ticked: Vec::new(),
             free_text: false,
@@ -159,7 +158,7 @@ impl Picker {
 
     /// The position of the cursor in `matched_items`.
     pub fn selected_row(&self) -> usize {
-        self.selected
+        self.cursor.index
     }
 
     /// Replaces the list, keeping the cursor on the same item if it's still there.
@@ -176,13 +175,12 @@ impl Picker {
     pub fn select_item(&mut self, item: &str) {
         let position = self.matches.iter().position(|&i| self.items[i] == item);
         if let Some(position) = position {
-            self.selected = position;
+            self.cursor.index = position;
         }
     }
 
     fn update_matches(&mut self) {
-        self.selected = 0;
-        self.scroll = 0;
+        self.cursor = ui::Cursor::default();
         if let Some(only) = &self.only {
             self.matches = (0..self.items.len()).filter(|&i| only.contains(&self.items[i])).collect();
             return;
@@ -199,12 +197,11 @@ impl Picker {
     }
 
     pub fn highlighted(&self) -> Option<&String> {
-        self.items.get(*self.matches.get(self.selected)?)
+        self.items.get(*self.matches.get(self.cursor.index)?)
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Outcome {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-        let last = self.matches.len().saturating_sub(1);
         match key.code {
             KeyCode::Enter => return self.submit(),
             KeyCode::Down => self.move_down(),
@@ -229,21 +226,20 @@ impl Picker {
             KeyCode::Char('i') => self.typing = true,
             KeyCode::Char('a') if self.multi => self.tick_all_matches(),
             KeyCode::Char('A') if self.multi => self.untick_all_matches(),
-            KeyCode::Char('j') => self.move_down(),
-            KeyCode::Char('k') => self.move_up(),
-            KeyCode::Char('g') => self.selected = 0,
-            KeyCode::Char('G') => self.selected = last,
+            KeyCode::Char('j' | 'k' | 'g' | 'G') => {
+                self.cursor.handle_key(key, self.matches.len());
+            }
             _ => {}
         }
         Outcome::Open
     }
 
     fn move_down(&mut self) {
-        self.selected = ui::next_index(self.selected, self.matches.len());
+        self.cursor.down(self.matches.len());
     }
 
     fn move_up(&mut self) {
-        self.selected = ui::previous_index(self.selected, self.matches.len());
+        self.cursor.up(self.matches.len());
     }
 
     fn submit(&self) -> Outcome {
@@ -297,13 +293,13 @@ impl Picker {
         self.render_query(frame, Rect { height: 1, ..inner });
 
         let list = Rect { y: inner.y + 1, height: inner.height - 1, ..inner };
-        self.scroll = ui::keep_visible(self.scroll, self.selected, list.height as usize);
+        let scroll = self.cursor.scroll_to(self.cursor.index, list.height as usize);
         let lines: Vec<Line> = self
             .matches
             .iter()
             .enumerate()
-            .skip(self.scroll)
-            .map(|(row, &item)| self.item_line(&self.items[item], row == self.selected))
+            .skip(scroll)
+            .map(|(row, &item)| self.item_line(&self.items[item], row == self.cursor.index))
             .collect();
         if lines.is_empty() {
             let note = if self.free_text {
@@ -447,7 +443,7 @@ mod tests {
         let items = vec!["a".to_string(), "b".to_string(), "jk".to_string()];
         let mut picker = Picker::single("t", items);
         picker.handle_key(key(KeyCode::Char('j')));
-        assert_eq!((picker.selected, picker.query.as_str()), (1, ""));
+        assert_eq!((picker.cursor.index, picker.query.as_str()), (1, ""));
 
         type_text(&mut picker, "jk");
         assert_eq!(picker.query, "jk");
