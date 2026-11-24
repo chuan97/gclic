@@ -4,11 +4,10 @@
 
 use crate::ui;
 use ratatui::Frame;
-use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::crossterm::event::KeyEvent;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::Clear;
 
 /// A group of keys and what each does, under a heading.
 struct Section {
@@ -170,32 +169,18 @@ const GAP: usize = 4;
 pub struct HelpPopup {
     /// The section for where help was opened from, which gets a marker.
     here: &'static str,
-    scroll: usize,
-    /// Rows of text on screen and the furthest scroll, known once drawn.
-    page: usize,
-    max_scroll: usize,
+    scroll: ui::Scroll,
 }
 
 impl HelpPopup {
     pub fn new(here: &'static str) -> HelpPopup {
-        HelpPopup { here, scroll: 0, page: 0, max_scroll: 0 }
+        HelpPopup { here, scroll: ui::Scroll::default() }
     }
 
     /// Scrolls with the usual keys. Any other key closes the popup, which
     /// this returns false for.
     pub fn handle_key(&mut self, key: KeyEvent) -> bool {
-        let half_page = (self.page / 2).max(1);
-        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-        match key.code {
-            KeyCode::Char('j') | KeyCode::Down => self.scroll = (self.scroll + 1).min(self.max_scroll),
-            KeyCode::Char('k') | KeyCode::Up => self.scroll = self.scroll.saturating_sub(1),
-            KeyCode::Char('d') if ctrl => self.scroll = (self.scroll + half_page).min(self.max_scroll),
-            KeyCode::Char('u') if ctrl => self.scroll = self.scroll.saturating_sub(half_page),
-            KeyCode::Char('g') => self.scroll = 0,
-            KeyCode::Char('G') => self.scroll = self.max_scroll,
-            _ => return false,
-        }
-        true
+        self.scroll.handle_key(key)
     }
 
     /// A column of sections as lines, each as wide as `width`.
@@ -258,22 +243,8 @@ impl HelpPopup {
         let width = ((2 * column_width + GAP + 2) as u16).min(area.width.saturating_sub(2));
         let lines = self.lines(width.saturating_sub(2) as usize);
         let height = (lines.len() as u16 + 2).min(area.height.saturating_sub(2));
-
-        self.page = height.saturating_sub(2) as usize;
-        self.max_scroll = lines.len().saturating_sub(self.page);
-        self.scroll = self.scroll.min(self.max_scroll);
-        let closing = if self.max_scroll > 0 {
-            ui::key_hints(&[("j/k", "scroll"), ("any other key", "closes")], None)
-        } else {
-            ui::key_hints(&[("any key", "closes")], None)
-        };
-
         let popup = ui::centered(area, width, height);
-        frame.render_widget(Clear, popup);
-        let block = ui::panel(" Help ".to_string(), true).title_bottom(closing);
-        let inner = block.inner(popup);
-        frame.render_widget(block, popup);
-        ui::render_lines(frame, inner, lines.into_iter().skip(self.scroll).collect());
+        ui::text_popup(frame, popup, ui::panel(" Help ".to_string(), true), lines, &mut self.scroll);
     }
 }
 
@@ -295,6 +266,7 @@ fn widest(sections: &[Section]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ratatui::crossterm::event::KeyCode;
 
     fn text(line: &Line) -> String {
         line.spans.iter().map(|span| span.content.as_ref()).collect()
@@ -344,12 +316,12 @@ mod tests {
     #[test]
     fn scrolling_stops_at_the_ends_and_other_keys_close() {
         let mut help = HelpPopup::new("Graph");
-        help.max_scroll = 3;
+        help.scroll.fit(10, 13);
         assert!(help.handle_key(KeyEvent::from(KeyCode::Char('k'))));
-        assert_eq!(help.scroll, 0);
+        assert_eq!(help.scroll.offset(), 0);
         help.handle_key(KeyEvent::from(KeyCode::Char('G')));
         help.handle_key(KeyEvent::from(KeyCode::Char('j')));
-        assert_eq!(help.scroll, 3);
+        assert_eq!(help.scroll.offset(), 3);
         assert!(!help.handle_key(KeyEvent::from(KeyCode::Esc)));
     }
 }
