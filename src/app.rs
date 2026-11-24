@@ -468,6 +468,14 @@ impl App {
 
     pub fn handle_key(&mut self, key: KeyEvent) {
         self.message.clear();
+        // gg goes to the top in the popups too, as in the panes, where
+        // handle_main_key waits for the second g.
+        let takes_gg = matches!(&self.modal, Modal::Help(_) | Modal::Output(_))
+            || matches!(&self.modal, Modal::Picker(picker, _) if !picker.is_typing());
+        let key = if takes_gg { ui::gg(&mut self.pending_g, key) } else { Some(key) };
+        let Some(key) = key else {
+            return;
+        };
 
         // Taken out of `self` so that handlers can freely use `self` while
         // holding it. Handlers put back whatever should stay open.

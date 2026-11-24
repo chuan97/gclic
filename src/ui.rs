@@ -21,6 +21,22 @@ pub fn selected(line: Line<'_>, selected: bool, focused: bool) -> Line<'_> {
         (true, true) => line.style(Style::default().bg(SELECTED_BG).add_modifier(Modifier::BOLD)),
     }
 }
+/// `gg` to go to the top, the same everywhere: the first g waits, kept in
+/// `pending`, and the second comes back as the one g to handle. Any other key
+/// after a g is dropped. None while there's no key to handle yet. The panes
+/// wait for theirs in the app, as their g also starts gc and gC.
+pub fn gg(pending: &mut bool, key: KeyEvent) -> Option<KeyEvent> {
+    let is_g = key.code == KeyCode::Char('g') && key.modifiers.is_empty();
+    if std::mem::take(pending) {
+        return is_g.then_some(key);
+    }
+    if is_g {
+        *pending = true;
+        return None;
+    }
+    Some(key)
+}
+
 /// A cursor in a list, and the scroll that keeps it on screen. j and k wrap
 /// around the ends, and g and G go to them, the same in every list.
 #[derive(Default)]
@@ -334,6 +350,19 @@ mod tests {
             assert!(cursor.handle_key(KeyEvent::from(KeyCode::Char(key)), 0));
             assert_eq!(cursor.index, 0);
         }
+    }
+
+    #[test]
+    fn gg_waits_for_the_second_g_and_drops_anything_else() {
+        let mut pending = false;
+        let g = KeyEvent::from(KeyCode::Char('g'));
+        let j = KeyEvent::from(KeyCode::Char('j'));
+        assert_eq!(gg(&mut pending, j), Some(j));
+        assert_eq!(gg(&mut pending, g), None);
+        assert_eq!(gg(&mut pending, g), Some(g));
+        assert_eq!(gg(&mut pending, g), None);
+        assert_eq!(gg(&mut pending, j), None);
+        assert!(!pending);
     }
 
     #[test]
