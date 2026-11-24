@@ -54,6 +54,29 @@ fn h_and_l_still_move_on_the_repo_tab_with_a_comparison_kept() {
 }
 
 #[test]
+fn gg_goes_to_the_top_of_a_picker_and_a_single_g_does_not() {
+    let mut app = App::new(PathBuf::new());
+    app.focus_left(Pane::Graph);
+    press(&mut app, KeyCode::Char('b'));
+    let row = |app: &App| match &app.modal {
+        Modal::Picker(picker, _) => picker.selected_row(),
+        _ => panic!("the branches picker should be open"),
+    };
+    press(&mut app, KeyCode::Char('G'));
+    let last = row(&app);
+    assert!(last > 0);
+    press(&mut app, KeyCode::Char('g'));
+    assert_eq!(row(&app), last);
+    press(&mut app, KeyCode::Char('g'));
+    assert_eq!(row(&app), 0);
+    // A g, then anything else, does nothing.
+    press(&mut app, KeyCode::Char('G'));
+    press(&mut app, KeyCode::Char('g'));
+    press(&mut app, KeyCode::Char('k'));
+    assert_eq!(row(&app), last);
+}
+
+#[test]
 fn the_repo_is_read_often_while_in_use_and_rarely_when_idle() {
     assert_eq!(refresh_every(Duration::ZERO), REFRESH_IN_USE);
     assert_eq!(refresh_every(IDLE_AFTER - Duration::from_millis(1)), REFRESH_IN_USE);

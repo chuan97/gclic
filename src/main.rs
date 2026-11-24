@@ -101,6 +101,8 @@ fn choose_repo(terminal: &mut DefaultTerminal, mut root: PathBuf) -> Result<Opti
         (Picker::single(&title, labels).with_hints(&repos::PICKER_KEYS), repos)
     };
     let (mut picker, mut repos) = finder(&root);
+    // gg goes to the top, as everywhere: the first g waits for the second.
+    let mut pending_g = false;
     loop {
         terminal.draw(|frame| picker.render(frame, frame.area()))?;
         let Event::Key(key) = event::read()? else {
@@ -112,6 +114,10 @@ fn choose_repo(terminal: &mut DefaultTerminal, mut root: PathBuf) -> Result<Opti
         if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
             return Ok(None);
         }
+        let key = if picker.is_typing() { Some(key) } else { ui::gg(&mut pending_g, key) };
+        let Some(key) = key else {
+            continue;
+        };
         match picker.handle_key(key) {
             Outcome::Open => {}
             Outcome::Cancelled => return Ok(None),
