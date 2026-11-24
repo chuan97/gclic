@@ -10,6 +10,7 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
+use std::collections::HashMap;
 
 /// Also read by the app, which writes key marks right after it.
 pub const TITLE: &str = " Branches ";
@@ -22,6 +23,17 @@ struct RemoteRow {
     is_upstream: bool,
 }
 
+/// What a branch's row shows besides its name, worked out when the branches
+/// are read rather than each time the list is drawn.
+struct RowInfo {
+    is_remote: bool,
+    ahead_behind: Option<(usize, usize)>,
+    /// How many remote branches belong to it, for a local branch.
+    remotes: usize,
+    /// The other worktree it's checked out in, if any.
+    elsewhere: Option<String>,
+}
+
 /// A local branch opened to show its remotes.
 struct DropDown {
     branch: String,
@@ -31,6 +43,8 @@ struct DropDown {
 pub struct BranchesPanel {
     picker: Picker,
     branches: Vec<Branch>,
+    /// Each branch's row, by name.
+    rows: HashMap<String, RowInfo>,
     /// The checked-out branch. None on a detached HEAD.
     current: Option<String>,
     drop_downs: Vec<DropDown>,
@@ -71,6 +85,7 @@ impl BranchesPanel {
         BranchesPanel {
             picker: Picker::single("", Vec::new()),
             branches: Vec::new(),
+            rows: HashMap::new(),
             current: None,
             drop_downs: Vec::new(),
             scroll: 0,
@@ -103,7 +118,7 @@ impl BranchesPanel {
     }
 
     pub fn refresh(&mut self) -> Result<()> {
-        self.branches = git::branches()?;
+        self.set_branches(git::branches()?);
         self.picker.set_items(listed_names(&self.branches));
         // The branches may have moved, so a searched sha is looked up again.
         self.sha_search = None;
@@ -127,6 +142,20 @@ impl BranchesPanel {
     /// Every branch, local and remote, as of the last refresh.
     pub fn list(&self) -> &[Branch] {
         &self.branches
+    }
+
+    fn set_branches(&mut self, branches: Vec<Branch>) {
+        self.branches = branches;
+        self.rows = self.branches.iter().map(|branch| (branch.name.clone(), self.row_info(branch))).collect();
+    }
+
+    fn row_info(&self, branch: &Branch) -> RowInfo {
+        RowInfo {
+            is_remote: branch.is_remote,
+            ahead_behind: branch.ahead_behind,
+            remotes: if branch.is_remote { 0 } else { remotes_of(&self.branches, branch).len() },
+            elsewhere: other_worktree(branch),
+        }
     }
 
     fn find(&self, name: &str) -> Option<&Branch> {
@@ -246,7 +275,13 @@ impl BranchesPanel {
             return 1;
         }
         let search = usize::from(self.picker.is_searching());
-        (self.list_lines(true).0.len().max(1) + search) as u16
+        let rows: usize = self.picker.matched_items().into_iter().map(|name| 1 + self.drop_down_rows(name)).sum();
+        (rows.max(1) + search) as u16
+    }
+
+    /// How many remotes `name`'s drop-down shows, if it's open.
+    fn drop_down_rows(&self, name: &str) -> usize {
+        self.drop_downs.iter().find(|d| d.branch == name).map_or(0, |d| d.remotes.len())
     }
 
     /// `note` goes at the right of the title: when the remotes were fetched.
@@ -317,8 +352,8 @@ impl BranchesPanel {
 
     fn branch_line(&self, name: &str, selected: bool) -> Line<'static> {
         let is_current = self.current.as_deref() == Some(name);
-        let branch = self.find(name);
-        let is_remote = branch.is_some_and(|branch| branch.is_remote);
+        let row = self.rows.get(name);
+        let is_remote = row.is_some_and(|row| row.is_remote);
         let style = if is_current {
             Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
         } else if is_remote {
@@ -331,7 +366,7 @@ impl BranchesPanel {
         let mut spans = vec![Span::styled(format!("{mark}{name}"), style)];
         // How it stands against its upstream, only when it's not in sync, so
         // that unpushed work shows at a glance, even with the pane collapsed.
-        if let Some((ahead, behind)) = branch.and_then(|branch| branch.ahead_behind) {
+        if let Some((ahead, behind)) = row.and_then(|row| row.ahead_behind) {
             if ahead > 0 {
                 spans.push(Span::styled(format!("  ↑{ahead}"), Style::default().fg(Color::Green)));
             }
@@ -340,15 +375,12 @@ impl BranchesPanel {
                 spans.push(Span::styled(format!("{gap}↓{behind}"), Style::default().fg(Color::Red)));
             }
         }
-        let count = match branch {
-            Some(local) if !local.is_remote => remotes_of(&self.branches, local).len(),
-            _ => 0,
-        };
+        let count = row.map_or(0, |row| row.remotes);
         if count > 0 {
             let noun = if count == 1 { "remote" } else { "remotes" };
             spans.push(Span::styled(format!("  {count} {noun}"), Style::default().fg(ui::DIM)));
         }
-        if let Some(elsewhere) = branch.and_then(other_worktree) {
+        if let Some(elsewhere) = row.and_then(|row| row.elsewhere.as_ref()) {
             spans.push(Span::styled(format!("  in {elsewhere}"), Style::default().fg(ui::DIM)));
         }
 
@@ -410,7 +442,7 @@ mod tests {
 
     fn panel_on(names: &[&str], current: &str, highlighted: &str) -> BranchesPanel {
         let mut panel = BranchesPanel::new();
-        panel.branches = names.iter().map(|name| local(name, None)).collect();
+        panel.set_branches(names.iter().map(|name| local(name, None)).collect());
         panel.picker.set_items(names.iter().map(|name| name.to_string()).collect());
         panel.picker.select_item(highlighted);
         panel.current = Some(current.to_string());
@@ -425,15 +457,15 @@ mod tests {
     #[test]
     fn a_branch_line_shows_how_it_stands_against_its_upstream() {
         let mut panel = panel_on(&["main"], "main", "main");
-        panel.branches[0].ahead_behind = Some((2, 0));
-        assert_eq!(line_text(&panel, "main"), "* main  ↑2");
-        panel.branches[0].ahead_behind = Some((2, 1));
-        assert_eq!(line_text(&panel, "main"), "* main  ↑2 ↓1");
-        panel.branches[0].ahead_behind = Some((0, 3));
-        assert_eq!(line_text(&panel, "main"), "* main  ↓3");
+        let mut line = |ahead_behind| {
+            panel.set_branches(vec![Branch { ahead_behind: Some(ahead_behind), ..local("main", None) }]);
+            line_text(&panel, "main")
+        };
+        assert_eq!(line((2, 0)), "* main  ↑2");
+        assert_eq!(line((2, 1)), "* main  ↑2 ↓1");
+        assert_eq!(line((0, 3)), "* main  ↓3");
         // In sync, nothing is added.
-        panel.branches[0].ahead_behind = Some((0, 0));
-        assert_eq!(line_text(&panel, "main"), "* main");
+        assert_eq!(line((0, 0)), "* main");
     }
 
     #[test]
