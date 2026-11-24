@@ -662,7 +662,7 @@ impl GraphPanel {
     }
 
     /// Walks down through a commit's files, if it is expanded, then on to the
-    /// next commit. Past the last row, it wraps to the top.
+    /// next commit. On the last row, it stays.
     fn move_down(&mut self) {
         if let Some(expanded) = self.expanded_at(self.selected) {
             let next = self.selected_file.map_or(0, |file| file + 1);
@@ -671,12 +671,15 @@ impl GraphPanel {
                 return;
             }
         }
-        self.select_commit(ui::next_index(self.selected, self.commits.len()));
+        self.next_commit();
     }
 
-    /// Jumps to the next commit, past the files of an expanded one.
+    /// Jumps to the next commit, past the files of an expanded one. On the
+    /// last commit, it stays.
     fn next_commit(&mut self) {
-        self.select_commit(ui::next_index(self.selected, self.commits.len()));
+        if self.selected + 1 < self.commits.len() {
+            self.select_commit(self.selected + 1);
+        }
     }
 
     /// Jumps to the previous commit, past the files of an expanded one. From
@@ -685,8 +688,8 @@ impl GraphPanel {
     fn previous_commit(&mut self) {
         if self.selected_file.is_some() {
             self.selected_file = None;
-        } else {
-            self.select_commit(ui::previous_index(self.selected, self.commits.len()));
+        } else if self.selected > 0 {
+            self.select_commit(self.selected - 1);
         }
     }
 
@@ -696,7 +699,11 @@ impl GraphPanel {
             self.selected_file = file.checked_sub(1);
             return;
         }
-        self.select_commit(ui::previous_index(self.selected, self.commits.len()));
+        // On the first row, it stays.
+        if self.selected == 0 {
+            return;
+        }
+        self.select_commit(self.selected - 1);
         self.selected_file = self
             .expanded_at(self.selected)
             .and_then(|expanded| expanded.files.len().checked_sub(1));
@@ -1407,26 +1414,23 @@ mod tests {
     }
 
     #[test]
-    fn moving_past_the_last_row_wraps_to_the_top() {
+    fn moving_down_on_the_last_row_stays() {
         let mut panel = panel_with_expanded(&["a", "b"], &["b"], &["x"]);
         panel.selected = 1;
         panel.selected_file = Some(0);
         panel.move_down();
+        assert_eq!((panel.selected, panel.selected_file), (1, Some(0)));
+        panel.next_commit();
+        assert_eq!((panel.selected, panel.selected_file), (1, Some(0)));
+    }
+
+    #[test]
+    fn moving_up_on_the_first_row_stays() {
+        let mut panel = panel_with_expanded(&["a", "b"], &["a"], &["x"]);
+        panel.move_up();
         assert_eq!((panel.selected, panel.selected_file), (0, None));
-    }
-
-    #[test]
-    fn moving_above_the_top_wraps_to_the_last_row() {
-        let mut panel = panel_with_expanded(&["a", "b"], &[], &[]);
-        panel.move_up();
-        assert_eq!((panel.selected, panel.selected_file), (1, None));
-    }
-
-    #[test]
-    fn moving_above_the_top_enters_an_expanded_last_commit_from_below() {
-        let mut panel = panel_with_expanded(&["a", "b"], &["b"], &["x", "y"]);
-        panel.move_up();
-        assert_eq!((panel.selected, panel.selected_file), (1, Some(1)));
+        panel.previous_commit();
+        assert_eq!((panel.selected, panel.selected_file), (0, None));
     }
 
     #[test]

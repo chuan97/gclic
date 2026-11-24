@@ -109,8 +109,9 @@ pub fn gg(pending: &mut bool, key: KeyEvent) -> Option<KeyEvent> {
     Some(key)
 }
 
-/// A cursor in a list, and the scroll that keeps it on screen. j and k wrap
-/// around the ends, and g and G go to them, the same in every list.
+/// A cursor in a list, and the scroll that keeps it on screen. j and k stop
+/// at the ends, as in a Vim buffer, and gg and G go to them, the same in
+/// every list.
 #[derive(Default)]
 pub struct Cursor {
     pub index: usize,
@@ -120,19 +121,20 @@ pub struct Cursor {
 
 impl Cursor {
     pub fn down(&mut self, len: usize) {
-        self.index = next_index(self.index, len);
+        self.index = below(self.index, len);
     }
 
-    pub fn up(&mut self, len: usize) {
-        self.index = previous_index(self.index, len);
+    pub fn up(&mut self) {
+        self.index = above(self.index);
     }
 
-    /// Moves with j/k and the arrows, wrapping, and g/G, in a list of `len`.
+    /// Moves with j/k and the arrows, stopping at the ends, and g/G, in a list
+    /// of `len`.
     /// Whether the key was one of them.
     pub fn handle_key(&mut self, key: KeyEvent, len: usize) -> bool {
         match key.code {
             KeyCode::Char('j') | KeyCode::Down => self.down(len),
-            KeyCode::Char('k') | KeyCode::Up => self.up(len),
+            KeyCode::Char('k') | KeyCode::Up => self.up(),
             KeyCode::Char('g') => self.index = 0,
             KeyCode::Char('G') => self.index = len.saturating_sub(1),
             _ => return false,
@@ -281,12 +283,24 @@ pub fn keep_visible(scroll: usize, selected: usize, height: usize) -> usize {
     }
 }
 
-/// The next position in a list of `len` items, wrapping past the end to the start.
+/// The position after `index` in a list of `len`, staying on the last.
+pub fn below(index: usize, len: usize) -> usize {
+    (index + 1).min(len.saturating_sub(1))
+}
+
+/// The position before `index`, staying on the first.
+pub fn above(index: usize) -> usize {
+    index.saturating_sub(1)
+}
+
+/// The next position among `len` places to cycle through, as panes and
+/// tabs are, wrapping past the end to the start.
 pub fn next_index(index: usize, len: usize) -> usize {
     if index + 1 >= len { 0 } else { index + 1 }
 }
 
-/// The previous position in a list of `len` items, wrapping past the start to the end.
+/// The previous position among `len` places to cycle through, wrapping past
+/// the start to the end.
 pub fn previous_index(index: usize, len: usize) -> usize {
     if index == 0 { len.saturating_sub(1) } else { index - 1 }
 }
@@ -298,7 +312,7 @@ fn one_key_away(selected: usize, len: usize) -> Vec<usize> {
         return Vec::new();
     }
     let mut positions = Vec::new();
-    let candidates = [selected, next_index(selected, len), previous_index(selected, len), 0, len - 1];
+    let candidates = [selected, below(selected, len), above(selected), 0, len - 1];
     for position in candidates {
         if !positions.contains(&position) {
             positions.push(position);
@@ -382,7 +396,16 @@ mod tests {
 
 
     #[test]
-    fn moving_wraps_around_both_ends() {
+    fn moving_in_a_list_stops_at_both_ends() {
+        assert_eq!(below(1, 3), 2);
+        assert_eq!(below(2, 3), 2);
+        assert_eq!(above(1), 0);
+        assert_eq!(above(0), 0);
+        assert_eq!(below(0, 0), 0);
+    }
+
+    #[test]
+    fn cycling_wraps_around_both_ends() {
         assert_eq!(next_index(0, 3), 1);
         assert_eq!(next_index(2, 3), 0);
         assert_eq!(previous_index(1, 3), 0);
@@ -466,13 +489,16 @@ mod tests {
     }
 
     #[test]
-    fn a_cursor_wraps_with_j_and_k_and_takes_only_its_keys() {
+    fn a_cursor_stops_at_the_ends_and_takes_only_its_keys() {
         let mut cursor = Cursor::default();
-        let mut press = |key| cursor.handle_key(KeyEvent::from(key), 3);
-        assert!(press(KeyCode::Char('k')));
-        assert!(press(KeyCode::Down));
-        assert!(!press(KeyCode::Enter));
-        assert_eq!(cursor.index, 0);
+        let press = |cursor: &mut Cursor, key| cursor.handle_key(KeyEvent::from(key), 3);
+        assert!(press(&mut cursor, KeyCode::Char('k')));
+        assert!(press(&mut cursor, KeyCode::Down));
+        assert!(!press(&mut cursor, KeyCode::Enter));
+        assert_eq!(cursor.index, 1);
+        press(&mut cursor, KeyCode::Char('j'));
+        press(&mut cursor, KeyCode::Char('j'));
+        assert_eq!(cursor.index, 2);
         cursor.handle_key(KeyEvent::from(KeyCode::Char('G')), 3);
         assert_eq!(cursor.index, 2);
         cursor.clamp(1);
