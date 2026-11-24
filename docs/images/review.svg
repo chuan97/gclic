@@ -161,14 +161,14 @@
 <line x1="4.1" y1="110.5" x2="4.1" y2="102.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="4.1" y1="110.5" x2="4.1" y2="119.0" stroke="#8abeb7" stroke-width="1.2"/>
 <rect x="8.2" y="102" width="16.4" height="17" fill="#3a3a3a" shape-rendering="crispEdges"/>
 <rect x="24.6" y="102" width="139.4" height="17" fill="#3a3a3a" shape-rendering="crispEdges"/>
-<text x="24.6" y="114.6" fill="#666666" textLength="139.4" lengthAdjust="spacingAndGlyphs">skycast/api.py:37</text>
+<text x="24.6" y="114.6" fill="#666666" font-weight="bold" textLength="139.4" lengthAdjust="spacingAndGlyphs">skycast/api.py:37</text>
 <rect x="164.0" y="102" width="221.4" height="17" fill="#3a3a3a" shape-rendering="crispEdges"/>
-<text x="180.4" y="114.6" fill="#ffffff" textLength="32.8" lengthAdjust="spacingAndGlyphs">Does</text>
-<text x="221.4" y="114.6" fill="#ffffff" textLength="24.6" lengthAdjust="spacingAndGlyphs">the</text>
-<text x="254.2" y="114.6" fill="#ffffff" textLength="24.6" lengthAdjust="spacingAndGlyphs">API</text>
-<text x="287.0" y="114.6" fill="#ffffff" textLength="32.8" lengthAdjust="spacingAndGlyphs">take</text>
-<text x="328.0" y="114.6" fill="#ffffff" textLength="24.6" lengthAdjust="spacingAndGlyphs">24?</text>
-<text x="360.8" y="114.6" fill="#ffffff" textLength="24.6" lengthAdjust="spacingAndGlyphs">Its</text>
+<text x="180.4" y="114.6" fill="#ffffff" font-weight="bold" textLength="32.8" lengthAdjust="spacingAndGlyphs">Does</text>
+<text x="221.4" y="114.6" fill="#ffffff" font-weight="bold" textLength="24.6" lengthAdjust="spacingAndGlyphs">the</text>
+<text x="254.2" y="114.6" fill="#ffffff" font-weight="bold" textLength="24.6" lengthAdjust="spacingAndGlyphs">API</text>
+<text x="287.0" y="114.6" fill="#ffffff" font-weight="bold" textLength="32.8" lengthAdjust="spacingAndGlyphs">take</text>
+<text x="328.0" y="114.6" fill="#ffffff" font-weight="bold" textLength="24.6" lengthAdjust="spacingAndGlyphs">24?</text>
+<text x="360.8" y="114.6" fill="#ffffff" font-weight="bold" textLength="24.6" lengthAdjust="spacingAndGlyphs">Its</text>
 <line x1="389.5" y1="110.5" x2="389.5" y2="102.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="389.5" y1="110.5" x2="389.5" y2="119.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="397.7" y1="110.5" x2="397.7" y2="102.0" stroke="#666666" stroke-width="1.2"/><line x1="397.7" y1="110.5" x2="397.7" y2="119.0" stroke="#666666" stroke-width="1.2"/>
 <rect x="401.8" y="102" width="82.0" height="17" fill="#1f1f1f" shape-rendering="crispEdges"/>
