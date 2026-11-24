@@ -92,20 +92,23 @@ impl DiffSource {
     }
 }
 
-fn git(args: &[&str]) -> Result<std::process::Output> {
-    Command::new("git")
+/// A git command as gclic runs its own, in the working directory unless
+/// told otherwise.
+fn command(args: &[&str]) -> Command {
+    let mut command = Command::new("git");
+    command
         .args(args)
         // Read-only refreshes shouldn't take the index lock and get in the
         // way of git commands the user runs in another terminal.
         .env("GIT_OPTIONAL_LOCKS", "0")
         // Nothing may wait for input on the terminal the TUI is drawing on.
-        .stdin(Stdio::null())
-        .output()
-        .map_err(|e| anyhow!("could not run git: {e}"))
+        .stdin(Stdio::null());
+    command
 }
 
-fn run(args: &[&str]) -> Result<String> {
-    let output = git(args)?;
+/// Runs a command to the end: what it printed, or why it failed.
+fn output(command: &mut Command) -> Result<String> {
+    let output = command.output().map_err(|e| anyhow!("could not run git: {e}"))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -115,6 +118,15 @@ fn run(args: &[&str]) -> Result<String> {
         bail!("{}", text.trim());
     }
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+fn run(args: &[&str]) -> Result<String> {
+    output(&mut command(args))
+}
+
+/// Runs a command for what it does, not what it prints.
+fn run_ok(args: &[&str]) -> Result<()> {
+    run(args).map(|_| ())
 }
 
 /// Like `run`, but returns None instead of an error when the command fails.
@@ -152,10 +164,10 @@ pub fn set_global_config(key: &str, value: Option<&str>) -> Result<()> {
 
 fn set_config(scope: &str, key: &str, value: Option<&str>) -> Result<()> {
     match value {
-        Some(value) => run(&["config", scope, key, value]).map(|_| ()),
+        Some(value) => run_ok(&["config", scope, key, value]),
         // Removing one that isn't there fails, which is fine.
         None => {
-            let _ = git(&["config", scope, "--unset", key]);
+            let _ = command(&["config", scope, "--unset", key]).output();
             Ok(())
         }
     }
@@ -222,19 +234,17 @@ pub fn background_fetch(remotes: &[String]) -> Result<()> {
     if remotes.is_empty() {
         return Ok(());
     }
-    let mut command = Command::new("git");
-    command
-        .args(["-c", "gc.auto=0", "-c", "maintenance.auto=false"])
+    let mut fetch = command(&["-c", "gc.auto=0", "-c", "maintenance.auto=false"]);
+    fetch
         .args(["fetch", "--quiet", "--no-write-fetch-head", "--multiple"])
         .args(remotes)
         .env("GCM_INTERACTIVE", "never");
-    no_prompts(&mut command);
-    let output = command.output().map_err(|e| anyhow!("could not run git: {e}"))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("{}", stderr.lines().next().unwrap_or("git fetch failed").trim());
-    }
-    Ok(())
+    no_prompts(&mut fetch);
+    // Its first line is enough for the Branches title.
+    output(&mut fetch).map(|_| ()).map_err(|error| {
+        let error = error.to_string();
+        anyhow!("{}", error.lines().next().unwrap_or("git fetch failed").trim())
+    })
 }
 
 /// How git runs SSH: the user's own setting if they have one.
@@ -248,14 +258,8 @@ fn ssh_command() -> String {
 
 /// The root of the repo `folder` is in, if it's in one.
 pub fn repo_root_of(folder: &Path) -> Option<PathBuf> {
-    let output = Command::new("git")
-        .args(["rev-parse", "--show-toplevel"])
-        .current_dir(folder)
-        .stdin(Stdio::null())
-        .output()
-        .ok()
-        .filter(|output| output.status.success())?;
-    Some(PathBuf::from(String::from_utf8_lossy(&output.stdout).trim()))
+    let root = output(command(&["rev-parse", "--show-toplevel"]).current_dir(folder)).ok()?;
+    Some(PathBuf::from(root.trim()))
 }
 
 pub fn repo_root() -> Result<String> {
@@ -301,29 +305,29 @@ fn parse_status(text: &str) -> Status {
 }
 
 pub fn stage(path: &str) -> Result<()> {
-    run(&["add", "--", path]).map(|_| ())
+    run_ok(&["add", "--", path])
 }
 
 pub fn stage_all() -> Result<()> {
-    run(&["add", "-A"]).map(|_| ())
+    run_ok(&["add", "-A"])
 }
 
 /// `reset` rather than `restore --staged` because it also works before the
 /// first commit, when there is no HEAD to restore from.
 pub fn unstage(path: &str) -> Result<()> {
-    run(&["reset", "-q", "--", path]).map(|_| ())
+    run_ok(&["reset", "-q", "--", path])
 }
 
 pub fn unstage_all() -> Result<()> {
-    run(&["reset", "-q"]).map(|_| ())
+    run_ok(&["reset", "-q"])
 }
 
 pub fn restore(path: &str) -> Result<()> {
-    run(&["restore", "--", path]).map(|_| ())
+    run_ok(&["restore", "--", path])
 }
 
 pub fn delete_untracked(path: &str) -> Result<()> {
-    run(&["clean", "-f", "--", path]).map(|_| ())
+    run_ok(&["clean", "-f", "--", path])
 }
 
 /// Restores these changed files and deletes these untracked ones, each kind
@@ -333,7 +337,7 @@ pub fn discard_all(restore: &[String], delete: &[String]) -> Result<()> {
         let mut args: Vec<&str> = command.to_vec();
         args.push("--");
         args.extend(paths.iter().map(String::as_str));
-        run(&args).map(|_| ())
+        run_ok(&args)
     };
     if !restore.is_empty() {
         with_paths(&["restore"], restore)?;
@@ -345,7 +349,7 @@ pub fn discard_all(restore: &[String], delete: &[String]) -> Result<()> {
 }
 
 pub fn commit(message: &str) -> Result<()> {
-    run(&["commit", "-m", message]).map(|_| ())
+    run_ok(&["commit", "-m", message])
 }
 
 // ------------------------------------------------------------------ diffs
@@ -362,7 +366,9 @@ pub fn diff(source: &DiffSource, whole: bool) -> Result<String> {
         DiffSource::Untracked(path) => {
             // --no-index exits with 1 when the files differ, which here is
             // always, so the exit code can't be treated as failure.
-            let output = git(&["diff", EXT, COLOR, "--no-index", "--", "/dev/null", path])?;
+            let output = command(&["diff", EXT, COLOR, "--no-index", "--", "/dev/null", path])
+                .output()
+                .map_err(|e| anyhow!("could not run git: {e}"))?;
             Ok(String::from_utf8_lossy(&output.stdout).into_owned())
         }
         // Not a diff: the file itself, whose conflict markers hold both sides.
@@ -418,8 +424,12 @@ pub fn file_versions(source: &DiffSource) -> (Option<String>, Option<String>) {
         // The diff is against the first parent, which `^` names.
         DiffSource::Commit { sha, .. } => (Version::At(format!("{sha}^")), Version::At(sha.clone())),
         DiffSource::Refs { a, b, .. } => (Version::At(a.clone()), Version::At(b.clone())),
-        DiffSource::Stash { sha, untracked: true, .. } => (Version::Missing, Version::At(format!("{sha}^3"))),
-        DiffSource::Stash { sha, .. } => (Version::At(format!("{sha}^1")), Version::At(sha.clone())),
+        DiffSource::Stash { sha, untracked, .. } => {
+            let (from, to) = stash_sides(sha, *untracked);
+            // Untracked files come from nothing, which has no file to read.
+            let from = if from == EMPTY_TREE { Version::Missing } else { Version::At(from) };
+            (from, Version::At(to))
+        }
     };
     thread::scope(|scope| {
         let old = scope.spawn(|| old.read(path));
@@ -521,14 +531,9 @@ fn git_dir_of(folder: &Path) -> Option<PathBuf> {
     {
         return dir.clone();
     }
-    let output = Command::new("git")
-        .args(["rev-parse", "--absolute-git-dir"])
-        .current_dir(folder)
-        .stdin(Stdio::null())
-        .output()
+    let dir = output(command(&["rev-parse", "--absolute-git-dir"]).current_dir(folder))
         .ok()
-        .filter(|output| output.status.success());
-    let dir = output.map(|output| PathBuf::from(String::from_utf8_lossy(&output.stdout).trim()));
+        .map(|dir| PathBuf::from(dir.trim()));
     *known = Some((folder.to_path_buf(), dir.clone()));
     dir
 }
@@ -722,16 +727,16 @@ pub fn stash_files(stash: &Stash) -> Result<Vec<FileEntry>> {
 
 /// Puts a stash's changes back, all unstaged, keeping the stash.
 pub fn stash_apply(stash: &Stash) -> Result<()> {
-    run(&["stash", "apply", &stash_name(stash)?]).map(|_| ())
+    run_ok(&["stash", "apply", &stash_name(stash)?])
 }
 
 /// Applies a stash and, if that worked, drops it. On a conflict, git keeps it.
 pub fn stash_pop(stash: &Stash) -> Result<()> {
-    run(&["stash", "pop", &stash_name(stash)?]).map(|_| ())
+    run_ok(&["stash", "pop", &stash_name(stash)?])
 }
 
 pub fn stash_drop(stash: &Stash) -> Result<()> {
-    run(&["stash", "drop", &stash_name(stash)?]).map(|_| ())
+    run_ok(&["stash", "drop", &stash_name(stash)?])
 }
 
 /// The stash's name now, which pop and drop need, as a sha won't do for them.
@@ -821,12 +826,12 @@ pub fn tags() -> Result<Vec<String>> {
 }
 
 pub fn switch(local_name: &str) -> Result<()> {
-    run(&["switch", local_name]).map(|_| ())
+    run_ok(&["switch", local_name])
 }
 
 /// Creates a local branch tracking this remote one, and switches to it.
 pub fn switch_track(remote_name: &str) -> Result<()> {
-    run(&["switch", "--track", remote_name]).map(|_| ())
+    run_ok(&["switch", "--track", remote_name])
 }
 
 // ---------------------------------------------------------------- compare
