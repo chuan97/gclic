@@ -39,18 +39,37 @@ pub fn total_lines(lines: impl IntoIterator<Item = Lines>) -> Lines {
     total
 }
 
-/// `+12 −3`, in green and red. Nothing for lines not known, and "binary"
-/// for a binary file.
+/// `+12 −3`, in green and red, leaving out a side that's 0. Nothing for
+/// lines not known, and "binary" for a binary file.
 pub fn line_count_spans(lines: Lines) -> Vec<Span<'static>> {
-    match lines {
-        Lines::Unknown => Vec::new(),
-        Lines::Binary => vec![Span::styled("binary", Style::default().fg(DIM))],
-        Lines::Counted { added, removed } => vec![
-            Span::styled(format!("+{added}"), Style::default().fg(Color::Green)),
-            Span::raw(" "),
-            Span::styled(format!("−{removed}"), Style::default().fg(Color::Red)),
-        ],
+    let (added, removed) = match lines {
+        Lines::Unknown => return Vec::new(),
+        Lines::Binary => return vec![Span::styled("binary", Style::default().fg(DIM))],
+        Lines::Counted { added, removed } => (added, removed),
+    };
+    let mut spans = Vec::new();
+    if added > 0 {
+        spans.push(Span::styled(format!("+{added}"), Style::default().fg(Color::Green)));
     }
+    if removed > 0 {
+        if added > 0 {
+            spans.push(Span::raw(" "));
+        }
+        spans.push(Span::styled(format!("−{removed}"), Style::default().fg(Color::Red)));
+    }
+    spans
+}
+
+/// `text` cut to `width` characters, ending in `…` where it was cut.
+pub fn shorten(text: &str, width: usize) -> String {
+    if text.chars().count() <= width {
+        return text.to_string();
+    }
+    if width == 0 {
+        return String::new();
+    }
+    let kept: String = text.chars().take(width.saturating_sub(1)).collect();
+    format!("{kept}…")
 }
 
 /// `line`, then the lines its change adds and removes, two spaces after.
@@ -414,10 +433,21 @@ mod tests {
     }
 
     #[test]
+    fn shortening_ends_in_an_ellipsis_only_when_cut() {
+        assert_eq!(shorten("fix the bug", 20), "fix the bug");
+        assert_eq!(shorten("fix the bug", 7), "fix th…");
+        assert_eq!(shorten("fix", 0), "");
+    }
+
+    #[test]
     fn counts_follow_the_name() {
         let text = |line: Line| line.spans.iter().map(|span| span.content.to_string()).collect::<String>();
-        let counted = Lines::Counted { added: 4, removed: 3 };
-        assert_eq!(text(with_line_counts(Line::raw(" M a.rs"), counted)), " M a.rs  +4 −3");
+        let counted = |added, removed| Lines::Counted { added, removed };
+        assert_eq!(text(with_line_counts(Line::raw(" M a.rs"), counted(4, 3))), " M a.rs  +4 −3");
+        // A side that's 0 is left out.
+        assert_eq!(text(with_line_counts(Line::raw(" A b.rs"), counted(4, 0))), " A b.rs  +4");
+        assert_eq!(text(with_line_counts(Line::raw(" D c.rs"), counted(0, 3))), " D c.rs  −3");
+        assert_eq!(text(with_line_counts(Line::raw(" M d.sh"), counted(0, 0))), " M d.sh");
         assert_eq!(text(with_line_counts(Line::raw(" M a.png"), Lines::Binary)), " M a.png  binary");
         assert_eq!(text(with_line_counts(Line::raw(" M a.rs"), Lines::Unknown)), " M a.rs");
     }
