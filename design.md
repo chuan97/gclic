@@ -143,6 +143,5 @@ The measuring scripts lived in the git-ignored `target/bench/`. `docs/screenshot
 ## Notes for the rewrite
 
 - **`app.rs` has become the place everything lands:** focus, tabs, the preview, popups, hints, the worker's results. It could split into tab state, the preview and popups.
-- **Some state is kept consistent by convention:** which preview is showing, which tab, focus and last focus. The tab switch moves the right fields over by hand. Enums could make the wrong combinations impossible.
 - **Keep:** the `Action` pattern, `git.rs` with typed results, the worker with tagged results, and the pure, tested layout and parsing functions.
 - **Open questions:** should Compare's file list stay the direct difference (`git diff A B`), or be PR-style (`A...B`)? Should the commit box gain a cursor, or open an editor? Should the graph keep 500 commits, or stop where the shown branches meet?
