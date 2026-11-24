@@ -7,7 +7,7 @@
 //! that are out of date by the time they arrive.
 
 use crate::diff::{self, Colored, DiffView};
-use crate::git::{self, DiffSource, Status};
+use crate::git::{self, Status};
 use anyhow::Result;
 use std::collections::VecDeque;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
@@ -16,7 +16,7 @@ use std::thread;
 
 enum Job {
     /// What auto-refresh checks: the refs, the files' status, and the open diff.
-    Poll { generation: u64, diff: Option<DiffSource> },
+    Poll { generation: u64, diff: Option<DiffView> },
     /// A diff with its syntax colours.
     Highlight(DiffView),
 }
@@ -28,7 +28,7 @@ pub enum Done {
         generation: u64,
         fingerprint: String,
         status: Result<Status>,
-        diff: Option<(DiffSource, Result<String>)>,
+        diff: Option<(DiffView, Result<String>)>,
     },
     /// `text` is the diff the colours belong to.
     Highlight { view: DiffView, text: String, colored: Colored },
@@ -75,7 +75,7 @@ impl Worker {
     }
 
     /// Asks for a poll, replacing one still waiting.
-    pub fn poll(&self, generation: u64, diff: Option<DiffSource>) {
+    pub fn poll(&self, generation: u64, diff: Option<DiffView>) {
         self.with_queue(|queue| queue.poll = Some(Job::Poll { generation, diff }));
     }
 
@@ -128,9 +128,9 @@ fn run(job: Job) -> Option<Done> {
         Job::Poll { generation, diff } => Some(thread::scope(|scope| {
             let fingerprint = scope.spawn(git::refs_fingerprint);
             let diff = scope.spawn(|| {
-                diff.map(|source| {
-                    let text = git::diff(&source);
-                    (source, text)
+                diff.map(|view| {
+                    let text = git::diff(&view.source, view.whole);
+                    (view, text)
                 })
             });
             let status = git::status();
@@ -144,7 +144,7 @@ fn run(job: Job) -> Option<Done> {
         Job::Highlight(view) => {
             // Without its diff there's nothing to colour, and the UI shows the
             // error when it loads the diff itself.
-            let text = git::diff_with(&view.source, view.whole).ok()?;
+            let text = git::diff(&view.source, view.whole).ok()?;
             let mut rows = diff::rows_for(&view.source, &text);
             let file_lines = diff::highlight_rows(&mut rows, &view.source);
             Some(Done::Highlight { view, text, colored: Colored { rows, file_lines } })
@@ -156,6 +156,7 @@ fn run(job: Job) -> Option<Done> {
 mod tests {
     use super::*;
     use crate::diff::Row;
+    use crate::git::DiffSource;
 
     fn file(path: &str) -> DiffView {
         DiffView { source: DiffSource::Unstaged(path.to_string()), whole: false }

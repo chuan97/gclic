@@ -272,6 +272,9 @@ pub struct App {
     /// Diffs side by side or unified, once the user chooses with `s`. Until
     /// then it depends on the room there is.
     split: Option<bool>,
+    /// Diffs show the whole file rather than just the changes, after `e`. It
+    /// stays that way while moving between files, for reading with context.
+    whole: bool,
     modal: Modal,
     /// `g` was pressed, and the next key says what for: `gg` the top, `gc`
     /// and `gC` a comment.
@@ -356,6 +359,7 @@ impl App {
             graph: GraphPanel::new(),
             compare: None,
             split: None,
+            whole: false,
             modal: Modal::None,
             pending_g: false,
             commit_draft: String::new(),
@@ -477,7 +481,7 @@ impl App {
             let name = root.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
             self.message = format!("Followed Neovim to {name}");
         }
-        let diff = self.view.diff().map(|diff| diff.source.clone());
+        let diff = self.view.diff().map(DiffPane::view);
         self.worker.poll(self.generation, diff);
         // Collects the editor commands that have finished, so none linger.
         self.editor_commands.retain_mut(|child| matches!(child.try_wait(), Ok(None)));
@@ -507,7 +511,7 @@ impl App {
         generation: u64,
         fingerprint: String,
         status: Result<git::Status>,
-        diff: Option<(DiffSource, Result<String>)>,
+        diff: Option<(DiffView, Result<String>)>,
     ) {
         if generation != self.generation {
             return; // A refresh has run since, which read the repo more recently.
@@ -531,8 +535,8 @@ impl App {
                 None => self.view.close_diff(),
             }
         } else if let Some(open) = self.view.diff_mut()
-            && let Some((source, Ok(text))) = diff
-            && open.source == source
+            && let Some((view, Ok(text))) = diff
+            && open.view() == view
         {
             open.set_text(text);
         }
@@ -541,7 +545,7 @@ impl App {
 
     fn apply_highlight(&mut self, view: DiffView, text: String, colored: Colored) {
         if let Some(diff) = self.view.diff_mut()
-            && diff.source == view.source
+            && diff.view() == view
             && diff.needs_colors()
         {
             // Only taken if the text matches, so not for the other kind of diff.
@@ -551,8 +555,8 @@ impl App {
     }
 
     /// A diff as it would show now, whole or just the changes.
-    fn view_of(source: &DiffSource) -> DiffView {
-        DiffView { source: source.clone(), whole: git::whole_files() }
+    fn view_of(&self, source: &DiffSource) -> DiffView {
+        DiffView { source: source.clone(), whole: self.whole }
     }
 
     /// Colours the open diff from the cache if it can, and asks the worker for
@@ -564,7 +568,7 @@ impl App {
     fn request_colors(&mut self) {
         let mut wanted = Vec::new();
         if let Some(diff) = self.view.diff_mut() {
-            let view = App::view_of(&diff.source);
+            let view = diff.view();
             if diff.needs_colors() {
                 match self.colors.get(&view, diff.text()) {
                     Some(colored) => {
@@ -589,7 +593,7 @@ impl App {
             around.truncate(1);
         }
         for source in around {
-            let view = App::view_of(&source);
+            let view = self.view_of(&source);
             if !wanted.contains(&view) && !self.colors.contains(&view) {
                 wanted.push(view);
             }
@@ -648,11 +652,12 @@ impl App {
                 self.report(result);
                 return;
             }
-        if let Some((text, colored)) = self.colors.latest(&App::view_of(&source)) {
-            self.view.preview = Preview::Diff(DiffPane::colored(source, text, colored));
+        let view = self.view_of(&source);
+        if let Some((text, colored)) = self.colors.latest(&view) {
+            self.view.preview = Preview::Diff(DiffPane::colored(view, text, colored));
             return;
         }
-        match DiffPane::load(source) {
+        match DiffPane::load(view) {
             Ok(diff) => self.view.preview = Preview::Diff(diff),
             // A refresh can get here while a popup is open, such as the
             // command line while typing, which an error popup would replace.
@@ -1477,11 +1482,20 @@ impl App {
     /// Switches every diff between the whole file and just the changes. It
     /// stays that way while moving between files, for reading with context.
     fn toggle_whole_files(&mut self) {
-        git::set_whole_files(!git::whole_files());
+        self.whole = !self.whole;
         // The cache keeps both kinds, so the other one, prefetched, shows
         // coloured at once.
-        if let Some(diff) = self.view.diff_mut() {
-            let result = diff.reload();
+        self.sync_whole();
+    }
+
+    /// Loads the open diff again if it's the other kind, whole or just the
+    /// changes, as when `e` was pressed on another tab.
+    fn sync_whole(&mut self) {
+        let whole = self.whole;
+        if let Some(diff) = self.view.diff_mut()
+            && diff.whole != whole
+        {
+            let result = diff.reload_as(whole);
             self.report(result);
         }
     }
@@ -1516,6 +1530,7 @@ impl App {
         let showing = std::mem::replace(&mut self.view, view);
         self.saved_views[self.tab as usize] = Some(showing);
         self.tab = tab;
+        self.sync_whole();
         // The Review tab opens on its selected comment's line.
         if tab == Tab::Review && self.view.diff().is_none() {
             self.show_selected_comment();
@@ -2089,7 +2104,7 @@ impl App {
         };
         let line = match self.view.diff() {
             Some(diff) if diff.source == source => diff.active_line(),
-            _ => DiffPane::load(source.clone()).ok().and_then(|diff| diff.active_line()),
+            _ => DiffPane::load(self.view_of(&source)).ok().and_then(|diff| diff.active_line()),
         };
         // gclic runs from the repo root, which paths are relative to.
         let path = match std::env::current_dir() {
@@ -2157,7 +2172,7 @@ impl App {
         };
         vec![
             "n/N change",
-            if git::whole_files() { "e changes only" } else { "e whole file" },
+            if self.whole { "e changes only" } else { "e whole file" },
             if diff.is_split() { "s unified" } else { "s side by side" },
         ]
     }
@@ -2748,6 +2763,22 @@ mod tests {
         let output = std::process::Command::new("git").args(["diff", "--name-only", "HEAD~1", "HEAD"]).output().unwrap();
         let path = String::from_utf8_lossy(&output.stdout).lines().next().unwrap().to_string();
         DiffSource::Refs { a: "HEAD~1".to_string(), b: "HEAD".to_string(), path }
+    }
+
+    #[test]
+    fn e_switches_the_diffs_on_every_tab() {
+        let mut app = App::new(PathBuf::new());
+        app.show_diff(last_commit_diff());
+        app.start_compare("HEAD~1".to_string(), "HEAD".to_string());
+        app.show_diff(last_commit_diff());
+        press(&mut app, KeyCode::Char('e'));
+        assert!(app.whole && app.view.diff().is_some_and(|diff| diff.whole));
+        // The Repo tab's diff, put aside, shows whole once its tab does.
+        press(&mut app, KeyCode::Tab);
+        assert!(app.tab == Tab::Repo && app.view.diff().is_some_and(|diff| diff.whole));
+        press(&mut app, KeyCode::Char('e'));
+        press(&mut app, KeyCode::Tab);
+        assert!(app.view.diff().is_some_and(|diff| !diff.whole));
     }
 
     #[test]
