@@ -55,7 +55,7 @@ fn h_and_l_still_move_on_the_repo_tab_with_a_comparison_kept() {
 
 #[test]
 fn hints_show_keys_in_the_key_colour() {
-    let spans = hint_spans("space stage · a/A stage/unstage all · type to filter");
+    let spans = hint_spans(&[("space", "stage"), ("a/A", "stage/unstage all"), ("", "type to filter")]);
     let text: Vec<(&str, Option<Color>)> = spans.iter().map(|s| (s.content.as_ref(), s.style.fg)).collect();
     assert_eq!(
         text,
@@ -69,6 +69,45 @@ fn hints_show_keys_in_the_key_colour() {
             ("type to filter", None),
         ]
     );
+}
+
+/// Fails if a key on the status line isn't in the help, where the user is
+/// or among the keys that work everywhere or on any diff.
+fn assert_hints_in_help(app: &App) {
+    let mut titles = vec![app.help_section(), "Everywhere", "Diff"];
+    if app.compare.as_ref().is_some_and(|compare| compare.stash_shown().is_some()) {
+        titles.push("Stashes");
+    }
+    for (key, action) in app.hints() {
+        assert!(key.is_empty() || crate::help::lists(&titles, key), "{key} {action} isn't in the help's {titles:?}");
+    }
+}
+
+#[test]
+fn every_hint_is_in_the_help() {
+    let mut app = App::new(PathBuf::new());
+    for pane in [Pane::Branches, Pane::Changes, Pane::Graph] {
+        app.focus_left(pane);
+        assert_hints_in_help(&app);
+    }
+    // A commit expanded, one of its files, its diff, then inside the diff,
+    // and a commit's details.
+    for code in [KeyCode::Enter, KeyCode::Char('j'), KeyCode::Enter, KeyCode::Enter] {
+        press(&mut app, code);
+        assert_hints_in_help(&app);
+    }
+    press(&mut app, KeyCode::Esc);
+    press(&mut app, KeyCode::Char('i'));
+    assert_hints_in_help(&app);
+    press(&mut app, KeyCode::Char('i'));
+    assert_hints_in_help(&app);
+    // The Compare tab, empty and then with a comparison and its diff.
+    press(&mut app, KeyCode::Tab);
+    assert_hints_in_help(&app);
+    app.start_compare("HEAD~1".to_string(), "HEAD".to_string());
+    assert_hints_in_help(&app);
+    press(&mut app, KeyCode::Enter);
+    assert_hints_in_help(&app);
 }
 
 #[test]

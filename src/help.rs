@@ -149,6 +149,20 @@ const RIGHT: &[Section] = &[
     },
 ];
 
+/// Whether the help lists `key` in one of the sections titled `titles`, alone
+/// or in a group such as "a A". A hint's keys joined with /, as in "a/A",
+/// must each be listed.
+#[cfg(test)]
+pub fn lists(titles: &[&str], key: &str) -> bool {
+    let listed: Vec<&str> = LEFT
+        .iter()
+        .chain(RIGHT)
+        .filter(|section| titles.contains(&section.title))
+        .flat_map(|section| section.keys.iter().flat_map(|(keys, _)| keys.split(' ')))
+        .collect();
+    key.split('/').all(|key| listed.contains(&key))
+}
+
 /// Room for the longest key, so the descriptions line up.
 const KEY_WIDTH: usize = 12;
 const GAP: usize = 4;

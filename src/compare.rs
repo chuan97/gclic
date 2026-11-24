@@ -113,6 +113,25 @@ impl ComparePanel {
         self.files.selected_source()
     }
 
+    /// The keys that do something now, for the status line. Enter's depends
+    /// on whether the selected file's diff is the one `shown`.
+    pub fn hints(&self, shown: Option<&DiffSource>) -> Vec<ui::Hint<'static>> {
+        let mut hints: Vec<ui::Hint> = ui::enter_diff_hint(self.selected_source(), shown).into_iter().collect();
+        match self.subject {
+            Subject::Stash(_) => hints.extend([("h/l", "fold"), ("a", "apply"), ("p", "pop"), ("d", "drop")]),
+            Subject::Refs { .. } => hints.extend([("h/l", "fold"), ("r", "swap from and to"), ("c", "new comparison")]),
+        }
+        hints
+    }
+
+    /// What esc does.
+    pub fn esc_hint(&self) -> &'static str {
+        match self.subject {
+            Subject::Stash(_) => "back to stashes",
+            Subject::Refs { .. } => "close compare",
+        }
+    }
+
     /// The diffs one key away, most likely first: the selected file's, then
     /// for a comparison the same file with from and to swapped, which r leads
     /// to, then the files j, k, g and G lead to.

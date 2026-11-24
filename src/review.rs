@@ -259,6 +259,11 @@ impl ReviewList {
         order.get(self.selected.min(order.len().saturating_sub(1))).copied()
     }
 
+    /// The keys, for the status line.
+    pub fn hints(&self) -> Vec<ui::Hint<'static>> {
+        vec![("enter", "focus diff"), ("c", "edit"), ("d", "delete"), ("y", "copy all"), ("D", "clear")]
+    }
+
     pub fn handle_key(&mut self, review: &Review, key: KeyEvent) -> ListAction {
         let len = review.len();
         if len == 0 {

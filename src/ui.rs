@@ -1,5 +1,6 @@
 //! Small drawing helpers shared by the panels.
 
+use crate::git::DiffSource;
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
@@ -21,6 +22,17 @@ pub fn selected(line: Line<'_>, selected: bool, focused: bool) -> Line<'_> {
 }
 /// The colour of keys wherever they're listed: popups and the help.
 pub const KEY: Color = Color::Yellow;
+
+/// A key and what it does, as the status line and the popups list them. An
+/// empty key is for words with no key, as in "type to filter".
+pub type Hint<'a> = (&'a str, &'a str);
+
+/// Enter on a file shows its diff, or moves into the diff if it's the one
+/// showing, `shown`.
+pub fn enter_diff_hint(selected: Option<DiffSource>, shown: Option<&DiffSource>) -> Option<Hint<'static>> {
+    let selected = selected?;
+    Some(if shown == Some(&selected) { ("enter", "focus diff") } else { ("enter", "diff") })
+}
 
 /// Keys and what they do, for a popup's bottom border: keys in `KEY` and
 /// actions in the normal colour. The key for the action named `danger`, if

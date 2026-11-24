@@ -49,7 +49,7 @@ const AUTO_REFRESH: Duration = Duration::from_millis(500);
 /// How long to wait for a key before checking on the worker's results. Short,
 /// so colours appear soon after they're ready.
 const KEY_WAIT: Duration = Duration::from_millis(30);
-const GLOBAL_HINTS: &str = ": command · ? help · q quit";
+const GLOBAL_HINTS: [ui::Hint; 3] = [(":", "command"), ("?", "help"), ("q", "quit")];
 /// The keys shown on the pickers that choose refs to compare.
 const STASH_PICKER_KEYS: [(&str, &str); 6] =
     [("enter", "files"), ("a", "apply"), ("p", "pop"), ("d", "drop"), ("i", "search"), ("esc", "close")];
@@ -284,7 +284,7 @@ pub struct App {
     editor_in_terminal: Option<(String, String, Command)>,
     /// Inside Neovim, how to follow its working folder to another repo.
     follow: Option<editor::Follow>,
-    /// "o open in nvim", naming the editor `o` opens.
+    /// What `o` does, "open in nvim", naming the editor it opens.
     editor_hint: String,
     /// Where `:cd` looks for repos. It stays put as the repo changes, so the
     /// same repos are a few keys away.
@@ -313,8 +313,8 @@ impl App {
             editor_in_terminal: None,
             follow: editor::Follow::from_env(),
             editor_hint: match editor::parent_nvim() {
-                Some(_) => "o open in nvim".to_string(),
-                None => format!("o open in {}", editor::name(&editor::setting())),
+                Some(_) => "open in nvim".to_string(),
+                None => format!("open in {}", editor::name(&editor::setting())),
             },
             tab: Tab::Repo,
             view: View::fresh(Tab::Repo),
