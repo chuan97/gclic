@@ -61,16 +61,21 @@ fn row_is_changed(row: &Row) -> bool {
     matches!(row, Row::Lines { left, right } if changed(left) || changed(right))
 }
 
-/// The lines to show for these rows, side by side or unified.
-fn layout(rows: &[Row], split: bool) -> Vec<Item> {
+/// The lines to show for these rows, side by side or unified. A whole file
+/// is one hunk, whose heading would only repeat the file's counts, so it
+/// leaves hunk headings out.
+fn layout(rows: &[Row], split: bool, whole: bool) -> Vec<Item> {
+    let shown = |i: &usize| !(whole && matches!(rows[*i], Row::Hunk { .. }));
     if split {
-        return (0..rows.len()).map(Item::Row).collect();
+        return (0..rows.len()).filter(shown).map(Item::Row).collect();
     }
     let mut items = Vec::with_capacity(rows.len());
     let mut i = 0;
     while i < rows.len() {
         if !row_is_changed(&rows[i]) {
-            items.push(Item::Row(i));
+            if shown(&i) {
+                items.push(Item::Row(i));
+            }
             i += 1;
             continue;
         }
@@ -272,7 +277,7 @@ impl DiffPane {
             source,
             whole,
             text,
-            items: layout(&rows, true),
+            items: layout(&rows, true, whole),
             rows,
             split: true,
             file_lines,
@@ -341,7 +346,7 @@ impl DiffPane {
 
     fn set_rows(&mut self, rows: Vec<Row>) {
         self.rows = rows;
-        self.items = layout(&self.rows, self.split);
+        self.items = layout(&self.rows, self.split, self.whole);
         self.active = self.active.min(self.items.len().saturating_sub(1));
     }
 
@@ -352,7 +357,7 @@ impl DiffPane {
         }
         let row = self.items.get(self.active).map_or(0, |item| item.row());
         self.split = split;
-        self.items = layout(&self.rows, split);
+        self.items = layout(&self.rows, split, self.whole);
         self.active = self.items.iter().position(|item| item.row() == row).unwrap_or(0);
     }
 
@@ -953,9 +958,9 @@ mod tests {
     fn unified_shows_a_changes_removed_lines_then_its_added_ones() {
         let rows = parse_diff("@@ -1,3 +1,3 @@\n a\n-b\n-c\n+B\n+C\n d");
         // Side by side: a, b|B, c|C, d after the heading.
-        assert_eq!(layout(&rows, true).len(), 5);
+        assert_eq!(layout(&rows, true, false).len(), 5);
         assert_eq!(
-            layout(&rows, false),
+            layout(&rows, false, false),
             [Item::Row(0), Item::Row(1), Item::Old(2), Item::Old(3), Item::New(2), Item::New(3), Item::Row(4)]
         );
     }
@@ -963,7 +968,14 @@ mod tests {
     #[test]
     fn unified_skips_the_empty_side_of_a_row() {
         let rows = parse_diff("@@ -1,2 +1,3 @@\n a\n+new\n b");
-        assert_eq!(layout(&rows, false), [Item::Row(0), Item::Row(1), Item::New(2), Item::Row(3)]);
+        assert_eq!(layout(&rows, false, false), [Item::Row(0), Item::Row(1), Item::New(2), Item::Row(3)]);
+    }
+
+    #[test]
+    fn a_whole_file_has_no_hunk_heading() {
+        let rows = parse_diff("@@ -1,2 +1,3 @@\n a\n+new\n b");
+        assert_eq!(layout(&rows, true, true), [Item::Row(1), Item::Row(2), Item::Row(3)]);
+        assert_eq!(layout(&rows, false, true), [Item::Row(1), Item::New(2), Item::Row(3)]);
     }
 
     #[test]
