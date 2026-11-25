@@ -210,12 +210,12 @@ impl ComparePanel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::git::FileEntry;
+    use crate::git::{FileEntry, Lines};
 
     fn panel() -> ComparePanel {
         // Already in the order the list sorts files in.
         let files = vec![
-            FileEntry { status: 'M', path: "edited".to_string(), ..Default::default() },
+            FileEntry { status: 'M', path: "edited".to_string(), lines: Lines::Counted { added: 4, removed: 1 } },
             FileEntry { status: 'D', path: "gone".to_string(), ..Default::default() },
             FileEntry { status: 'A', path: "new".to_string(), ..Default::default() },
         ];
@@ -257,6 +257,13 @@ mod tests {
     }
 
     #[test]
+    fn swapping_flips_added_and_removed_lines() {
+        let mut compare = panel();
+        compare.swap();
+        assert_eq!(compare.files.lines()[0], Lines::Counted { added: 1, removed: 4 });
+    }
+
+    #[test]
     fn the_swapped_diff_is_prefetched_right_after_the_selected_one() {
         let sources = panel().sources_around();
         assert_eq!(sources[0], DiffSource::Refs { a: "main".into(), b: "feature".into(), path: "edited".into() });
@@ -273,7 +280,7 @@ mod tests {
             age: "2 hours ago".to_string(),
         };
         let files = vec![
-            FileEntry { status: 'M', path: "edited".to_string(), ..Default::default() },
+            FileEntry { status: 'M', path: "edited".to_string(), lines: Lines::Counted { added: 4, removed: 1 } },
             FileEntry { status: '?', path: "new".to_string(), ..Default::default() },
         ];
         ComparePanel { files: FileList::stash(stash.sha.clone(), files), subject: Subject::Stash(stash) }
