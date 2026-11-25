@@ -1,7 +1,7 @@
 //! Feature 1: the staging area, modelled on VS Code's git panel.
 
 use crate::app::{Action, Confirm};
-use crate::file_list::file_line;
+use crate::file_list::{FOLDER, NAME, NAME_KEPT, file_line};
 use crate::git::{self, DiffSource, FileEntry, Status};
 use crate::ui;
 use anyhow::Result;
@@ -318,7 +318,8 @@ impl StagingPanel {
             };
             lines.push(Line::styled(format!("{name} ({})", files.len()), heading));
             for entry in files {
-                lines.push(file_line(entry, index == self.cursor.index, focused));
+                let line = file_line(entry, index == self.cursor.index, focused);
+                lines.push(ui::fit(line, &[(FOLDER, 0), (NAME, NAME_KEPT)], inner.width as usize));
                 index += 1;
             }
         }

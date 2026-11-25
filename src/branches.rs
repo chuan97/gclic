@@ -296,7 +296,7 @@ impl BranchesPanel {
 
         if !focused {
             let line = match &self.current {
-                Some(name) => self.branch_line(name, false),
+                Some(name) => self.branch_line(name, false, list.width as usize),
                 None => Line::styled("detached HEAD", Style::default().fg(ui::DIM)),
             };
             frame.render_widget(line, list);
@@ -315,7 +315,7 @@ impl BranchesPanel {
             list.height -= 1;
         }
 
-        let (lines, selected_line) = self.list_lines(focused);
+        let (lines, selected_line) = self.list_lines(focused, list.width as usize);
         if lines.is_empty() {
             let note = if self.branches.is_empty() {
                 "No branches yet"
@@ -333,7 +333,7 @@ impl BranchesPanel {
     }
 
     /// Every row of the list, and which of them holds the cursor.
-    fn list_lines(&self, focused: bool) -> (Vec<Line<'static>>, usize) {
+    fn list_lines(&self, focused: bool, width: usize) -> (Vec<Line<'static>>, usize) {
         let mut lines = Vec::new();
         let mut selected_line = 0;
         for (row, name) in self.picker.matched_items().into_iter().enumerate() {
@@ -341,7 +341,7 @@ impl BranchesPanel {
             if selected {
                 selected_line = lines.len();
             }
-            lines.push(self.branch_line(name, selected && focused));
+            lines.push(self.branch_line(name, selected && focused, width));
             let drop_down = self.drop_downs.iter().find(|d| d.branch == name);
             if let Some(drop_down) = drop_down {
                 lines.extend(drop_down.remotes.iter().map(remote_line));
@@ -350,7 +350,8 @@ impl BranchesPanel {
         (lines, selected_line)
     }
 
-    fn branch_line(&self, name: &str, selected: bool) -> Line<'static> {
+    /// A branch's row. Its name gives way to how it stands, which comes after.
+    fn branch_line(&self, name: &str, selected: bool, width: usize) -> Line<'static> {
         let is_current = self.current.as_deref() == Some(name);
         let row = self.rows.get(name);
         let is_remote = row.is_some_and(|row| row.is_remote);
@@ -384,9 +385,11 @@ impl BranchesPanel {
             spans.push(Span::styled(format!("  in {elsewhere}"), Style::default().fg(ui::DIM)));
         }
 
+        // At least the start of the name stays.
+        let line = ui::fit(Line::from(spans), &[(0, 10)], width);
         // Only while focused, as the list shows just the checked-out
         // branch otherwise: `selected` is false then.
-        ui::selected(Line::from(spans), selected, true)
+        ui::selected(line, selected, true)
     }
 }
 
@@ -450,7 +453,7 @@ mod tests {
     }
 
     fn line_text(panel: &BranchesPanel, name: &str) -> String {
-        let line = panel.branch_line(name, false);
+        let line = panel.branch_line(name, false, 200);
         line.spans.iter().map(|span| span.content.as_ref()).collect()
     }
 

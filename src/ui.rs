@@ -72,6 +72,30 @@ pub fn shorten(text: &str, width: usize) -> String {
     format!("{kept}…")
 }
 
+/// `line` made to fit in `width` columns, so what's at its end, like line
+/// counts or an author, still shows. Each `(span, keep)` in `shrinkable` is
+/// cut short in turn, as far as needed, down to `keep` characters after its
+/// leading spaces. A span allowed to keep nothing goes, spaces and all.
+pub fn fit<'a>(mut line: Line<'a>, shrinkable: &[(usize, usize)], width: usize) -> Line<'a> {
+    for &(index, keep) in shrinkable {
+        let over = line.width().saturating_sub(width);
+        if over == 0 {
+            break;
+        }
+        let Some(span) = line.spans.get_mut(index) else { continue };
+        let text = span.content.as_ref();
+        let text_start = text.len() - text.trim_start_matches(' ').len();
+        let (gap, text) = text.split_at(text_start);
+        let length = text.chars().count();
+        let room = length.saturating_sub(over).max(keep);
+        if room >= length {
+            continue;
+        }
+        span.content = if room == 0 { String::new() } else { format!("{gap}{}", shorten(text, room)) }.into();
+    }
+    line
+}
+
 /// `line`, then the lines its change adds and removes, two spaces after.
 pub fn with_line_counts(mut line: Line<'_>, lines: Lines) -> Line<'_> {
     let counts = line_count_spans(lines);
@@ -460,6 +484,20 @@ mod tests {
         assert_eq!(shorten("fix the bug", 20), "fix the bug");
         assert_eq!(shorten("fix the bug", 7), "fix th…");
         assert_eq!(shorten("fix", 0), "");
+    }
+
+    #[test]
+    fn fitting_shortens_the_spans_given_in_turn() {
+        let text = |line: Line| line.spans.iter().map(|span| span.content.to_string()).collect::<String>();
+        let row = || Line::from(vec![Span::raw(" M "), Span::raw("model.py"), Span::raw("  src/data"), Span::raw("  +3 −20")]);
+        // It fits already.
+        assert_eq!(text(fit(row(), &[(2, 0), (1, 1)], 40)), " M model.py  src/data  +3 −20");
+        // The folder gives way first, keeping its gap.
+        assert_eq!(text(fit(row(), &[(2, 0), (1, 1)], 26)), " M model.py  src/…  +3 −20");
+        // Then it goes, and the name is cut.
+        assert_eq!(text(fit(row(), &[(2, 0), (1, 1)], 16)), " M mode…  +3 −20");
+        // Never past what a span keeps: the end is cut off then.
+        assert_eq!(text(fit(row(), &[(2, 0), (1, 1)], 5)), " M …  +3 −20");
     }
 
     #[test]

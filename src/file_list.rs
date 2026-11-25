@@ -244,6 +244,7 @@ impl FileList {
             return;
         }
         let scroll = self.cursor.scroll_to(self.cursor.index, area.height as usize);
+        let width = area.width as usize;
         let lines: Vec<Line> = self
             .visible()
             .into_iter()
@@ -261,7 +262,8 @@ impl FileList {
                         let file = &self.files[*index];
                         let indent = "  ".repeat(*depth);
                         let line = styled_file_line(file, name_of(&file.path), None, indent, selected, focused);
-                        ui::with_line_counts(line, file.lines)
+                        // Most of the name gives way to the counts.
+                        ui::fit(ui::with_line_counts(line, file.lines), &[(NAME, NAME_KEPT)], width)
                     }
                 }
             })
@@ -342,6 +344,14 @@ fn name_of(path: &str) -> &str {
 fn folder_of(path: &str) -> Option<&str> {
     path.trim_end_matches('/').rsplit_once('/').map(|(folder, _)| folder)
 }
+
+/// Where a file row built here has its name, and its folder if it has one.
+pub const NAME: usize = 1;
+pub const FOLDER: usize = 2;
+
+/// How much of a file's name stays when its row is short of room, so it can
+/// still be told apart. Past that, what comes after it is cut off instead.
+pub const NAME_KEPT: usize = 12;
 
 /// A file's row in a flat list, as VS Code lists changes: its name, then the
 /// folder it's in, dimmed, like `app.rs  src/ui`.
