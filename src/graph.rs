@@ -2,7 +2,7 @@
 //! over commits; `GraphPanel` holds the state and draws them.
 
 use crate::app::Action;
-use crate::file_list::file_line;
+use crate::file_list::{FOLDER, NAME, NAME_KEPT, file_line};
 use crate::app::StashAction;
 use crate::git::{self, Branch, Commit, DiffSource, FileEntry, Stash};
 use crate::ui;
@@ -820,7 +820,7 @@ impl GraphPanel {
             .take(height)
             .map(|row| match row {
                 Display::Commit(index) => self.commit_line(*index, focused, width),
-                Display::File { commit, file } => self.file_row_line(*commit, *file, focused),
+                Display::File { commit, file } => self.file_row_line(*commit, *file, focused, width),
             })
             .collect();
         let at_end = self.scroll + lines.len() == display.len();
@@ -868,19 +868,12 @@ impl GraphPanel {
 
         let commit = &self.commits[index];
         let subject = if selected && focused { Color::White } else { Color::Gray };
-        let subject_style = Style::default().fg(subject);
+        let subject_at = spans.len();
+        spans.push(Span::styled(commit.subject.as_str(), Style::default().fg(subject)));
         // Expanded, what it changes in all, as its files show what each does.
-        // The message gives way where there isn't room for both.
-        let total = self.expanded_at(index).map(|expanded| ui::total_lines(expanded.files.iter().map(|f| f.lines)));
-        match total {
-            Some(total) => {
-                let counts = ui::with_line_counts(Line::default(), total);
-                let used: usize = spans.iter().map(Span::width).sum();
-                let room = width.saturating_sub(used + counts.width());
-                spans.push(Span::styled(ui::shorten(&commit.subject, room), subject_style));
-                spans.extend(counts.spans);
-            }
-            None => spans.push(Span::styled(commit.subject.as_str(), subject_style)),
+        if let Some(expanded) = self.expanded_at(index) {
+            let total = ui::total_lines(expanded.files.iter().map(|f| f.lines));
+            spans.extend(ui::with_line_counts(Line::default(), total).spans);
         }
         spans.push(Span::styled(format!("  {}", commit.author), Style::default().fg(ui::DIM)));
         if let Some(stash) = self.stash_at(index) {
@@ -896,23 +889,28 @@ impl GraphPanel {
             }
         }
 
-        ui::selected(Line::from(spans), selected, focused)
+        // The message gives way to what follows it, but its first words stay.
+        let line = ui::fit(Line::from(spans), &[(subject_at, SUBJECT_KEPT)], width);
+        ui::selected(line, selected, focused)
     }
 
     /// A file in the drop-down, with the graph's lines carrying on beside it.
     /// The files line up with their commit's message, or further right if
     /// lines pass beside them.
     /// A file of an expanded commit, with the lines it adds and removes.
-    fn file_row_line(&self, commit: usize, file: usize, focused: bool) -> Line<'_> {
+    fn file_row_line(&self, commit: usize, file: usize, focused: bool, width: usize) -> Line<'_> {
         let Some(expanded) = self.expanded_at(commit) else {
             return Line::default();
         };
         let selected = commit == self.selected && self.selected_file == Some(file);
         let mut line = file_line(&expanded.files[file], selected, focused);
         let mut spans = self.lines_below(commit);
+        let at = spans.len();
         spans.append(&mut line.spans);
         line.spans = spans;
-        ui::with_line_counts(line, expanded.files[file].lines)
+        // The folder gives way to the counts, then most of the name.
+        let line = ui::with_line_counts(line, expanded.files[file].lines);
+        ui::fit(line, &[(at + FOLDER, 0), (at + NAME, NAME_KEPT)], width)
     }
 
     /// The graph's lines carrying on below a commit, then the gap to where
@@ -929,6 +927,10 @@ impl GraphPanel {
 
 /// Between a row's lines and its text.
 const GAP: &str = "  ";
+
+/// How much of a commit's message stays when the row is short of room:
+/// its first few words, which usually say enough.
+const SUBJECT_KEPT: usize = 24;
 
 /// How much of a row the graph draws on: up to its rightmost line or bead.
 fn drawn_width(glyphs: &[Glyph]) -> usize {
@@ -1290,6 +1292,25 @@ mod tests {
 
     fn panel_with_expanded_first_commit(shas: &[&str], files: &[&str]) -> GraphPanel {
         panel_with_expanded(shas, &shas[..1], files)
+    }
+
+    #[test]
+    fn a_long_message_gives_way_to_the_author_and_branch_but_keeps_its_first_words() {
+        let mut panel = panel_with_expanded(&["a"], &[], &[]);
+        panel.commits[0].subject = "Migrate to zarr 3 and move hazard models to the async interface".to_string();
+        panel.commits[0].author = "Joe".to_string();
+        panel.tips = vec![Tip { name: "main".to_string(), sha: "a".to_string() }];
+        panel.colors = vec![Color::Green];
+        panel.unpushed = vec![false];
+        panel.rows = layout(&panel.commits);
+        // Without the bead, which differs between terminals.
+        let text = |width| -> String {
+            panel.commit_line(0, false, width).spans[1..].iter().map(|span| span.content.as_ref()).collect()
+        };
+        assert_eq!(text(200), "  Migrate to zarr 3 and move hazard models to the async interface  Joe  main");
+        assert_eq!(text(40), "  Migrate to zarr 3 and mov…  Joe  main");
+        // Short of room even for its first words, the end is what's cut off.
+        assert_eq!(text(20), "  Migrate to zarr 3 and m…  Joe  main");
     }
 
     #[test]

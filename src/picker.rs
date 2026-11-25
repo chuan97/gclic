@@ -299,7 +299,7 @@ impl Picker {
             .iter()
             .enumerate()
             .skip(scroll)
-            .map(|(row, &item)| self.item_line(&self.items[item], row == self.cursor.index))
+            .map(|(row, &item)| self.item_line(&self.items[item], row == self.cursor.index, list.width as usize))
             .collect();
         if lines.is_empty() {
             let note = if self.free_text {
@@ -344,22 +344,26 @@ impl Picker {
         frame.render_widget(Line::from(query), area);
     }
 
-    fn item_line<'a>(&self, item: &'a str, selected: bool) -> Line<'a> {
+    /// An item's row. A path's folders give way, so its file's name shows.
+    fn item_line<'a>(&self, item: &'a str, selected: bool, width: usize) -> Line<'a> {
         let mut spans = Vec::new();
         if self.multi {
             let mark = if self.ticked.iter().any(|t| t == item) { "◉ " } else { "○ " };
             spans.push(Span::styled(mark, Style::default().fg(Color::Green)));
         }
+        let mut shrinkable = Vec::new();
         match item.rfind('/').filter(|_| self.dim_folders) {
             Some(slash) => {
                 let (folders, name) = item.split_at(slash + 1);
+                shrinkable.push((spans.len(), 1));
                 spans.push(Span::styled(folders, Style::default().fg(ui::DIM)));
                 spans.push(Span::raw(name));
             }
             None => spans.push(Span::raw(item)),
         }
+        let line = ui::fit(Line::from(spans), &shrinkable, width);
         // A picker is focused whenever it shows.
-        ui::selected(Line::from(spans), selected, true)
+        ui::selected(line, selected, true)
     }
 }
 
@@ -392,11 +396,11 @@ mod tests {
     #[test]
     fn dimmed_folders_leave_the_last_name_in_full() {
         let picker = Picker::single("t", Vec::new()).with_dimmed_folders();
-        let line = picker.item_line("group/sub/repo", false);
+        let line = picker.item_line("group/sub/repo", false, 200);
         let parts: Vec<(&str, Option<Color>)> = line.spans.iter().map(|span| (span.content.as_ref(), span.style.fg)).collect();
         assert_eq!(parts, [("group/sub/", Some(ui::DIM)), ("repo", None)]);
 
-        let plain = Picker::single("t", Vec::new()).item_line("feature/bar", false);
+        let plain = Picker::single("t", Vec::new()).item_line("feature/bar", false, 200);
         assert_eq!(plain.spans.len(), 1);
     }
 
