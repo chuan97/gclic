@@ -2,7 +2,7 @@
 //! the file row shared with the other panels' flat lists.
 
 use crate::app::Action;
-use crate::git::{DiffSource, FileEntry};
+use crate::git::{DiffSource, FileEntry, Lines};
 use crate::ui;
 use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
@@ -70,7 +70,8 @@ impl FileList {
         };
     }
 
-    /// Going the other way, an added file is a deleted one and the reverse.
+    /// Going the other way, an added file is a deleted one and the reverse,
+    /// and so are a file's added and removed lines.
     pub fn swap_refs(&mut self) {
         let Diffs::Refs { a, b } = &mut self.diffs else {
             return;
@@ -82,7 +83,15 @@ impl FileList {
                 'D' => 'A',
                 other => other,
             };
+            if let Lines::Counted { added, removed } = file.lines {
+                file.lines = Lines::Counted { added: removed, removed: added };
+            }
         }
+    }
+
+    #[cfg(test)]
+    pub fn lines(&self) -> Vec<Lines> {
+        self.files.iter().map(|file| file.lines).collect()
     }
 
     #[cfg(test)]
