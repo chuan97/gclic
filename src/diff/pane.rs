@@ -77,7 +77,7 @@ fn layout(rows: &[Row], split: bool) -> Vec<Item> {
         let end = (i..rows.len()).find(|&j| !row_is_changed(&rows[j])).unwrap_or(rows.len());
         let has = |j: &usize, left: bool| match &rows[*j] {
             Row::Lines { left: l, right: r } => if left { l.is_some() } else { r.is_some() },
-            Row::Heading(_) => false,
+            Row::Heading(_) | Row::Hunk { .. } => false,
         };
         items.extend((i..end).filter(|j| has(j, true)).map(Item::Old));
         items.extend((i..end).filter(|j| has(j, false)).map(Item::New));
@@ -134,7 +134,7 @@ fn locate(rows: &[Row], anchor: &Anchor) -> Option<usize> {
     let cells = rows.iter().filter_map(|row| match (row, anchor.side) {
         (Row::Lines { left, .. }, Side::Old) => left.as_ref().filter(|cell| cell.changed),
         (Row::Lines { right, .. }, Side::New) => right.as_ref(),
-        (Row::Heading(_), _) => None,
+        (Row::Heading(_) | Row::Hunk { .. }, _) => None,
     });
     cells
         .filter(|cell| cell.text == anchor.text)
@@ -161,7 +161,7 @@ fn file_positions(rows: &[Row]) -> Vec<usize> {
 fn side_number(row: &Row, new_side: bool) -> Option<usize> {
     match row {
         Row::Lines { left, right } => if new_side { right } else { left }.as_ref().map(|cell| cell.number),
-        Row::Heading(_) => None,
+        Row::Heading(_) | Row::Hunk { .. } => None,
     }
 }
 
@@ -244,7 +244,7 @@ pub struct DiffPane {
 fn longest_line(rows: &[Row]) -> usize {
     let cells = rows.iter().flat_map(|row| match row {
         Row::Lines { left, right } => [left.as_ref(), right.as_ref()],
-        Row::Heading(_) => [None, None],
+        Row::Heading(_) | Row::Hunk { .. } => [None, None],
     });
     cells.flatten().map(|cell| cell.text.chars().count()).max().unwrap_or(0)
 }
@@ -646,8 +646,12 @@ impl DiffPane {
             // or once n or N has moved it, as then it's where the user is.
             let active = (focused || self.navigated) && index == self.active;
             let row = &self.rows[item.row()];
-            if let Row::Heading(text) = row {
-                let line = Line::styled(text.as_str(), Style::default().fg(Color::Cyan));
+            let heading = match row {
+                Row::Heading(text) => Some(Line::styled(text.as_str(), Style::default().fg(Color::Cyan))),
+                Row::Hunk { line, added, removed, context } => Some(hunk_heading(*line, *added, *removed, context)),
+                Row::Lines { .. } => None,
+            };
+            if let Some(line) = heading {
                 let line = if active { line.style(Style::default().bg(ui::SELECTED_BG)) } else { line };
                 frame.render_widget(line, full);
                 continue;
@@ -805,6 +809,20 @@ fn finish_line<'a>(gutter: Vec<Span<'a>>, cell: &'a Cell, shift: usize, changed_
     } else {
         line
     }
+}
+
+/// A hunk's heading: `line 6  +43 −2`, then what it's inside of, dimmed.
+fn hunk_heading(line: usize, added: usize, removed: usize, context: &str) -> Line<'_> {
+    let mut spans = vec![Span::styled(format!("line {line}"), Style::default().fg(Color::Cyan))];
+    let counts = ui::line_count_spans(git::Lines::Counted { added, removed });
+    if !counts.is_empty() {
+        spans.push(Span::raw("  "));
+        spans.extend(counts);
+    }
+    if !context.is_empty() {
+        spans.push(Span::styled(format!("  {context}"), Style::default().fg(ui::DIM)));
+    }
+    Line::from(spans)
 }
 
 #[cfg(test)]

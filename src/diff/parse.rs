@@ -30,8 +30,14 @@ pub struct Cell {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Row {
-    /// A hunk header, or a note such as "binary file".
+    /// A note such as "binary file", or a conflict's heading.
     Heading(String),
+    /// Where a hunk starts, the line in the new file, or in the old one when
+    /// it's gone from the new, with the lines it adds and removes, and what
+    /// git found it's inside of, like a function's first line. Git's own
+    /// `@@ -6,9 +6,50 @@` counts the unchanged lines around a change too, and
+    /// the line numbers are on the rows already.
+    Hunk { line: usize, added: usize, removed: usize, context: String },
     Lines { left: Option<Cell>, right: Option<Cell> },
 }
 
@@ -40,6 +46,13 @@ pub fn parse_diff(text: &str) -> Vec<Row> {
     let mut rows = Vec::new();
     let mut in_hunk = false;
     let (mut old_number, mut new_number) = (0, 0);
+    // The heading of the hunk being read, which its lines are counted into.
+    let mut hunk: Option<usize> = None;
+    let count = |rows: &mut Vec<Row>, hunk: Option<usize>, is_added: bool| {
+        if let Some(Row::Hunk { added, removed, .. }) = hunk.and_then(|index| rows.get_mut(index)) {
+            *if is_added { added } else { removed } += 1;
+        }
+    };
     // A change is a run of removed lines followed by a run of added lines.
     // They are held back here so they can be lined up with each other.
     let mut removed: Vec<Cell> = Vec::new();
@@ -49,7 +62,10 @@ pub fn parse_diff(text: &str) -> Vec<Row> {
         if line.starts_with("@@ ") {
             flush_change(&mut rows, &mut removed, &mut added);
             (old_number, new_number) = parse_hunk_header(line);
-            rows.push(Row::Heading(line.to_string()));
+            hunk = Some(rows.len());
+            let context = line.splitn(4, ' ').nth(3).and_then(|rest| rest.split_once("@@")).map_or("", |(_, after)| after);
+            let line = if new_number > 0 { new_number } else { old_number };
+            rows.push(Row::Hunk { line, added: 0, removed: 0, context: context.trim().to_string() });
             in_hunk = true;
         } else if !in_hunk {
             if line.starts_with("Binary files ") {
@@ -61,9 +77,11 @@ pub fn parse_diff(text: &str) -> Vec<Row> {
                 flush_change(&mut rows, &mut removed, &mut added);
             }
             removed.push(changed_cell(old_number, content));
+            count(&mut rows, hunk, false);
             old_number += 1;
         } else if let Some(content) = line.strip_prefix('+') {
             added.push(changed_cell(new_number, content));
+            count(&mut rows, hunk, true);
             new_number += 1;
         } else if !line.starts_with('\\') {
             // Context line. `\ No newline at end of file` is ignored.
@@ -176,11 +194,11 @@ pub fn highlight_rows(rows: &mut [Row], source: &DiffSource) -> usize {
     };
     let last_old = last_line(|row| match row {
         Row::Lines { left, .. } => left.as_ref(),
-        Row::Heading(_) => None,
+        Row::Heading(_) | Row::Hunk { .. } => None,
     });
     let last_new = last_line(|row| match row {
         Row::Lines { right, .. } => right.as_ref(),
-        Row::Heading(_) => None,
+        Row::Heading(_) | Row::Hunk { .. } => None,
     });
     if last_old == 0 && last_new == 0 {
         return 0; // Nothing to colour, as in a binary file's diff.
@@ -490,7 +508,7 @@ mod tests {
                     left.as_ref().map(|c| c.text.as_str()),
                     right.as_ref().map(|c| c.text.as_str()),
                 )),
-                Row::Heading(_) => None,
+                Row::Heading(_) | Row::Hunk { .. } => None,
             })
             .collect()
     }
@@ -595,7 +613,7 @@ mod tests {
         assert_eq!(
             rows,
             vec![
-                Row::Heading("@@ -10,3 +10,4 @@ fn x".to_string()),
+                Row::Hunk { line: 10, added: 2, removed: 1, context: "fn x".to_string() },
                 Row::Lines { left: cell(10, "ctx", false), right: cell(10, "ctx", false) },
                 Row::Lines { left: cell(11, "old", true), right: cell(11, "new1", true) },
                 Row::Lines { left: None, right: cell(12, "new2", true) },
@@ -624,6 +642,16 @@ mod tests {
     fn reports_binary_files() {
         let rows = parse_diff("diff --git a/x b/x\nBinary files a/x and b/x differ\n");
         assert_eq!(rows, vec![Row::Heading("Binary file".to_string())]);
+    }
+
+    #[test]
+    fn each_hunk_counts_its_own_changes_not_the_lines_around_them() {
+        let hunks = |diff| -> Vec<Row> { parse_diff(diff).into_iter().filter(|row| matches!(row, Row::Hunk { .. })).collect() };
+        let hunk = |line, added, removed, context: &str| Row::Hunk { line, added, removed, context: context.to_string() };
+        let two = "@@ -6,4 +6,5 @@ class A:\n a\n-b\n+B\n+C\n c\n d\n@@ -40,3 +41,2 @@\n x\n-y\n z\n";
+        assert_eq!(hunks(two), [hunk(6, 2, 1, "class A:"), hunk(41, 0, 1, "")]);
+        // A deleted file has no line in the new one, so it's the old one's.
+        assert_eq!(hunks("@@ -1,2 +0,0 @@\n-a\n-b\n"), [hunk(1, 0, 2, "")]);
     }
 
     #[test]
