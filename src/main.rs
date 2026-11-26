@@ -87,9 +87,6 @@ fn run(terminal: &mut DefaultTerminal, repo: Option<Repo>, search_root: PathBuf)
             None => return Ok(()),
         },
     };
-    // gclic's git calls run in the repo wherever it is, but the commands the
-    // user runs, in a shell or an editor in this terminal, start here.
-    std::env::set_current_dir(repo.root())?;
     App::new(repo, search_root).run(terminal)
 }
 

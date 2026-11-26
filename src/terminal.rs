@@ -13,6 +13,7 @@ use ratatui::crossterm::terminal::{
 };
 use ratatui::DefaultTerminal;
 use std::io::BufRead;
+use std::path::Path;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
@@ -43,23 +44,23 @@ pub fn plain_keys() {
     }
 }
 
-/// The shell `:!` runs a line in: the user's own on Unix, PowerShell on
-/// Windows.
-fn shell(line: &str) -> Vec<Command> {
+/// The shell `:!` runs a line in, in `folder`: the user's own on Unix,
+/// PowerShell on Windows.
+fn shell(folder: &Path, line: &str) -> Vec<Command> {
     if cfg!(windows) {
         // PowerShell 7 if it's installed, or the one Windows comes with.
         ["pwsh", "powershell"]
             .into_iter()
             .map(|program| {
                 let mut command = Command::new(program);
-                command.args(["-NoLogo", "-Command", line]);
+                command.args(["-NoLogo", "-Command", line]).current_dir(folder);
                 command
             })
             .collect()
     } else {
         let program = std::env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
         let mut command = Command::new(program);
-        command.args(["-c", line]);
+        command.args(["-c", line]).current_dir(folder);
         vec![command]
     }
 }
@@ -73,8 +74,8 @@ fn shell(line: &str) -> Vec<Command> {
 /// moves it. The screen is cleared first, so that printing can't scroll the
 /// cursor back to where it was. Returns a note for the message line, when
 /// gclic came straight back from a command that failed.
-pub fn run_in_terminal(terminal: &mut DefaultTerminal, line: &str) -> Result<Option<String>> {
-    hand_terminal(terminal, line, &format!("!{line}"), shell(line))
+pub fn run_in_terminal(terminal: &mut DefaultTerminal, folder: &Path, line: &str) -> Result<Option<String>> {
+    hand_terminal(terminal, line, &format!("!{line}"), shell(folder, line))
 }
 
 /// Gives the terminal to a command, as `run_in_terminal` does, showing what
@@ -164,6 +165,19 @@ impl Drop for LeaveInterrupts {
         #[cfg(windows)]
         unsafe {
             windows_sys::Win32::System::Console::SetConsoleCtrlHandler(None, 0);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_shell_command_runs_in_the_folder_it_is_given() {
+        let folder = std::env::temp_dir();
+        for command in shell(&folder, "ls") {
+            assert_eq!(command.get_current_dir(), Some(folder.as_path()));
         }
     }
 }
