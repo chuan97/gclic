@@ -115,6 +115,8 @@ const RIGHT: &[Section] = &[
             ("gg G", "first/last line"),
             ("ctrl-d u", "half a page down/up"),
             ("n N", "next/previous change, from any pane"),
+            ("space", "stage or unstage the change, in a file's changes"),
+            ("d", "discard the change, after asking, in its unstaged changes"),
             ("h l", "scroll sideways"),
             ("e", "whole file, or just the changes, from any pane"),
             ("s", "side by side, or unified, from any pane"),

@@ -780,3 +780,271 @@ fn following_neovim_moves_to_the_repo_it_went_to_once() {
     // It keeps following, without moving again for the same folder.
     assert!(app.follow.is_some() && !app.follow_neovim());
 }
+
+// Staging a change at a time, from inside a file's diff (#86).
+
+/// Eight numbered lines, committed, as the file each test edits.
+const EIGHT: &str = "1\n2\n3\n4\n5\n6\n7\n8\n";
+
+fn repo_with(path: &str, text: &str) -> TestRepo {
+    let repo = TestRepo::new();
+    repo.write(path, text);
+    repo.commit("Add it");
+    repo
+}
+
+/// The file as the index has it.
+fn staged(repo: &TestRepo, path: &str) -> String {
+    repo.git(&["show", &format!(":{path}")])
+}
+
+/// Into `source`'s diff, on its first change.
+fn into_diff(app: &mut App, source: DiffSource) {
+    app.show_diff(source);
+    app.focus_preview();
+    press(app, KeyCode::Char('n'));
+}
+
+#[test]
+fn space_in_a_diff_stages_the_change_the_active_line_is_in() {
+    // Two changes, close enough to share a hunk.
+    let repo = repo_with("f", EIGHT);
+    repo.write("f", "1\nTWO\n3\n4\n5\n5.5\n6\n7\n8\n");
+    let mut app = app_on(&repo);
+    into_diff(&mut app, DiffSource::Unstaged("f".to_string()));
+    assert!(app.hints().contains(&("space", "stage change")));
+    press(&mut app, KeyCode::Char(' '));
+    assert_eq!(app.message, "Staged the change");
+    assert_eq!(staged(&repo, "f"), "1\nTWO\n3\n4\n5\n6\n7\n8\n");
+    // The other change is left, and the active line is on it.
+    let diff = app.view.diff().unwrap();
+    assert_eq!(diff.change_count(), 1);
+    assert_eq!(diff.active_change().map(|change| change.new.into_iter().collect::<Vec<_>>()), Some(vec![6]));
+    // It's the last one, so it goes as the whole file does.
+    press(&mut app, KeyCode::Char(' '));
+    assert_eq!(app.message, "Staged f");
+    assert_eq!(staged(&repo, "f"), repo.read("f").unwrap());
+    assert_eq!(app.view.diff().unwrap().change_count(), 0);
+}
+
+#[test]
+fn staging_a_change_and_unstaging_it_leaves_the_index_as_it_was() {
+    let repo = repo_with("f", EIGHT);
+    repo.write("f", "1\nTWO\n3\n4\n5\n5.5\n6\n7\nEIGHT\n");
+    let mut app = app_on(&repo);
+    into_diff(&mut app, DiffSource::Unstaged("f".to_string()));
+    press(&mut app, KeyCode::Char('n'));
+    press(&mut app, KeyCode::Char(' '));
+    assert_eq!(staged(&repo, "f"), "1\n2\n3\n4\n5\n5.5\n6\n7\n8\n");
+    // Stage the first too, then unstage the second from the staged diff.
+    press(&mut app, KeyCode::Char('g'));
+    press(&mut app, KeyCode::Char('g'));
+    press(&mut app, KeyCode::Char('n'));
+    press(&mut app, KeyCode::Char(' '));
+    assert_eq!(staged(&repo, "f"), "1\nTWO\n3\n4\n5\n5.5\n6\n7\n8\n");
+    into_diff(&mut app, DiffSource::Staged("f".to_string()));
+    assert!(app.hints().contains(&("space", "unstage change")));
+    press(&mut app, KeyCode::Char('n'));
+    press(&mut app, KeyCode::Char(' '));
+    assert_eq!(app.message, "Unstaged the change");
+    assert_eq!(staged(&repo, "f"), "1\nTWO\n3\n4\n5\n6\n7\n8\n");
+    press(&mut app, KeyCode::Char(' '));
+    assert_eq!(staged(&repo, "f"), EIGHT);
+    // The working tree was never touched.
+    assert_eq!(repo.read("f").as_deref(), Some("1\nTWO\n3\n4\n5\n5.5\n6\n7\nEIGHT\n"));
+}
+
+#[test]
+fn a_change_stages_the_same_in_a_whole_file_diff_and_unified() {
+    for keys in [&['e'][..], &['s'][..], &['e', 's'][..]] {
+        let repo = repo_with("f", EIGHT);
+        repo.write("f", "1\nTWO\n3\n4\n5\n6\n7\nEIGHT\n");
+        let mut app = app_on(&repo);
+        for key in keys {
+            press(&mut app, KeyCode::Char(*key));
+        }
+        into_diff(&mut app, DiffSource::Unstaged("f".to_string()));
+        press(&mut app, KeyCode::Char(' '));
+        assert_eq!(staged(&repo, "f"), "1\nTWO\n3\n4\n5\n6\n7\n8\n", "with {keys:?}");
+    }
+}
+
+#[test]
+fn changes_at_the_ends_of_a_file_stage_alone() {
+    // The first line, and a last line without a newline, in a file long
+    // enough for them to be separate hunks.
+    let long: String = (1..=20).map(|n| format!("{n}\n")).collect();
+    let repo = repo_with("f", &long);
+    let edited = format!("ONE\n{}20 and no newline", &long["1\n".len()..long.len() - "20\n".len()]);
+    repo.write("f", &edited);
+    let mut app = app_on(&repo);
+    // The last change first, then the first.
+    into_diff(&mut app, DiffSource::Unstaged("f".to_string()));
+    press(&mut app, KeyCode::Char('n'));
+    press(&mut app, KeyCode::Char(' '));
+    let index = staged(&repo, "f");
+    assert!(index.starts_with("1\n2\n") && index.ends_with("19\n20 and no newline"), "{index:?}");
+    press(&mut app, KeyCode::Char(' '));
+    assert_eq!(staged(&repo, "f"), edited);
+}
+
+#[test]
+fn a_change_in_a_file_with_spaces_in_its_path_stages() {
+    let repo = repo_with("a folder/a file.txt", EIGHT);
+    repo.write("a folder/a file.txt", "ONE\n2\n3\n4\n5\n6\n7\nEIGHT\n");
+    let mut app = app_on(&repo);
+    into_diff(&mut app, DiffSource::Unstaged("a folder/a file.txt".to_string()));
+    press(&mut app, KeyCode::Char(' '));
+    assert_eq!(staged(&repo, "a folder/a file.txt"), "ONE\n2\n3\n4\n5\n6\n7\n8\n");
+}
+
+#[test]
+fn a_new_or_deleted_file_is_staged_whole() {
+    let repo = repo_with("gone", EIGHT);
+    repo.write("new", "a\nb\n");
+    std::fs::remove_file(repo.file("gone")).unwrap();
+    let mut app = app_on(&repo);
+    into_diff(&mut app, DiffSource::Untracked("new".to_string()));
+    press(&mut app, KeyCode::Char(' '));
+    into_diff(&mut app, DiffSource::Unstaged("gone".to_string()));
+    press(&mut app, KeyCode::Char(' '));
+    let staged = git::status(&repo).unwrap().staged;
+    assert_eq!(staged.iter().map(|file| (file.status, file.path.as_str())).collect::<Vec<_>>(), [('D', "gone"), ('A', "new")]);
+    // And back, from the staged diff.
+    into_diff(&mut app, DiffSource::Staged("gone".to_string()));
+    press(&mut app, KeyCode::Char(' '));
+    assert_eq!(git::status(&repo).unwrap().staged.len(), 1);
+}
+
+#[test]
+fn space_off_a_change_or_on_a_conflict_says_why_it_does_nothing() {
+    let repo = repo_with("f", EIGHT);
+    repo.write("f", "1\nTWO\n3\n4\n5\n6\n7\n8\n");
+    let mut app = app_on(&repo);
+    app.show_diff(DiffSource::Unstaged("f".to_string()));
+    app.focus_preview();
+    // The hunk's heading, at the top, isn't a change.
+    press(&mut app, KeyCode::Char(' '));
+    assert!(app.message.starts_with("Not on a change"), "{}", app.message);
+    assert!(!app.hints().iter().any(|(key, _)| *key == "space"));
+    assert_eq!(staged(&repo, "f"), EIGHT);
+
+    let repo = TestRepo::with_history();
+    repo.conflicting_merge("clash.txt");
+    let mut app = app_on(&repo);
+    into_diff(&mut app, DiffSource::Conflict("clash.txt".to_string()));
+    press(&mut app, KeyCode::Char(' '));
+    assert!(app.message.starts_with("A conflict is staged whole"), "{}", app.message);
+    assert_eq!(git::status(&repo).unwrap().conflicted.len(), 1);
+}
+
+#[test]
+fn a_diff_that_no_longer_matches_the_index_stages_nothing() {
+    let repo = repo_with("f", EIGHT);
+    repo.write("f", "1\nTWO\n3\n4\n5\n6\n7\nEIGHT\n");
+    let mut app = app_on(&repo);
+    into_diff(&mut app, DiffSource::Unstaged("f".to_string()));
+    // Staged elsewhere, as from another terminal, before gclic saw it.
+    repo.git(&["add", "f"]);
+    press(&mut app, KeyCode::Char(' '));
+    assert!(matches!(app.modal, Modal::Error(_)), "{}", app.message);
+    assert_eq!(staged(&repo, "f"), "1\nTWO\n3\n4\n5\n6\n7\nEIGHT\n");
+}
+
+#[test]
+fn space_in_a_commit_s_diff_does_nothing() {
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
+    into_diff(&mut app, last_commit_diff());
+    press(&mut app, KeyCode::Char(' '));
+    assert!(app.message.is_empty(), "{}", app.message);
+    assert_eq!(git::status(&repo).unwrap(), git::Status::default());
+}
+
+#[test]
+fn d_in_a_diff_discards_the_change_the_active_line_is_in_after_asking() {
+    let repo = repo_with("f", EIGHT);
+    repo.write("f", "1\nTWO\n3\n4\n5\n5.5\n6\n7\n8\n");
+    let mut app = app_on(&repo);
+    into_diff(&mut app, DiffSource::Unstaged("f".to_string()));
+    assert!(app.hints().contains(&("d", "discard change")));
+    press(&mut app, KeyCode::Char('d'));
+    assert!(matches!(&app.modal, Modal::Confirm(Confirm::RestoreChange { path, .. }) if path == "f"));
+    let shown = screen(&mut app);
+    assert!(shown.contains("Discard this change to f?"), "{shown}");
+    // Esc keeps it.
+    press(&mut app, KeyCode::Esc);
+    assert_eq!(repo.read("f").as_deref(), Some("1\nTWO\n3\n4\n5\n5.5\n6\n7\n8\n"));
+    press(&mut app, KeyCode::Char('d'));
+    press(&mut app, KeyCode::Enter);
+    assert_eq!(app.message, "Discarded the change");
+    assert_eq!(repo.read("f").as_deref(), Some("1\n2\n3\n4\n5\n5.5\n6\n7\n8\n"));
+    // The other change is left, with the active line on it, and the index
+    // was never touched.
+    assert_eq!(app.view.diff().unwrap().change_count(), 1);
+    assert!(app.view.diff().unwrap().active_change().is_some());
+    assert_eq!(staged(&repo, "f"), EIGHT);
+}
+
+#[test]
+fn discarding_a_change_leaves_what_s_staged_alone() {
+    // Line 2 staged, then lines 2 and 7 changed again on disk.
+    let repo = repo_with("f", EIGHT);
+    repo.write("f", "1\nTWO\n3\n4\n5\n6\n7\n8\n");
+    repo.git(&["add", "f"]);
+    repo.write("f", "1\nTwo\n3\n4\n5\n6\nSEVEN\n8\n");
+    let mut app = app_on(&repo);
+    // The edit to line 7 first, which is the second change.
+    into_diff(&mut app, DiffSource::Unstaged("f".to_string()));
+    press(&mut app, KeyCode::Char('n'));
+    press(&mut app, KeyCode::Char('d'));
+    press(&mut app, KeyCode::Enter);
+    // Back to what's staged, not to what was committed.
+    assert_eq!(repo.read("f").as_deref(), Some("1\nTwo\n3\n4\n5\n6\n7\n8\n"));
+    assert_eq!(staged(&repo, "f"), "1\nTWO\n3\n4\n5\n6\n7\n8\n");
+}
+
+#[test]
+fn d_on_a_file_s_only_change_or_a_new_file_asks_as_the_list_does() {
+    let repo = repo_with("f", EIGHT);
+    repo.write("f", "1\nTWO\n3\n4\n5\n6\n7\n8\n");
+    repo.write("new", "new\n");
+    let mut app = app_on(&repo);
+    into_diff(&mut app, DiffSource::Unstaged("f".to_string()));
+    press(&mut app, KeyCode::Char('d'));
+    assert!(matches!(&app.modal, Modal::Confirm(Confirm::Restore(path)) if path == "f"));
+    press(&mut app, KeyCode::Esc);
+    into_diff(&mut app, DiffSource::Untracked("new".to_string()));
+    press(&mut app, KeyCode::Char('d'));
+    assert!(matches!(&app.modal, Modal::Confirm(Confirm::DeleteUntracked(path)) if path == "new"));
+    press(&mut app, KeyCode::Enter);
+    assert_eq!(repo.read("new"), None);
+}
+
+#[test]
+fn a_staged_change_is_not_discarded_from_its_diff() {
+    let repo = repo_with("f", EIGHT);
+    repo.write("f", "1\nTWO\n3\n4\n5\n6\n7\n8\n");
+    repo.git(&["add", "f"]);
+    let mut app = app_on(&repo);
+    into_diff(&mut app, DiffSource::Staged("f".to_string()));
+    assert!(!app.hints().iter().any(|(key, _)| *key == "d"));
+    press(&mut app, KeyCode::Char('d'));
+    assert!(matches!(app.modal, Modal::None));
+    assert!(app.message.starts_with("Staged changes are kept"), "{}", app.message);
+    assert_eq!(staged(&repo, "f"), "1\nTWO\n3\n4\n5\n6\n7\n8\n");
+}
+
+#[test]
+fn a_file_changed_since_its_diff_loaded_discards_nothing() {
+    let repo = repo_with("f", EIGHT);
+    repo.write("f", "1\nTWO\n3\n4\n5\n6\n7\nEIGHT\n");
+    let mut app = app_on(&repo);
+    into_diff(&mut app, DiffSource::Unstaged("f".to_string()));
+    press(&mut app, KeyCode::Char('d'));
+    // Edited again in the editor, under the change, before confirming.
+    repo.write("f", "1\nTwo\n3\n4\n5\n6\n7\nEIGHT\n");
+    press(&mut app, KeyCode::Enter);
+    assert!(matches!(app.modal, Modal::Error(_)), "{}", app.message);
+    assert_eq!(repo.read("f").as_deref(), Some("1\nTwo\n3\n4\n5\n6\n7\nEIGHT\n"));
+}

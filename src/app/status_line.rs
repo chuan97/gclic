@@ -77,7 +77,17 @@ impl App {
         // What esc does, unless an open diff or details take it.
         let mut esc = None;
         if self.view.in_preview {
-            if self.view.diff().is_some() {
+            if let Some(diff) = self.view.diff() {
+                // On a change of the working tree, it can be staged alone.
+                if diff.active_change().is_some() {
+                    match diff.source {
+                        DiffSource::Unstaged(_) | DiffSource::Untracked(_) => {
+                            hints.extend([("space", "stage change"), ("d", "discard change")]);
+                        }
+                        DiffSource::Staged(_) => hints.push(("space", "unstage change")),
+                        _ => {}
+                    }
+                }
                 hints.extend(self.comment_hints());
                 hints.extend(self.diff_view_hints());
             } else {

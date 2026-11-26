@@ -27,7 +27,7 @@ use crate::details::DetailsPane;
 use crate::editor::{self, Launch};
 use crate::repos;
 use crate::review::{self, Anchor, Comment, ListAction, Review, ReviewList};
-use crate::diff::{ColorCache, Colored, DiffPane, DiffView};
+use crate::diff::{self, ColorCache, Colored, DiffPane, DiffView};
 use crate::git::{self, Stash, CommitDetails, DiffSource, Repo};
 use crate::graph::GraphPanel;
 use crate::help::HelpPopup;
@@ -141,6 +141,9 @@ impl Action {
 /// A destructive operation waiting for y/n.
 pub enum Confirm {
     Restore(String),
+    /// d inside a file's diff: the change the active line is in, as a patch
+    /// to take back out of the file.
+    RestoreChange { path: String, patch: String },
     DeleteUntracked(String),
     /// D: every change not staged, as d would discard each.
     DiscardAll { restore: Vec<String>, delete: Vec<String> },
@@ -557,6 +560,18 @@ impl App {
                 if let Some(diff) = self.view.diff_mut() {
                     diff.handle_key(key);
                 }
+            }
+            // Inside a working-tree diff, space takes the change the active
+            // line is in, as it takes the file in the list.
+            KeyCode::Char(' ') if self.view.in_preview && self.view.diff().is_some_and(|diff| diff.source.is_working_tree()) => {
+                self.stage_active_change();
+            }
+            KeyCode::Char('d')
+                if key.modifiers.is_empty()
+                    && self.view.in_preview
+                    && self.view.diff().is_some_and(|diff| diff.source.is_working_tree()) =>
+            {
+                self.ask_to_restore_active_change();
             }
             KeyCode::Char('s') if self.view.diff().is_some() => {
                 self.split = self.view.diff().map(|diff| !diff.is_split());

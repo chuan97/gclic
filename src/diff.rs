@@ -4,10 +4,12 @@
 mod cache;
 mod pane;
 mod parse;
+mod patch;
 
 pub use cache::{ColorCache, Colored, DiffView};
 pub use pane::DiffPane;
 pub use parse::{highlight_rows, rows_for};
+pub use patch::{change_patch, Direction};
 #[cfg(test)]
 pub use parse::Row;
 
