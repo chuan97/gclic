@@ -31,7 +31,13 @@ impl Fetcher {
     }
 
     fn with(fetch: impl Fn() -> Result<()> + Send + Sync + 'static) -> Fetcher {
-        Fetcher { auto: true, running: None, started: None, last: None, fetch: Arc::new(fetch) }
+        Fetcher {
+            auto: true,
+            running: None,
+            started: None,
+            last: None,
+            fetch: Arc::new(fetch),
+        }
     }
 
     pub(super) fn is_fetching(&self) -> bool {
@@ -59,7 +65,11 @@ impl Fetcher {
         if let Some(running) = &self.running {
             match running.try_recv() {
                 Ok(result) => {
-                    self.last = Some(result.map(|()| Instant::now()).map_err(|error| error.to_string()));
+                    self.last = Some(
+                        result
+                            .map(|()| Instant::now())
+                            .map_err(|error| error.to_string()),
+                    );
                     self.running = None;
                 }
                 Err(TryRecvError::Empty) => {}
@@ -69,7 +79,9 @@ impl Fetcher {
                 }
             }
         }
-        let due = self.started.is_none_or(|started| started.elapsed() >= FETCH_EVERY);
+        let due = self
+            .started
+            .is_none_or(|started| started.elapsed() >= FETCH_EVERY);
         let ended = before && self.running.is_none();
         if self.auto && self.running.is_none() && due {
             self.start();

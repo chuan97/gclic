@@ -27,7 +27,13 @@ pub fn setting() -> String {
         .into_iter()
         .filter_map(|name| std::env::var(name).ok())
         .find(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| if cfg!(windows) { "notepad".to_string() } else { "vi".to_string() })
+        .unwrap_or_else(|| {
+            if cfg!(windows) {
+                "notepad".to_string()
+            } else {
+                "vi".to_string()
+            }
+        })
 }
 
 /// The setting's words, split as a shell would, unless the whole of it is
@@ -42,12 +48,17 @@ fn words(setting: &str) -> Result<Vec<String>, String> {
 
 /// The editor's name, for the hint: its program, without folders or `.exe`.
 pub fn name(setting: &str) -> String {
-    let program = words(setting).ok().and_then(|args| args.into_iter().next()).unwrap_or_default();
+    let program = words(setting)
+        .ok()
+        .and_then(|args| args.into_iter().next())
+        .unwrap_or_default();
     program_name(&program)
 }
 
 fn program_name(program: &str) -> String {
-    let file = Path::new(program).file_name().map_or(program.into(), |name| name.to_string_lossy());
+    let file = Path::new(program)
+        .file_name()
+        .map_or(program.into(), |name| name.to_string_lossy());
     file.trim_end_matches(".exe").to_lowercase()
 }
 
@@ -65,9 +76,8 @@ enum LineArgs {
 
 fn line_args(program: &str) -> LineArgs {
     match program {
-        "vi" | "vim" | "nvim" | "gvim" | "nano" | "micro" | "emacs" | "emacsclient" | "kak" | "ne" | "mg" => {
-            LineArgs::Plus
-        }
+        "vi" | "vim" | "nvim" | "gvim" | "nano" | "micro" | "emacs" | "emacsclient" | "kak"
+        | "ne" | "mg" => LineArgs::Plus,
         "hx" | "helix" | "zed" | "subl" => LineArgs::Colon,
         "code" | "code-insiders" | "codium" | "cursor" | "windsurf" => LineArgs::Goto,
         _ => LineArgs::None,
@@ -79,7 +89,15 @@ fn line_args(program: &str) -> LineArgs {
 fn is_gui(program: &str) -> bool {
     matches!(
         program,
-        "zed" | "subl" | "code" | "code-insiders" | "codium" | "cursor" | "windsurf" | "gvim" | "notepad"
+        "zed"
+            | "subl"
+            | "code"
+            | "code-insiders"
+            | "codium"
+            | "cursor"
+            | "windsurf"
+            | "gvim"
+            | "notepad"
     )
 }
 
@@ -93,7 +111,10 @@ pub fn launch(setting: &str, file: &Path, line: usize) -> Result<Launch, String>
     let templated = args.iter().any(|arg| arg.contains("{file}"));
     let mut full: Vec<String> = Vec::new();
     if templated {
-        full.extend(own_args.iter().map(|arg| arg.replace("{file}", &file).replace("{line}", &line.to_string())));
+        full.extend(own_args.iter().map(|arg| {
+            arg.replace("{file}", &file)
+                .replace("{line}", &line.to_string())
+        }));
     } else {
         full.extend(own_args.iter().cloned());
         match line_args(&program_name(program)) {
@@ -119,14 +140,18 @@ pub fn parent_nvim() -> Option<String> {
     if cfg!(test) {
         return None;
     }
-    std::env::var("NVIM").ok().filter(|address| !address.is_empty())
+    std::env::var("NVIM")
+        .ok()
+        .filter(|address| !address.is_empty())
 }
 
 /// Asks the Neovim at `address` to evaluate an expression, in the background.
 /// Through the very Neovim gclic runs in, which the plugin names in
 /// `$GCLIC_NVIM`, as `nvim` on the `PATH` may be another, or none.
 fn nvim_expr(address: &str, expr: &str) -> Command {
-    let program = std::env::var("GCLIC_NVIM").ok().filter(|program| !program.is_empty());
+    let program = std::env::var("GCLIC_NVIM")
+        .ok()
+        .filter(|program| !program.is_empty());
     let mut command = Command::new(program.as_deref().unwrap_or("nvim"));
     command.args(["--server", address, "--remote-expr", expr]);
     command
@@ -149,7 +174,10 @@ pub fn open_in_nvim(address: &str, file: &Path, line: usize) -> Command {
                pcall(vim.api.nvim_win_set_cursor, 0, { a[2], 0 }) \
                end)(_A)";
     let file = vim_string(&file.display().to_string());
-    nvim_expr(address, &format!("luaeval({}, [{file}, {line}])", vim_string(lua)))
+    nvim_expr(
+        address,
+        &format!("luaeval({}, [{file}, {line}])", vim_string(lua)),
+    )
 }
 
 /// Asks the parent Neovim to show the repo's colour again, after `:color`
@@ -163,7 +191,14 @@ pub fn refresh_nvim_accent(address: &str) -> Command {
 /// its file finder, search and file tree follow.
 pub fn cd_nvim(address: &str, folder: &Path) -> Command {
     let lua = "vim.cmd.cd(vim.fn.fnameescape(_A))";
-    nvim_expr(address, &format!("luaeval({}, {})", vim_string(lua), vim_string(&folder.display().to_string())))
+    nvim_expr(
+        address,
+        &format!(
+            "luaeval({}, {})",
+            vim_string(lua),
+            vim_string(&folder.display().to_string())
+        ),
+    )
 }
 
 /// Following the Neovim gclic runs in: its plugin writes Neovim's working
@@ -184,26 +219,36 @@ impl Follow {
             return None;
         }
         let file = std::env::var_os("GCLIC_FOLLOW").filter(|file| !file.is_empty())?;
-        Some(Follow { file: PathBuf::from(file), seen: None })
+        Some(Follow {
+            file: PathBuf::from(file),
+            seen: None,
+        })
     }
 
     /// Following the folders written to `file`.
     #[cfg(test)]
     pub fn at(file: &Path) -> Follow {
-        Follow { file: file.to_path_buf(), seen: None }
+        Follow {
+            file: file.to_path_buf(),
+            seen: None,
+        }
     }
 
     /// The root of the repo Neovim has moved to, if it wrote a folder since
     /// last asked and that folder is in a repo other than `current`. Folders
     /// outside a repo are passed over.
     pub fn moved_to(&mut self, current: &Path) -> Option<PathBuf> {
-        let changed = std::fs::metadata(&self.file).and_then(|meta| meta.modified()).ok()?;
+        let changed = std::fs::metadata(&self.file)
+            .and_then(|meta| meta.modified())
+            .ok()?;
         if self.seen == Some(changed) {
             return None;
         }
         self.seen = Some(changed);
         let folder = std::fs::read_to_string(&self.file).ok()?;
-        let root = crate::git::Repo::discover(Path::new(folder.trim()))?.root().to_path_buf();
+        let root = crate::git::Repo::discover(Path::new(folder.trim()))?
+            .root()
+            .to_path_buf();
         (!crate::repos::same_folder(&root, current)).then_some(root)
     }
 }
@@ -214,27 +259,53 @@ mod tests {
 
     /// The program and arguments a launch would run, and whether in the terminal.
     fn run(setting: &str) -> (Vec<String>, bool) {
-        let (command, terminal) = match launch(setting, Path::new("/repo/src/main.rs"), 42).unwrap() {
+        let (command, terminal) = match launch(setting, Path::new("/repo/src/main.rs"), 42).unwrap()
+        {
             Launch::Background(command) => (command, false),
             Launch::Terminal(_, command) => (command, true),
         };
         let mut words = vec![command.get_program().to_string_lossy().into_owned()];
-        words.extend(command.get_args().map(|arg| arg.to_string_lossy().into_owned()));
+        words.extend(
+            command
+                .get_args()
+                .map(|arg| arg.to_string_lossy().into_owned()),
+        );
         (words, terminal)
     }
 
     #[test]
     fn each_editor_gets_the_line_its_own_way() {
-        assert_eq!(run("nvim"), (vec!["nvim".into(), "+42".into(), "/repo/src/main.rs".into()], true));
-        assert_eq!(run("hx"), (vec!["hx".into(), "/repo/src/main.rs:42".into()], true));
-        assert_eq!(run("zed"), (vec!["zed".into(), "/repo/src/main.rs:42".into()], false));
-        let code = vec!["code".into(), "--goto".into(), "/repo/src/main.rs:42".into()];
+        assert_eq!(
+            run("nvim"),
+            (
+                vec!["nvim".into(), "+42".into(), "/repo/src/main.rs".into()],
+                true
+            )
+        );
+        assert_eq!(
+            run("hx"),
+            (vec!["hx".into(), "/repo/src/main.rs:42".into()], true)
+        );
+        assert_eq!(
+            run("zed"),
+            (vec!["zed".into(), "/repo/src/main.rs:42".into()], false)
+        );
+        let code = vec![
+            "code".into(),
+            "--goto".into(),
+            "/repo/src/main.rs:42".into(),
+        ];
         assert_eq!(run("code"), (code, false));
     }
 
     #[test]
     fn a_setting_keeps_its_own_arguments_and_its_program_path() {
-        let emacs = vec!["emacs".into(), "-nw".into(), "+42".into(), "/repo/src/main.rs".into()];
+        let emacs = vec![
+            "emacs".into(),
+            "-nw".into(),
+            "+42".into(),
+            "/repo/src/main.rs".into(),
+        ];
         assert_eq!(run("emacs -nw"), (emacs, true));
         assert_eq!(run("/usr/local/bin/nvim").0[1], "+42");
         assert_eq!(name("/usr/local/bin/nvim"), "nvim");
@@ -259,7 +330,12 @@ mod tests {
 
     #[test]
     fn a_template_says_where_the_file_and_line_go() {
-        let custom = vec!["myeditor".into(), "--line".into(), "42".into(), "/repo/src/main.rs".into()];
+        let custom = vec![
+            "myeditor".into(),
+            "--line".into(),
+            "42".into(),
+            "/repo/src/main.rs".into(),
+        ];
         assert_eq!(run("myeditor --line {line} {file}"), (custom, true));
         // Unknown and without a template, it just gets the file.
         assert_eq!(run("myeditor").0, ["myeditor", "/repo/src/main.rs"]);
@@ -272,10 +348,17 @@ mod tests {
         let (here, there) = (base.join("here"), base.join("there"));
         for repo in [&here, &there] {
             std::fs::create_dir_all(repo.join("src")).unwrap();
-            Command::new("git").args(["init", "-q"]).current_dir(repo).status().unwrap();
+            Command::new("git")
+                .args(["init", "-q"])
+                .current_dir(repo)
+                .status()
+                .unwrap();
         }
         let file = base.join("follow");
-        let mut follow = Follow { file: file.clone(), seen: None };
+        let mut follow = Follow {
+            file: file.clone(),
+            seen: None,
+        };
         assert_eq!(follow.moved_to(&here), None); // no file yet
         // A subfolder of the repo gclic is in: nowhere to go.
         std::fs::write(&file, here.join("src").display().to_string()).unwrap();
@@ -283,7 +366,9 @@ mod tests {
         // Another repo, given by a subfolder of it: its root, once.
         std::thread::sleep(std::time::Duration::from_millis(20));
         std::fs::write(&file, there.join("src").display().to_string()).unwrap();
-        let moved = follow.moved_to(&here).map(|root| root.canonicalize().unwrap());
+        let moved = follow
+            .moved_to(&here)
+            .map(|root| root.canonicalize().unwrap());
         assert_eq!(moved, Some(there.canonicalize().unwrap()));
         assert_eq!(follow.moved_to(&here), None);
         // Outside any repo: passed over.

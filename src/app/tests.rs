@@ -1,7 +1,7 @@
-use super::*;
 use super::layout::{accent_bar, fit_folder};
 use super::popups::render_text_box;
 use super::status_line::hint_spans;
+use super::*;
 use crate::test_repo::TestRepo;
 
 /// A whole app on `repo`, which must outlive it.
@@ -17,7 +17,13 @@ fn press(app: &mut App, code: KeyCode) {
 fn the_colour_bar_ends_in_the_repo_s_folder_and_name_as_far_as_they_fit() {
     let bar = |width| accent_bar(width, "~/Code/", "gclic");
     // 30 wide: 28 inside, of which " ~/Code/gclic" takes 13.
-    assert_eq!(bar(30), ("━".repeat(15), Some(("~/Code/".to_string(), "gclic".to_string()))));
+    assert_eq!(
+        bar(30),
+        (
+            "━".repeat(15),
+            Some(("~/Code/".to_string(), "gclic".to_string()))
+        )
+    );
     // Shorter: the folder goes before the name, and some line always shows.
     assert_eq!(bar(16).1, Some((String::new(), "gclic".to_string())));
     assert_eq!(bar(16).0.chars().count(), 8);
@@ -86,14 +92,24 @@ fn gg_goes_to_the_top_of_a_picker_and_a_single_g_does_not() {
 #[test]
 fn the_repo_is_read_often_while_in_use_and_rarely_when_idle() {
     assert_eq!(refresh_every(Duration::ZERO), REFRESH_IN_USE);
-    assert_eq!(refresh_every(IDLE_AFTER - Duration::from_millis(1)), REFRESH_IN_USE);
+    assert_eq!(
+        refresh_every(IDLE_AFTER - Duration::from_millis(1)),
+        REFRESH_IN_USE
+    );
     assert_eq!(refresh_every(IDLE_AFTER), REFRESH_IDLE);
 }
 
 #[test]
 fn hints_show_keys_in_the_key_colour() {
-    let spans = hint_spans(&[("space", "stage"), ("a/A", "stage/unstage all"), ("", "type to filter")]);
-    let text: Vec<(&str, Option<Color>)> = spans.iter().map(|s| (s.content.as_ref(), s.style.fg)).collect();
+    let spans = hint_spans(&[
+        ("space", "stage"),
+        ("a/A", "stage/unstage all"),
+        ("", "type to filter"),
+    ]);
+    let text: Vec<(&str, Option<Color>)> = spans
+        .iter()
+        .map(|s| (s.content.as_ref(), s.style.fg))
+        .collect();
     assert_eq!(
         text,
         [
@@ -112,11 +128,18 @@ fn hints_show_keys_in_the_key_colour() {
 /// or among the keys that work everywhere or on any diff.
 fn assert_hints_in_help(app: &App) {
     let mut titles = vec![app.help_section(), "Everywhere", "Diff"];
-    if app.compare.as_ref().is_some_and(|compare| compare.stash_shown().is_some()) {
+    if app
+        .compare
+        .as_ref()
+        .is_some_and(|compare| compare.stash_shown().is_some())
+    {
         titles.push("Stashes");
     }
     for (key, action) in app.hints() {
-        assert!(key.is_empty() || crate::help::lists(&titles, key), "{key} {action} isn't in the help's {titles:?}");
+        assert!(
+            key.is_empty() || crate::help::lists(&titles, key),
+            "{key} {action} isn't in the help's {titles:?}"
+        );
     }
 }
 
@@ -130,7 +153,12 @@ fn every_hint_is_in_the_help() {
     }
     // A commit expanded, one of its files, its diff, then inside the diff,
     // and a commit's details.
-    for code in [KeyCode::Enter, KeyCode::Char('j'), KeyCode::Enter, KeyCode::Enter] {
+    for code in [
+        KeyCode::Enter,
+        KeyCode::Char('j'),
+        KeyCode::Enter,
+        KeyCode::Enter,
+    ] {
         press(&mut app, code);
         assert_hints_in_help(&app);
     }
@@ -185,7 +213,11 @@ fn starting_a_comparison_switches_to_its_tab() {
     let mut app = app_on(&repo);
     app.start_compare("HEAD~1".to_string(), "HEAD".to_string());
     assert!(app.tab == Tab::Compare && app.view.focused(Pane::Compare));
-    assert!(app.compare.as_ref().is_some_and(|c| c.refs() == "HEAD~1 → HEAD"));
+    assert!(
+        app.compare
+            .as_ref()
+            .is_some_and(|c| c.refs() == "HEAD~1 → HEAD")
+    );
     // Closing it asks first, and esc cancels.
     press(&mut app, KeyCode::Esc);
     assert!(matches!(app.modal, Modal::Confirm(Confirm::CloseCompare)));
@@ -209,7 +241,9 @@ fn closing_a_comparison_from_the_repo_tab_leaves_the_repo_tab_alone() {
     app.close_compare();
     assert!(app.tab == Tab::Repo && app.compare.is_none() && app.view.diff().is_some());
     press(&mut app, KeyCode::Tab);
-    assert!(app.tab == Tab::Compare && app.view.focused(Pane::Compare) && app.view.diff().is_none());
+    assert!(
+        app.tab == Tab::Compare && app.view.focused(Pane::Compare) && app.view.diff().is_none()
+    );
 }
 
 fn type_text(app: &mut App, text: &str) {
@@ -261,7 +295,11 @@ fn a_comment_opens_the_review_tab_and_deleting_the_last_closes_it() {
 
 /// The diff of the file the last commit of `TestRepo::with_history` changed.
 fn last_commit_diff() -> DiffSource {
-    DiffSource::Refs { a: "HEAD~1".to_string(), b: "HEAD".to_string(), path: "README.md".to_string() }
+    DiffSource::Refs {
+        a: "HEAD~1".to_string(),
+        b: "HEAD".to_string(),
+        path: "README.md".to_string(),
+    }
 }
 
 #[test]
@@ -291,7 +329,10 @@ fn gg_goes_to_the_top_and_g_then_another_key_does_nothing() {
     press(&mut app, KeyCode::Char('g'));
     assert!(app.pending_g);
     press(&mut app, KeyCode::Char('g'));
-    assert!(!app.pending_g && app.view.diff().unwrap().active_anchor().is_none(), "on the first heading");
+    assert!(
+        !app.pending_g && app.view.diff().unwrap().active_anchor().is_none(),
+        "on the first heading"
+    );
     press(&mut app, KeyCode::Char('g'));
     press(&mut app, KeyCode::Esc);
     assert!(!app.pending_g && app.view.in_preview);
@@ -317,7 +358,11 @@ fn gc_from_a_list_needs_n_to_show_the_active_line_and_gc_upper_takes_the_file() 
     type_text(&mut app, "Split it.");
     app.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
     assert_eq!(app.review.len(), 1);
-    assert!(app.review.find(&app.view.diff().unwrap().source, None).is_some());
+    assert!(
+        app.review
+            .find(&app.view.diff().unwrap().source, None)
+            .is_some()
+    );
 }
 
 #[test]
@@ -329,7 +374,13 @@ fn a_long_draft_keeps_its_end_in_view() {
     terminal
         .draw(|frame| render_text_box(frame, frame.area(), " Box ", None, &draft, Line::default()))
         .unwrap();
-    let screen: String = terminal.backend().buffer().content().iter().map(|cell| cell.symbol()).collect();
+    let screen: String = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect();
     assert!(screen.contains("the end▏"));
     assert!(!screen.contains("line 1 "), "the start scrolled away");
 }
@@ -338,9 +389,14 @@ fn a_long_draft_keeps_its_end_in_view() {
 fn clearing_the_review_asks_first() {
     let repo = TestRepo::with_history();
     let mut app = app_on(&repo);
-    let anchor = Some(Anchor { side: review::Side::New, number: 1, text: "x".to_string() });
+    let anchor = Some(Anchor {
+        side: review::Side::New,
+        number: 1,
+        text: "x".to_string(),
+    });
     let source = DiffSource::Unstaged("a.rs".to_string());
-    app.review.set(Comment::new(&app.repo, source, anchor, "y".to_string()).unwrap());
+    app.review
+        .set(Comment::new(&app.repo, source, anchor, "y".to_string()).unwrap());
     app.go_to_tab(Tab::Review);
     press(&mut app, KeyCode::Char('D'));
     press(&mut app, KeyCode::Esc);
@@ -365,12 +421,18 @@ fn yanks_keep_their_order() {
 
 #[test]
 fn only_the_last_two_yanks_are_kept() {
-    assert_eq!(yanks(&["aaa  one", "bbb  two", "ccc  three"]), ["bbb  two", "ccc  three"]);
+    assert_eq!(
+        yanks(&["aaa  one", "bbb  two", "ccc  three"]),
+        ["bbb  two", "ccc  three"]
+    );
 }
 
 #[test]
 fn yanking_a_commit_again_moves_it_to_the_end() {
-    assert_eq!(yanks(&["aaa  one", "bbb  two", "aaa  one"]), ["bbb  two", "aaa  one"]);
+    assert_eq!(
+        yanks(&["aaa  one", "bbb  two", "aaa  one"]),
+        ["bbb  two", "aaa  one"]
+    );
 }
 
 // These set up what they test in a repo of their own, as the user would
@@ -397,7 +459,14 @@ fn stashed() -> TestRepo {
     let repo = TestRepo::with_history();
     repo.write("README.md", "# Test\n\nStashed.\n");
     repo.write("untracked.txt", "new\n");
-    repo.git(&["stash", "push", "-q", "--include-untracked", "-m", "try this"]);
+    repo.git(&[
+        "stash",
+        "push",
+        "-q",
+        "--include-untracked",
+        "-m",
+        "try this",
+    ]);
     repo
 }
 
@@ -407,7 +476,10 @@ fn an_empty_repo_opens_without_an_error() {
     let mut app = app_on(&repo);
     assert!(matches!(app.modal, Modal::None), "{}", app.message);
     let shown = screen(&mut app);
-    assert!(shown.contains("Changes") && shown.contains("Graph"), "{shown}");
+    assert!(
+        shown.contains("Changes") && shown.contains("Graph"),
+        "{shown}"
+    );
     // Its first files can be staged and committed.
     repo.write("first.txt", "first\n");
     app.refresh();
@@ -417,7 +489,10 @@ fn an_empty_repo_opens_without_an_error() {
     type_text(&mut app, "First");
     ctrl(&mut app, 's');
     assert_eq!(app.message, "Committed");
-    assert_eq!(git::commit_label(&repo, "HEAD").map(|label| label.ends_with("  First")), Some(true));
+    assert_eq!(
+        git::commit_label(&repo, "HEAD").map(|label| label.ends_with("  First")),
+        Some(true)
+    );
 }
 
 #[test]
@@ -437,7 +512,10 @@ fn a_file_is_staged_and_committed_from_the_changes_pane() {
     type_text(&mut app, "Edit the README");
     ctrl(&mut app, 's');
     assert_eq!(app.message, "Committed");
-    assert_eq!(git::commit_details(&repo, "HEAD").unwrap().message, "Edit the README");
+    assert_eq!(
+        git::commit_details(&repo, "HEAD").unwrap().message,
+        "Edit the README"
+    );
     assert_eq!(git::status(&repo).unwrap(), git::Status::default());
     // With nothing staged, c says so rather than open the box.
     press(&mut app, KeyCode::Char('c'));
@@ -454,18 +532,33 @@ fn a_failed_commit_keeps_its_message() {
     press(&mut app, KeyCode::Char(' '));
     // A hook that refuses every commit.
     repo.write("hooks/pre-commit", "#!/bin/sh\necho refused >&2\nexit 1\n");
-    repo.git(&["config", "core.hooksPath", &repo.file("hooks").display().to_string()]);
+    repo.git(&[
+        "config",
+        "core.hooksPath",
+        &repo.file("hooks").display().to_string(),
+    ]);
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(repo.file("hooks/pre-commit"), std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::set_permissions(
+            repo.file("hooks/pre-commit"),
+            std::fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
     }
     press(&mut app, KeyCode::Char('c'));
     type_text(&mut app, "Refused");
     ctrl(&mut app, 's');
-    assert!(matches!(&app.modal, Modal::Error(error) if error.contains("refused")), "{:?}", app.message);
+    assert!(
+        matches!(&app.modal, Modal::Error(error) if error.contains("refused")),
+        "{:?}",
+        app.message
+    );
     assert_eq!(app.commit_draft, "Refused");
-    assert_eq!(git::commit_label(&repo, "HEAD").map(|label| label.ends_with("  Third")), Some(true));
+    assert_eq!(
+        git::commit_label(&repo, "HEAD").map(|label| label.ends_with("  Third")),
+        Some(true)
+    );
 }
 
 #[test]
@@ -492,7 +585,10 @@ fn discarding_everything_asks_first_and_takes_new_files_too() {
     let mut app = app_on(&repo);
     app.focus_left(Pane::Changes);
     press(&mut app, KeyCode::Char('D'));
-    assert!(matches!(app.modal, Modal::Confirm(Confirm::DiscardAll { .. })));
+    assert!(matches!(
+        app.modal,
+        Modal::Confirm(Confirm::DiscardAll { .. })
+    ));
     press(&mut app, KeyCode::Enter);
     assert_eq!(git::status(&repo).unwrap(), git::Status::default());
     assert_eq!(repo.read("new.txt"), None);
@@ -540,7 +636,10 @@ fn popping_the_stash_shown_on_the_compare_tab_closes_it_from_the_repo_tab() {
     let mut app = app_on(&repo);
     let stash = git::stashes(&repo).unwrap().remove(0);
     app.open_stash(stash.clone());
-    assert!(app.tab == Tab::Compare && app.compare.as_ref().and_then(|c| c.stash_shown()) == Some(&stash));
+    assert!(
+        app.tab == Tab::Compare
+            && app.compare.as_ref().and_then(|c| c.stash_shown()) == Some(&stash)
+    );
     press(&mut app, KeyCode::Tab);
     app.focus_left(Pane::Graph);
     // The stash sits above its base, the newest commit, at the top.
@@ -549,7 +648,10 @@ fn popping_the_stash_shown_on_the_compare_tab_closes_it_from_the_repo_tab() {
     press(&mut app, KeyCode::Char('p'));
     assert_eq!(app.message, "Popped stash@{0}");
     assert!(git::stashes(&repo).unwrap().is_empty());
-    assert_eq!(repo.read("README.md").as_deref(), Some("# Test\n\nStashed.\n"));
+    assert_eq!(
+        repo.read("README.md").as_deref(),
+        Some("# Test\n\nStashed.\n")
+    );
     assert!(app.tab == Tab::Repo && app.compare.is_none());
     assert!(screen(&mut app).contains("Changes (2)"));
     // The Compare tab is empty, ready for another comparison.
@@ -595,7 +697,10 @@ fn a_stash_s_files_open_in_its_view() {
     let mut app = app_on(&repo);
     app.open_stash(git::stashes(&repo).unwrap().remove(0));
     let shown = screen(&mut app);
-    assert!(shown.contains("README.md") && shown.contains("untracked.txt"), "{shown}");
+    assert!(
+        shown.contains("README.md") && shown.contains("untracked.txt"),
+        "{shown}"
+    );
     press(&mut app, KeyCode::Enter);
     let diff = app.view.diff().expect("the first file's diff");
     assert!(diff.text().contains("+Stashed."), "{}", diff.text());
@@ -611,7 +716,9 @@ fn the_stash_command_lists_the_stashes_or_says_there_are_none() {
     repo.write("README.md", "changed\n");
     repo.git(&["stash", "-q"]);
     app.open_stash_picker();
-    assert!(matches!(&app.modal, Modal::Picker(_, PickerUse::Stash(stashes)) if stashes.len() == 1));
+    assert!(
+        matches!(&app.modal, Modal::Picker(_, PickerUse::Stash(stashes)) if stashes.len() == 1)
+    );
 }
 
 #[test]
@@ -620,7 +727,10 @@ fn the_branches_pane_checks_out_the_branch_picked() {
     let mut app = app_on(&repo);
     app.focus_left(Pane::Branches);
     let shown = screen(&mut app);
-    assert!(shown.contains("feature") && shown.contains("main"), "{shown}");
+    assert!(
+        shown.contains("feature") && shown.contains("main"),
+        "{shown}"
+    );
     press(&mut app, KeyCode::Char('i'));
     type_text(&mut app, "feat");
     press(&mut app, KeyCode::Enter);
@@ -639,7 +749,11 @@ fn comparing_two_branches_shows_what_one_has_that_the_other_lacks() {
     let shown = screen(&mut app);
     assert!(shown.contains("feature.txt"), "{shown}");
     press(&mut app, KeyCode::Enter);
-    assert!(app.view.diff().is_some_and(|diff| diff.text().contains("+new")));
+    assert!(
+        app.view
+            .diff()
+            .is_some_and(|diff| diff.text().contains("+new"))
+    );
     // A ref that isn't there says so.
     app.start_compare("main".to_string(), "no-such-branch".to_string());
     assert!(matches!(app.modal, Modal::Error(_)));
@@ -655,7 +769,10 @@ fn changes_made_outside_gclic_show_after_a_refresh() {
     repo.write("README.md", "and an edit\n");
     app.refresh();
     let shown = screen(&mut app);
-    assert!(shown.contains("Changes (1)") && shown.contains("Made elsewhere"), "{shown}");
+    assert!(
+        shown.contains("Changes (1)") && shown.contains("Made elsewhere"),
+        "{shown}"
+    );
 }
 
 // :cd, between repos in a folder made for the test.
@@ -693,7 +810,10 @@ fn cd_with_a_name_moves_to_that_repo_and_starts_afresh() {
     app.change_repo("beta");
     assert_eq!(app.repo, beta.repo);
     let shown = screen(&mut app);
-    assert!(shown.contains("only-in-beta.txt") && shown.contains("beta"), "{shown}");
+    assert!(
+        shown.contains("only-in-beta.txt") && shown.contains("beta"),
+        "{shown}"
+    );
     // What was read from alpha goes, and how things are shown stays.
     assert!(app.compare.is_none() && app.tab == Tab::Repo);
     assert_eq!((app.split, app.fetcher.auto), (Some(false), false));
@@ -721,7 +841,8 @@ fn picking_a_repo_in_the_finder_moves_there() {
     let (folder, alpha, beta) = two_repos();
     let mut app = app_in(&folder, &alpha);
     app.change_repo("");
-    let Modal::Picker(_, PickerUse::Repo(repos)) = std::mem::replace(&mut app.modal, Modal::None) else {
+    let Modal::Picker(_, PickerUse::Repo(repos)) = std::mem::replace(&mut app.modal, Modal::None)
+    else {
         panic!("the repo finder should be open");
     };
     app.use_picked(PickerUse::Repo(repos), vec!["beta".to_string()]);
@@ -752,7 +873,11 @@ fn cd_with_a_name_no_repo_has_says_so_and_stays() {
     let (folder, alpha, _beta) = two_repos();
     let mut app = app_in(&folder, &alpha);
     app.change_repo("gamma");
-    assert!(app.message.starts_with("No repo matches gamma"), "{}", app.message);
+    assert!(
+        app.message.starts_with("No repo matches gamma"),
+        "{}",
+        app.message
+    );
     assert_eq!(app.repo, alpha.repo);
 }
 
@@ -819,7 +944,11 @@ fn space_in_a_diff_stages_the_change_the_active_line_is_in() {
     // The other change is left, and the active line is on it.
     let diff = app.view.diff().unwrap();
     assert_eq!(diff.change_count(), 1);
-    assert_eq!(diff.active_change().map(|change| change.new.into_iter().collect::<Vec<_>>()), Some(vec![6]));
+    assert_eq!(
+        diff.active_change()
+            .map(|change| change.new.into_iter().collect::<Vec<_>>()),
+        Some(vec![6])
+    );
     // It's the last one, so it goes as the whole file does.
     press(&mut app, KeyCode::Char(' '));
     assert_eq!(app.message, "Staged f");
@@ -851,7 +980,10 @@ fn staging_a_change_and_unstaging_it_leaves_the_index_as_it_was() {
     press(&mut app, KeyCode::Char(' '));
     assert_eq!(staged(&repo, "f"), EIGHT);
     // The working tree was never touched.
-    assert_eq!(repo.read("f").as_deref(), Some("1\nTWO\n3\n4\n5\n5.5\n6\n7\nEIGHT\n"));
+    assert_eq!(
+        repo.read("f").as_deref(),
+        Some("1\nTWO\n3\n4\n5\n5.5\n6\n7\nEIGHT\n")
+    );
 }
 
 #[test]
@@ -865,7 +997,11 @@ fn a_change_stages_the_same_in_a_whole_file_diff_and_unified() {
         }
         into_diff(&mut app, DiffSource::Unstaged("f".to_string()));
         press(&mut app, KeyCode::Char(' '));
-        assert_eq!(staged(&repo, "f"), "1\nTWO\n3\n4\n5\n6\n7\n8\n", "with {keys:?}");
+        assert_eq!(
+            staged(&repo, "f"),
+            "1\nTWO\n3\n4\n5\n6\n7\n8\n",
+            "with {keys:?}"
+        );
     }
 }
 
@@ -875,7 +1011,10 @@ fn changes_at_the_ends_of_a_file_stage_alone() {
     // enough for them to be separate hunks.
     let long: String = (1..=20).map(|n| format!("{n}\n")).collect();
     let repo = repo_with("f", &long);
-    let edited = format!("ONE\n{}20 and no newline", &long["1\n".len()..long.len() - "20\n".len()]);
+    let edited = format!(
+        "ONE\n{}20 and no newline",
+        &long["1\n".len()..long.len() - "20\n".len()]
+    );
     repo.write("f", &edited);
     let mut app = app_on(&repo);
     // The last change first, then the first.
@@ -883,7 +1022,10 @@ fn changes_at_the_ends_of_a_file_stage_alone() {
     press(&mut app, KeyCode::Char('n'));
     press(&mut app, KeyCode::Char(' '));
     let index = staged(&repo, "f");
-    assert!(index.starts_with("1\n2\n") && index.ends_with("19\n20 and no newline"), "{index:?}");
+    assert!(
+        index.starts_with("1\n2\n") && index.ends_with("19\n20 and no newline"),
+        "{index:?}"
+    );
     press(&mut app, KeyCode::Char(' '));
     assert_eq!(staged(&repo, "f"), edited);
 }
@@ -893,9 +1035,15 @@ fn a_change_in_a_file_with_spaces_in_its_path_stages() {
     let repo = repo_with("a folder/a file.txt", EIGHT);
     repo.write("a folder/a file.txt", "ONE\n2\n3\n4\n5\n6\n7\nEIGHT\n");
     let mut app = app_on(&repo);
-    into_diff(&mut app, DiffSource::Unstaged("a folder/a file.txt".to_string()));
+    into_diff(
+        &mut app,
+        DiffSource::Unstaged("a folder/a file.txt".to_string()),
+    );
     press(&mut app, KeyCode::Char(' '));
-    assert_eq!(staged(&repo, "a folder/a file.txt"), "ONE\n2\n3\n4\n5\n6\n7\n8\n");
+    assert_eq!(
+        staged(&repo, "a folder/a file.txt"),
+        "ONE\n2\n3\n4\n5\n6\n7\n8\n"
+    );
 }
 
 #[test]
@@ -909,7 +1057,13 @@ fn a_new_or_deleted_file_is_staged_whole() {
     into_diff(&mut app, DiffSource::Unstaged("gone".to_string()));
     press(&mut app, KeyCode::Char(' '));
     let staged = git::status(&repo).unwrap().staged;
-    assert_eq!(staged.iter().map(|file| (file.status, file.path.as_str())).collect::<Vec<_>>(), [('D', "gone"), ('A', "new")]);
+    assert_eq!(
+        staged
+            .iter()
+            .map(|file| (file.status, file.path.as_str()))
+            .collect::<Vec<_>>(),
+        [('D', "gone"), ('A', "new")]
+    );
     // And back, from the staged diff.
     into_diff(&mut app, DiffSource::Staged("gone".to_string()));
     press(&mut app, KeyCode::Char(' '));
@@ -925,7 +1079,11 @@ fn space_off_a_change_or_on_a_conflict_says_why_it_does_nothing() {
     app.focus_preview();
     // The hunk's heading, at the top, isn't a change.
     press(&mut app, KeyCode::Char(' '));
-    assert!(app.message.starts_with("Not on a change"), "{}", app.message);
+    assert!(
+        app.message.starts_with("Not on a change"),
+        "{}",
+        app.message
+    );
     assert!(!app.hints().iter().any(|(key, _)| *key == "space"));
     assert_eq!(staged(&repo, "f"), EIGHT);
 
@@ -934,7 +1092,11 @@ fn space_off_a_change_or_on_a_conflict_says_why_it_does_nothing() {
     let mut app = app_on(&repo);
     into_diff(&mut app, DiffSource::Conflict("clash.txt".to_string()));
     press(&mut app, KeyCode::Char(' '));
-    assert!(app.message.starts_with("A conflict is staged whole"), "{}", app.message);
+    assert!(
+        app.message.starts_with("A conflict is staged whole"),
+        "{}",
+        app.message
+    );
     assert_eq!(git::status(&repo).unwrap().conflicted.len(), 1);
 }
 
@@ -969,16 +1131,24 @@ fn d_in_a_diff_discards_the_change_the_active_line_is_in_after_asking() {
     into_diff(&mut app, DiffSource::Unstaged("f".to_string()));
     assert!(app.hints().contains(&("d", "discard change")));
     press(&mut app, KeyCode::Char('d'));
-    assert!(matches!(&app.modal, Modal::Confirm(Confirm::RestoreChange { path, .. }) if path == "f"));
+    assert!(
+        matches!(&app.modal, Modal::Confirm(Confirm::RestoreChange { path, .. }) if path == "f")
+    );
     let shown = screen(&mut app);
     assert!(shown.contains("Discard this change to f?"), "{shown}");
     // Esc keeps it.
     press(&mut app, KeyCode::Esc);
-    assert_eq!(repo.read("f").as_deref(), Some("1\nTWO\n3\n4\n5\n5.5\n6\n7\n8\n"));
+    assert_eq!(
+        repo.read("f").as_deref(),
+        Some("1\nTWO\n3\n4\n5\n5.5\n6\n7\n8\n")
+    );
     press(&mut app, KeyCode::Char('d'));
     press(&mut app, KeyCode::Enter);
     assert_eq!(app.message, "Discarded the change");
-    assert_eq!(repo.read("f").as_deref(), Some("1\n2\n3\n4\n5\n5.5\n6\n7\n8\n"));
+    assert_eq!(
+        repo.read("f").as_deref(),
+        Some("1\n2\n3\n4\n5\n5.5\n6\n7\n8\n")
+    );
     // The other change is left, with the active line on it, and the index
     // was never touched.
     assert_eq!(app.view.diff().unwrap().change_count(), 1);
@@ -1000,7 +1170,10 @@ fn discarding_a_change_leaves_what_s_staged_alone() {
     press(&mut app, KeyCode::Char('d'));
     press(&mut app, KeyCode::Enter);
     // Back to what's staged, not to what was committed.
-    assert_eq!(repo.read("f").as_deref(), Some("1\nTwo\n3\n4\n5\n6\n7\n8\n"));
+    assert_eq!(
+        repo.read("f").as_deref(),
+        Some("1\nTwo\n3\n4\n5\n6\n7\n8\n")
+    );
     assert_eq!(staged(&repo, "f"), "1\nTWO\n3\n4\n5\n6\n7\n8\n");
 }
 
@@ -1031,7 +1204,11 @@ fn a_staged_change_is_not_discarded_from_its_diff() {
     assert!(!app.hints().iter().any(|(key, _)| *key == "d"));
     press(&mut app, KeyCode::Char('d'));
     assert!(matches!(app.modal, Modal::None));
-    assert!(app.message.starts_with("Staged changes are kept"), "{}", app.message);
+    assert!(
+        app.message.starts_with("Staged changes are kept"),
+        "{}",
+        app.message
+    );
     assert_eq!(staged(&repo, "f"), "1\nTWO\n3\n4\n5\n6\n7\n8\n");
 }
 
@@ -1046,7 +1223,10 @@ fn a_file_changed_since_its_diff_loaded_discards_nothing() {
     repo.write("f", "1\nTwo\n3\n4\n5\n6\n7\nEIGHT\n");
     press(&mut app, KeyCode::Enter);
     assert!(matches!(app.modal, Modal::Error(_)), "{}", app.message);
-    assert_eq!(repo.read("f").as_deref(), Some("1\nTwo\n3\n4\n5\n6\n7\nEIGHT\n"));
+    assert_eq!(
+        repo.read("f").as_deref(),
+        Some("1\nTwo\n3\n4\n5\n6\n7\nEIGHT\n")
+    );
 }
 
 // u, undoing stagings and discards.
@@ -1087,7 +1267,14 @@ fn u_undoes_the_lists_stagings_new_files_included() {
     assert_eq!(app.message, "Undid staging everything");
     let status = git::status(&repo).unwrap();
     assert!(status.staged.is_empty());
-    assert_eq!(status.unstaged.iter().map(|file| file.status).collect::<String>(), "M?");
+    assert_eq!(
+        status
+            .unstaged
+            .iter()
+            .map(|file| file.status)
+            .collect::<String>(),
+        "M?"
+    );
     // And unstaging, back.
     press(&mut app, KeyCode::Char('a'));
     press(&mut app, KeyCode::Char('A'));
@@ -1105,7 +1292,10 @@ fn u_brings_back_a_discarded_change_or_file() {
     into_diff(&mut app, DiffSource::Unstaged("f".to_string()));
     press(&mut app, KeyCode::Char('d'));
     press(&mut app, KeyCode::Enter);
-    assert_eq!(repo.read("f").as_deref(), Some("1\n2\n3\n4\n5\n5.5\n6\n7\n8\n"));
+    assert_eq!(
+        repo.read("f").as_deref(),
+        Some("1\n2\n3\n4\n5\n5.5\n6\n7\n8\n")
+    );
     press(&mut app, KeyCode::Char('u'));
     assert_eq!(app.message, "Undid discarding a change to f");
     assert_eq!(repo.read("f").as_deref(), Some(edited));
@@ -1131,7 +1321,10 @@ fn undoing_discard_all_brings_back_the_changes_but_not_the_untracked_files() {
     press(&mut app, KeyCode::Enter);
     assert_eq!(git::status(&repo).unwrap(), git::Status::default());
     press(&mut app, KeyCode::Char('u'));
-    assert_eq!(app.message, "Undid discarding your changes to 1 file, though not deleting 1 untracked file");
+    assert_eq!(
+        app.message,
+        "Undid discarding your changes to 1 file, though not deleting 1 untracked file"
+    );
     assert_eq!(repo.read("f").as_deref(), Some("changed\n"));
     assert_eq!(repo.read("new"), None);
 }
@@ -1192,11 +1385,17 @@ fn an_undo_that_would_lose_later_changes_is_refused_and_dropped() {
     press(&mut app, KeyCode::Char('j'));
     press(&mut app, KeyCode::Char('d'));
     press(&mut app, KeyCode::Enter);
-    assert_eq!(repo.read("f").as_deref(), Some("1\nTWO\n3\n4\n5\n6\n7\n8\n"));
+    assert_eq!(
+        repo.read("f").as_deref(),
+        Some("1\nTWO\n3\n4\n5\n6\n7\n8\n")
+    );
     // Then edited once more, in the editor.
     repo.write("f", "and again, by hand\n");
     press(&mut app, KeyCode::Char('u'));
-    assert_eq!(app.message, "Can't undo discarding your changes to f: f changed since");
+    assert_eq!(
+        app.message,
+        "Can't undo discarding your changes to f: f changed since"
+    );
     assert_eq!(repo.read("f").as_deref(), Some("and again, by hand\n"));
     // It's gone, and the step before it is next: the staging, which
     // nothing has touched since.
@@ -1243,7 +1442,13 @@ fn ctrl_r_redoes_what_u_undid() {
     let (index, file) = (staged(&repo, "f"), repo.read("f"));
     press(&mut app, KeyCode::Char('u'));
     press(&mut app, KeyCode::Char('u'));
-    assert_eq!((staged(&repo, "f"), repo.read("f").unwrap()), (EIGHT.to_string(), "1\nTWO\n3\n4\n5\n5.5\n6\n7\n8\n".to_string()));
+    assert_eq!(
+        (staged(&repo, "f"), repo.read("f").unwrap()),
+        (
+            EIGHT.to_string(),
+            "1\nTWO\n3\n4\n5\n5.5\n6\n7\n8\n".to_string()
+        )
+    );
     assert!(app.hints().contains(&("ctrl-r", "redo")));
     ctrl(&mut app, 'r');
     assert_eq!(app.message, "Redid staging a change to f");
@@ -1286,7 +1491,10 @@ fn a_redo_that_would_lose_later_changes_is_refused() {
     press(&mut app, KeyCode::Char('u'));
     repo.write("f", "changed, then edited\n");
     ctrl(&mut app, 'r');
-    assert_eq!(app.message, "Can't redo discarding your changes to f: f changed since");
+    assert_eq!(
+        app.message,
+        "Can't redo discarding your changes to f: f changed since"
+    );
     assert_eq!(repo.read("f").as_deref(), Some("changed, then edited\n"));
 }
 
@@ -1325,11 +1533,20 @@ fn u_undoes_only_where_files_and_changes_are_staged() {
         app.focus_left(pane);
         assert!(!app.hints().iter().any(|(key, _)| *key == "u"));
         press(&mut app, KeyCode::Char('u'));
-        assert_eq!(git::status(&repo).unwrap().staged.len(), 1, "u in {:?}", pane as u8);
+        assert_eq!(
+            git::status(&repo).unwrap().staged.len(),
+            1,
+            "u in {:?}",
+            pane as u8
+        );
     }
     into_diff(&mut app, last_commit_diff());
     press(&mut app, KeyCode::Char('u'));
-    assert_eq!(git::status(&repo).unwrap().staged.len(), 1, "u in a commit's diff");
+    assert_eq!(
+        git::status(&repo).unwrap().staged.len(),
+        1,
+        "u in a commit's diff"
+    );
     // In a diff of the working tree, it does.
     into_diff(&mut app, DiffSource::Staged("README.md".to_string()));
     assert!(app.hints().contains(&("u", "undo")));

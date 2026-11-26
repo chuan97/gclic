@@ -33,7 +33,10 @@ pub struct ColorCache {
 impl ColorCache {
     /// The coloured rows of this diff, if they were made from this same text.
     pub fn get(&mut self, view: &DiffView, text: &str) -> Option<Colored> {
-        let position = self.entries.iter().position(|(v, t, _)| v == view && t == text)?;
+        let position = self
+            .entries
+            .iter()
+            .position(|(v, t, _)| v == view && t == text)?;
         let entry = self.entries.remove(position);
         let colored = entry.2.clone();
         self.entries.push(entry);
@@ -75,14 +78,21 @@ mod tests {
     use crate::diff::testing::colored;
 
     fn view(name: &str, whole: bool) -> DiffView {
-        DiffView { source: DiffSource::Unstaged(name.to_string()), whole }
+        DiffView {
+            source: DiffSource::Unstaged(name.to_string()),
+            whole,
+        }
     }
 
     #[test]
     fn the_cache_only_matches_the_same_text() {
         let mut cache = ColorCache::default();
         let view = view("f", false);
-        cache.insert(view.clone(), "v1".to_string(), colored(parse_diff("@@ -1 +1 @@\n-a\n+b")));
+        cache.insert(
+            view.clone(),
+            "v1".to_string(),
+            colored(parse_diff("@@ -1 +1 @@\n-a\n+b")),
+        );
         assert!(cache.get(&view, "v1").is_some());
         assert!(cache.get(&view, "v2").is_none());
         assert!(cache.contains(&view));
@@ -93,8 +103,20 @@ mod tests {
         let mut cache = ColorCache::default();
         cache.insert(view("f", false), "changes".to_string(), Colored::default());
         cache.insert(view("f", true), "whole".to_string(), Colored::default());
-        assert_eq!(cache.latest(&view("f", false)).map(|(text, _)| text).as_deref(), Some("changes"));
-        assert_eq!(cache.latest(&view("f", true)).map(|(text, _)| text).as_deref(), Some("whole"));
+        assert_eq!(
+            cache
+                .latest(&view("f", false))
+                .map(|(text, _)| text)
+                .as_deref(),
+            Some("changes")
+        );
+        assert_eq!(
+            cache
+                .latest(&view("f", true))
+                .map(|(text, _)| text)
+                .as_deref(),
+            Some("whole")
+        );
     }
 
     #[test]

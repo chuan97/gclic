@@ -20,7 +20,11 @@ impl App {
             (true, true) => self.render_preview(frame, main),
             (true, false) => {
                 // The review's comments are read in the list, so it gets more room.
-                let diff_percent = if self.tab == Tab::Review { REVIEW_DIFF_PERCENT } else { DIFF_PERCENT };
+                let diff_percent = if self.tab == Tab::Review {
+                    REVIEW_DIFF_PERCENT
+                } else {
+                    DIFF_PERCENT
+                };
                 let [left, right] = Layout::horizontal([
                     Constraint::Percentage(100 - diff_percent),
                     Constraint::Percentage(diff_percent),
@@ -42,7 +46,10 @@ impl App {
         let color = Style::default().fg(self.accent.color());
         let mut spans = vec![Span::raw(" "), Span::styled(line, color)];
         if let Some((folder, name)) = label {
-            spans.push(Span::styled(format!(" {folder}"), Style::default().fg(ui::DIM)));
+            spans.push(Span::styled(
+                format!(" {folder}"),
+                Style::default().fg(ui::DIM),
+            ));
             spans.push(Span::styled(name, color.add_modifier(Modifier::BOLD)));
         }
         spans.push(Span::raw(" "));
@@ -56,7 +63,11 @@ impl App {
     /// project goes on the right: its folder dimmed, and its name in the repo's
     /// colour, shortened to fit.
     pub(super) fn render_tabs(&self, frame: &mut Frame, area: Rect) {
-        let area = Rect { x: area.x + 1, width: area.width.saturating_sub(2), ..area };
+        let area = Rect {
+            x: area.x + 1,
+            width: area.width.saturating_sub(2),
+            ..area
+        };
         let compare = match &self.compare {
             Some(compare) => format!(" {} ", compare.title()),
             None => " Compare ".to_string(),
@@ -70,7 +81,10 @@ impl App {
                 Tab::Review => format!(" {} ({}) ", review::TITLE, self.review.len()),
             };
             if tab == self.tab {
-                let style = Style::default().fg(Color::Cyan).bg(ui::SELECTED_BG).add_modifier(Modifier::BOLD);
+                let style = Style::default()
+                    .fg(Color::Cyan)
+                    .bg(ui::SELECTED_BG)
+                    .add_modifier(Modifier::BOLD);
                 spans.push(Span::styled(label, style));
             } else {
                 spans.push(Span::styled(label, Style::default().fg(ui::DIM)));
@@ -93,7 +107,10 @@ impl App {
         if let Some(folder) = fit_folder(folder, name, room) {
             let project = Line::from(vec![
                 Span::styled(folder, Style::default().fg(ui::DIM)),
-                Span::styled(name.as_str(), Style::default().fg(name_color).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    name.as_str(),
+                    Style::default().fg(name_color).add_modifier(Modifier::BOLD),
+                ),
             ]);
             frame.render_widget(project.right_aligned(), area);
         }
@@ -102,7 +119,8 @@ impl App {
 
     pub(super) fn render_left(&mut self, frame: &mut Frame, area: Rect) {
         if self.tab == Tab::Review {
-            self.review_list.render(frame, area, self.view.focused(Pane::Review), &self.review);
+            self.review_list
+                .render(frame, area, self.view.focused(Pane::Review), &self.review);
             return;
         }
         if self.tab == Tab::Compare {
@@ -115,9 +133,11 @@ impl App {
         }
         // Branches and Changes take the rows they ask for, up to a share of the
         // height, and the graph gets the rest. Borders add two rows to each.
-        let fit = |rows: u16, max_percent: u16| (rows + 2).min(area.height * max_percent / 100).max(3);
+        let fit =
+            |rows: u16, max_percent: u16| (rows + 2).min(area.height * max_percent / 100).max(3);
         let branches_height = fit(
-            self.branches.wanted_height(self.view.focused(Pane::Branches)),
+            self.branches
+                .wanted_height(self.view.focused(Pane::Branches)),
             BRANCHES_MAX_PERCENT,
         );
         let changes_max = if self.view.focused(Pane::Changes) {
@@ -133,9 +153,16 @@ impl App {
         ])
         .areas(area);
         let note = self.fetcher.note();
-        self.branches.render(frame, branches, self.view.focused(Pane::Branches), note.as_deref());
-        self.staging.render(frame, changes, self.view.focused(Pane::Changes));
-        self.graph.render(frame, graph, self.view.focused(Pane::Graph));
+        self.branches.render(
+            frame,
+            branches,
+            self.view.focused(Pane::Branches),
+            note.as_deref(),
+        );
+        self.staging
+            .render(frame, changes, self.view.focused(Pane::Changes));
+        self.graph
+            .render(frame, graph, self.view.focused(Pane::Graph));
 
         // The panes that h and l lead to say so next to their title, in place
         // of a hint. With three panes and wrapping, those are the two not focused.
@@ -176,7 +203,12 @@ pub(super) fn mark_key(frame: &mut Frame, pane: Rect, title: &str, key: &str) {
     if pane.height == 0 || start + width + 1 > pane.width {
         return;
     }
-    let area = Rect { x: pane.x + start, y: pane.y, width, height: 1 };
+    let area = Rect {
+        x: pane.x + start,
+        y: pane.y,
+        width,
+        height: 1,
+    };
     frame.render_widget(Line::styled(label, Style::default().fg(Color::Gray)), area);
 }
 
@@ -197,22 +229,35 @@ pub(super) fn render_empty_compare(frame: &mut Frame, area: Rect, focused: bool)
 /// it, the folder shortened or left out where there's no room for it, and
 /// the name too, so that at least a short line shows. A column of margin at
 /// each end, as the panes have.
-pub(super) fn accent_bar(width: usize, folder: &str, name: &str) -> (String, Option<(String, String)>) {
+pub(super) fn accent_bar(
+    width: usize,
+    folder: &str,
+    name: &str,
+) -> (String, Option<(String, String)>) {
     const SHORTEST_LINE: usize = 4;
     let inside = width.saturating_sub(2);
     // A space between the line and the folder.
     let room = inside.saturating_sub(SHORTEST_LINE + 1);
     let label = fit_folder(folder, name, room).map(|folder| (folder, name.to_string()));
-    let label_width = label.as_ref().map_or(0, |(folder, name)| 1 + folder.chars().count() + name.chars().count());
+    let label_width = label.as_ref().map_or(0, |(folder, name)| {
+        1 + folder.chars().count() + name.chars().count()
+    });
     ("━".repeat(inside - label_width), label)
 }
 
 /// The folder holding the repo, ending in a separator and with `~` for the
 /// home folder, and the repo's own folder name.
 pub(super) fn project_location(root: &Path) -> (String, String) {
-    let name = root.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
+    let name = root
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let folder = root.parent().map(repos::tilde).unwrap_or_default();
-    let separator = if folder.ends_with(std::path::MAIN_SEPARATOR) { "" } else { std::path::MAIN_SEPARATOR_STR };
+    let separator = if folder.ends_with(std::path::MAIN_SEPARATOR) {
+        ""
+    } else {
+        std::path::MAIN_SEPARATOR_STR
+    };
     (format!("{folder}{separator}"), name)
 }
 

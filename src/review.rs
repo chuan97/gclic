@@ -46,7 +46,9 @@ impl Place {
     /// changes yet.
     pub fn of(source: &DiffSource) -> Option<Place> {
         Some(match source {
-            DiffSource::Unstaged(_) | DiffSource::Staged(_) | DiffSource::Untracked(_) => Place::WorkingTree,
+            DiffSource::Unstaged(_) | DiffSource::Staged(_) | DiffSource::Untracked(_) => {
+                Place::WorkingTree
+            }
             DiffSource::Conflict(_) => return None,
             DiffSource::Commit { sha, .. } => Place::Commit(sha.clone()),
             DiffSource::Refs { a, b, .. } => Place::Refs(a.clone(), b.clone()),
@@ -92,10 +94,21 @@ fn key_of(anchor: &Option<Anchor>) -> LineKey {
 }
 
 impl Comment {
-    pub fn new(repo: &Repo, source: DiffSource, anchor: Option<Anchor>, body: String) -> Option<Comment> {
+    pub fn new(
+        repo: &Repo,
+        source: DiffSource,
+        anchor: Option<Anchor>,
+        body: String,
+    ) -> Option<Comment> {
         let place = Place::of(&source)?;
         let heading = place.heading(repo);
-        Some(Comment { source, place, heading, anchor, body })
+        Some(Comment {
+            source,
+            place,
+            heading,
+            anchor,
+            body,
+        })
     }
 
     pub fn path(&self) -> &str {
@@ -118,8 +131,16 @@ impl Comment {
 pub fn location(path: &str, anchor: &Option<Anchor>) -> String {
     match anchor {
         None => path.to_string(),
-        Some(Anchor { side: Side::New, number, .. }) => format!("{path}:{number}"),
-        Some(Anchor { side: Side::Old, number, .. }) => format!("{path}, removed line {number}"),
+        Some(Anchor {
+            side: Side::New,
+            number,
+            ..
+        }) => format!("{path}:{number}"),
+        Some(Anchor {
+            side: Side::Old,
+            number,
+            ..
+        }) => format!("{path}, removed line {number}"),
     }
 }
 
@@ -144,14 +165,19 @@ impl Review {
     /// The comment on this line, or on the file for None, if there is one.
     pub fn find(&self, source: &DiffSource, key: LineKey) -> Option<usize> {
         let place = Place::of(source)?;
-        self.comments.iter().position(|comment| comment.is_on(&place, source.path(), key))
+        self.comments
+            .iter()
+            .position(|comment| comment.is_on(&place, source.path(), key))
     }
 
     /// Adds a comment, or replaces the one already on its line. An empty one
     /// removes it.
     pub fn set(&mut self, comment: Comment) {
         let key = key_of(&comment.anchor);
-        let existing = self.comments.iter().position(|c| c.is_on(&comment.place, comment.path(), key));
+        let existing = self
+            .comments
+            .iter()
+            .position(|c| c.is_on(&comment.place, comment.path(), key));
         match (existing, comment.body.trim().is_empty()) {
             (Some(index), true) => {
                 self.comments.remove(index);
@@ -198,7 +224,11 @@ impl Review {
         order.sort_by_key(|&i| {
             let comment = &self.comments[i];
             let place = places.iter().position(|place| **place == comment.place);
-            (place, comment.path().to_string(), comment.anchor.as_ref().map(|anchor| anchor.number))
+            (
+                place,
+                comment.path().to_string(),
+                comment.anchor.as_ref().map(|anchor| anchor.number),
+            )
         });
         order
     }
@@ -249,18 +279,28 @@ pub enum ListAction {
 
 impl ReviewList {
     pub fn new() -> ReviewList {
-        ReviewList { cursor: ui::Cursor::default() }
+        ReviewList {
+            cursor: ui::Cursor::default(),
+        }
     }
 
     /// The selected comment, as an index into the review.
     pub fn selected(&self, review: &Review) -> Option<usize> {
         let order = review.ordered();
-        order.get(self.cursor.index.min(order.len().saturating_sub(1))).copied()
+        order
+            .get(self.cursor.index.min(order.len().saturating_sub(1)))
+            .copied()
     }
 
     /// The keys, for the status line.
     pub fn hints(&self) -> Vec<ui::Hint<'static>> {
-        vec![("enter", "focus diff"), ("c", "edit"), ("d", "delete"), ("y", "copy all"), ("D", "clear")]
+        vec![
+            ("enter", "focus diff"),
+            ("c", "edit"),
+            ("d", "delete"),
+            ("y", "copy all"),
+            ("D", "clear"),
+        ]
     }
 
     pub fn handle_key(&mut self, review: &Review, key: KeyEvent) -> ListAction {
@@ -281,7 +321,11 @@ impl ReviewList {
                 self.cursor.handle_key(key, len);
             }
         }
-        if self.cursor.index == before { ListAction::None } else { ListAction::Moved }
+        if self.cursor.index == before {
+            ListAction::None
+        } else {
+            ListAction::Moved
+        }
     }
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool, review: &Review) {
@@ -300,11 +344,15 @@ impl ReviewList {
         let mut heading = None;
         let mut headings = Vec::new();
         for (position, &index) in order.iter().enumerate() {
-            let Some(comment) = review.get(index) else { continue };
+            let Some(comment) = review.get(index) else {
+                continue;
+            };
             if heading != Some(&comment.heading) {
                 heading = Some(&comment.heading);
                 headings.push(lines.len());
-                let style = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
+                let style = Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD);
                 lines.push(Line::styled(comment.heading.clone(), style));
             }
             if position == self.cursor.index {
@@ -335,7 +383,11 @@ mod tests {
     use super::*;
 
     fn comment(source: DiffSource, side: Side, number: usize, text: &str, body: &str) -> Comment {
-        let anchor = Some(Anchor { side, number, text: text.to_string() });
+        let anchor = Some(Anchor {
+            side,
+            number,
+            text: text.to_string(),
+        });
         Comment {
             place: Place::of(&source).unwrap(),
             heading: match &source {
@@ -353,7 +405,10 @@ mod tests {
     }
 
     fn in_commit(path: &str) -> DiffSource {
-        DiffSource::Commit { sha: "a3f9c12aaaa".to_string(), path: path.to_string() }
+        DiffSource::Commit {
+            sha: "a3f9c12aaaa".to_string(),
+            path: path.to_string(),
+        }
     }
 
     #[test]
@@ -364,7 +419,13 @@ mod tests {
         assert_eq!(review.len(), 1);
         assert_eq!(review.get(0).unwrap().body, "second");
         // The same line staged is the same place.
-        assert_eq!(review.find(&DiffSource::Staged("a.rs".to_string()), Some((Side::New, 3))), Some(0));
+        assert_eq!(
+            review.find(
+                &DiffSource::Staged("a.rs".to_string()),
+                Some((Side::New, 3))
+            ),
+            Some(0)
+        );
         review.set(comment(unstaged("a.rs"), Side::New, 3, "x", "  "));
         assert!(review.is_empty());
     }
@@ -379,16 +440,46 @@ mod tests {
 
     #[test]
     fn conflicts_take_no_comments() {
-        let anchor = Some(Anchor { side: Side::New, number: 1, text: String::new() });
-        assert!(Comment::new(&Repo::nowhere(), DiffSource::Conflict("a.rs".to_string()), anchor, "x".to_string()).is_none());
+        let anchor = Some(Anchor {
+            side: Side::New,
+            number: 1,
+            text: String::new(),
+        });
+        assert!(
+            Comment::new(
+                &Repo::nowhere(),
+                DiffSource::Conflict("a.rs".to_string()),
+                anchor,
+                "x".to_string()
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn the_review_groups_comments_by_place_then_file_then_line() {
         let mut review = Review::default();
-        review.set(comment(unstaged("b.rs"), Side::New, 9, "    let b = 2;", "Why 2?"));
-        review.set(comment(in_commit("a.rs"), Side::New, 4, "fn a() {}", "Rename this."));
-        review.set(comment(unstaged("a.rs"), Side::Old, 12, "check();", "Keep this check.\n\nIt guards the empty case."));
+        review.set(comment(
+            unstaged("b.rs"),
+            Side::New,
+            9,
+            "    let b = 2;",
+            "Why 2?",
+        ));
+        review.set(comment(
+            in_commit("a.rs"),
+            Side::New,
+            4,
+            "fn a() {}",
+            "Rename this.",
+        ));
+        review.set(comment(
+            unstaged("a.rs"),
+            Side::Old,
+            12,
+            "check();",
+            "Keep this check.\n\nIt guards the empty case.",
+        ));
         review.set(comment(unstaged("b.rs"), Side::New, 2, "use x;", "Unused."));
         let mut on_file = comment(unstaged("b.rs"), Side::New, 0, "", "Split this file.");
         on_file.anchor = None;
@@ -413,8 +504,14 @@ mod tests {
         review.set(comment(unstaged("a.rs"), Side::New, 1, "a", "first"));
         let mut list = ReviewList::new();
         assert_eq!(list.selected(&review), Some(1));
-        assert!(matches!(list.handle_key(&review, KeyEvent::from(KeyCode::Char('j'))), ListAction::Moved));
+        assert!(matches!(
+            list.handle_key(&review, KeyEvent::from(KeyCode::Char('j'))),
+            ListAction::Moved
+        ));
         assert_eq!(list.selected(&review), Some(0));
-        assert!(matches!(list.handle_key(&review, KeyEvent::from(KeyCode::Char('d'))), ListAction::Delete(0)));
+        assert!(matches!(
+            list.handle_key(&review, KeyEvent::from(KeyCode::Char('d'))),
+            ListAction::Delete(0)
+        ));
     }
 }

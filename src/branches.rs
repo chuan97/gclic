@@ -71,7 +71,8 @@ fn listed_names(branches: &[Branch]) -> Vec<String> {
     let locals: Vec<&Branch> = branches.iter().filter(|branch| !branch.is_remote).collect();
     let covered = |remote: &Branch| {
         locals.iter().any(|local| {
-            local.name == remote.local_name || local.upstream.as_deref() == Some(remote.name.as_str())
+            local.name == remote.local_name
+                || local.upstream.as_deref() == Some(remote.name.as_str())
         })
     };
     branches
@@ -111,7 +112,12 @@ impl BranchesPanel {
         if self.is_typing() {
             return vec![("", "type to filter"), ("enter", "check out")];
         }
-        vec![("enter", "check out"), ("c", "compare"), ("space", "remotes"), ("i", "search")]
+        vec![
+            ("enter", "check out"),
+            ("c", "compare"),
+            ("space", "remotes"),
+            ("i", "search"),
+        ]
     }
 
     /// What esc does, if anything.
@@ -137,7 +143,10 @@ impl BranchesPanel {
 
         // Open drop-downs stay open, with up-to-date counts.
         let open: Vec<String> = self.drop_downs.iter().map(|d| d.branch.clone()).collect();
-        self.drop_downs = open.iter().filter_map(|name| self.load_drop_down(name)).collect();
+        self.drop_downs = open
+            .iter()
+            .filter_map(|name| self.load_drop_down(name))
+            .collect();
         Ok(())
     }
 
@@ -148,14 +157,22 @@ impl BranchesPanel {
 
     fn set_branches(&mut self, branches: Vec<Branch>) {
         self.branches = branches;
-        self.rows = self.branches.iter().map(|branch| (branch.name.clone(), self.row_info(branch))).collect();
+        self.rows = self
+            .branches
+            .iter()
+            .map(|branch| (branch.name.clone(), self.row_info(branch)))
+            .collect();
     }
 
     fn row_info(&self, branch: &Branch) -> RowInfo {
         RowInfo {
             is_remote: branch.is_remote,
             ahead_behind: branch.ahead_behind,
-            remotes: if branch.is_remote { 0 } else { remotes_of(&self.branches, branch).len() },
+            remotes: if branch.is_remote {
+                0
+            } else {
+                remotes_of(&self.branches, branch).len()
+            },
             elsewhere: self.other_worktree(branch),
         }
     }
@@ -175,12 +192,21 @@ impl BranchesPanel {
         let remotes: Vec<RemoteRow> = remotes_of(&self.branches, local)
             .into_iter()
             .map(|remote| {
-                let (ahead, behind) = git::ahead_behind(&self.repo, name, &remote.name).unwrap_or((0, 0));
+                let (ahead, behind) =
+                    git::ahead_behind(&self.repo, name, &remote.name).unwrap_or((0, 0));
                 let is_upstream = local.upstream.as_deref() == Some(remote.name.as_str());
-                RemoteRow { name: remote.name.clone(), ahead, behind, is_upstream }
+                RemoteRow {
+                    name: remote.name.clone(),
+                    ahead,
+                    behind,
+                    is_upstream,
+                }
             })
             .collect();
-        (!remotes.is_empty()).then(|| DropDown { branch: name.to_string(), remotes })
+        (!remotes.is_empty()).then(|| DropDown {
+            branch: name.to_string(),
+            remotes,
+        })
     }
 
     /// A search that's a commit's sha lists the branches holding that commit,
@@ -188,22 +214,31 @@ impl BranchesPanel {
     /// rather than for each letter, so that a pasted sha runs git once.
     pub fn search_sha(&mut self) {
         let query = self.picker.query().to_string();
-        if self.sha_search.as_ref().is_some_and(|(searched, _)| *searched == query) {
+        if self
+            .sha_search
+            .as_ref()
+            .is_some_and(|(searched, _)| *searched == query)
+        {
             return;
         }
-        let containing = git::looks_like_sha(&query).then(|| git::branches_containing(&self.repo, &query)).flatten();
+        let containing = git::looks_like_sha(&query)
+            .then(|| git::branches_containing(&self.repo, &query))
+            .flatten();
         self.sha_search = Some((query, containing.is_some()));
         self.picker.set_only(containing);
     }
 
     /// Whether the search is a commit's sha, listing the branches holding it.
     fn is_sha_search(&self) -> bool {
-        self.sha_search.as_ref().is_some_and(|(_, is_commit)| *is_commit)
+        self.sha_search
+            .as_ref()
+            .is_some_and(|(_, is_commit)| *is_commit)
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Action {
         // Whatever acts on the list, like enter, sees it as it is for the search.
-        let edits_search = self.picker.is_typing() && matches!(key.code, KeyCode::Char(_) | KeyCode::Backspace);
+        let edits_search =
+            self.picker.is_typing() && matches!(key.code, KeyCode::Char(_) | KeyCode::Backspace);
         if !edits_search {
             self.search_sha();
         }
@@ -244,7 +279,11 @@ impl BranchesPanel {
         let Some(name) = self.picker.highlighted().cloned() else {
             return Action::None;
         };
-        if self.drop_downs.iter().any(|drop_down| drop_down.branch == name) {
+        if self
+            .drop_downs
+            .iter()
+            .any(|drop_down| drop_down.branch == name)
+        {
             self.drop_downs.retain(|drop_down| drop_down.branch != name);
             return Action::None;
         }
@@ -263,11 +302,20 @@ impl BranchesPanel {
     fn check_out(&mut self, name: &str) -> Action {
         self.picker.stop_typing();
         // git won't check out a branch in two worktrees at once, so say why first.
-        if let Some(elsewhere) = self.find(name).and_then(|branch| self.other_worktree(branch)) {
-            return Action::Message(format!("{name} is checked out in {elsewhere}, so not here too"));
+        if let Some(elsewhere) = self
+            .find(name)
+            .and_then(|branch| self.other_worktree(branch))
+        {
+            return Action::Message(format!(
+                "{name} is checked out in {elsewhere}, so not here too"
+            ));
         }
         let is_remote = self.find(name).is_some_and(|branch| branch.is_remote);
-        let result = if is_remote { git::switch_track(&self.repo, name) } else { git::switch(&self.repo, name) };
+        let result = if is_remote {
+            git::switch_track(&self.repo, name)
+        } else {
+            git::switch(&self.repo, name)
+        };
         if result.is_ok() {
             self.picker.clear_query();
             self.picker.select_item(name);
@@ -282,13 +330,21 @@ impl BranchesPanel {
             return 1;
         }
         let search = usize::from(self.picker.is_searching());
-        let rows: usize = self.picker.matched_items().into_iter().map(|name| 1 + self.drop_down_rows(name)).sum();
+        let rows: usize = self
+            .picker
+            .matched_items()
+            .into_iter()
+            .map(|name| 1 + self.drop_down_rows(name))
+            .sum();
         (rows.max(1) + search) as u16
     }
 
     /// How many remotes `name`'s drop-down shows, if it's open.
     fn drop_down_rows(&self, name: &str) -> usize {
-        self.drop_downs.iter().find(|d| d.branch == name).map_or(0, |d| d.remotes.len())
+        self.drop_downs
+            .iter()
+            .find(|d| d.branch == name)
+            .map_or(0, |d| d.remotes.len())
     }
 
     /// `note` goes at the right of the title: when the remotes were fetched.
@@ -363,7 +419,9 @@ impl BranchesPanel {
         let row = self.rows.get(name);
         let is_remote = row.is_some_and(|row| row.is_remote);
         let style = if is_current {
-            Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD)
         } else if is_remote {
             Style::default().fg(ui::DIM)
         } else {
@@ -376,20 +434,32 @@ impl BranchesPanel {
         // that unpushed work shows at a glance, even with the pane collapsed.
         if let Some((ahead, behind)) = row.and_then(|row| row.ahead_behind) {
             if ahead > 0 {
-                spans.push(Span::styled(format!("  ↑{ahead}"), Style::default().fg(Color::Green)));
+                spans.push(Span::styled(
+                    format!("  ↑{ahead}"),
+                    Style::default().fg(Color::Green),
+                ));
             }
             if behind > 0 {
                 let gap = if ahead > 0 { " " } else { "  " };
-                spans.push(Span::styled(format!("{gap}↓{behind}"), Style::default().fg(Color::Red)));
+                spans.push(Span::styled(
+                    format!("{gap}↓{behind}"),
+                    Style::default().fg(Color::Red),
+                ));
             }
         }
         let count = row.map_or(0, |row| row.remotes);
         if count > 0 {
             let noun = if count == 1 { "remote" } else { "remotes" };
-            spans.push(Span::styled(format!("  {count} {noun}"), Style::default().fg(ui::DIM)));
+            spans.push(Span::styled(
+                format!("  {count} {noun}"),
+                Style::default().fg(ui::DIM),
+            ));
         }
         if let Some(elsewhere) = row.and_then(|row| row.elsewhere.as_ref()) {
-            spans.push(Span::styled(format!("  in {elsewhere}"), Style::default().fg(ui::DIM)));
+            spans.push(Span::styled(
+                format!("  in {elsewhere}"),
+                Style::default().fg(ui::DIM),
+            ));
         }
 
         // At least the start of the name stays.
@@ -400,16 +470,21 @@ impl BranchesPanel {
     }
 }
 
-
 fn remote_line(remote: &RemoteRow) -> Line<'static> {
     let dim = Style::default().fg(ui::DIM);
     let mut spans = vec![Span::styled(format!("    {}  ", remote.name), dim)];
     if remote.ahead == 0 && remote.behind == 0 {
         spans.push(Span::styled("in sync", dim));
     } else {
-        spans.push(Span::styled(format!("↑{}", remote.ahead), Style::default().fg(Color::Green)));
+        spans.push(Span::styled(
+            format!("↑{}", remote.ahead),
+            Style::default().fg(Color::Green),
+        ));
         spans.push(Span::raw(" "));
-        spans.push(Span::styled(format!("↓{}", remote.behind), Style::default().fg(Color::Red)));
+        spans.push(Span::styled(
+            format!("↓{}", remote.behind),
+            Style::default().fg(Color::Red),
+        ));
     }
     if remote.is_upstream {
         spans.push(Span::styled("  tracked", dim));
@@ -449,7 +524,9 @@ mod tests {
     fn panel_on(names: &[&str], current: &str, highlighted: &str) -> BranchesPanel {
         let mut panel = BranchesPanel::new(&Repo::nowhere());
         panel.set_branches(names.iter().map(|name| local(name, None)).collect());
-        panel.picker.set_items(names.iter().map(|name| name.to_string()).collect());
+        panel
+            .picker
+            .set_items(names.iter().map(|name| name.to_string()).collect());
         panel.picker.select_item(highlighted);
         panel.current = Some(current.to_string());
         panel
@@ -457,14 +534,20 @@ mod tests {
 
     fn line_text(panel: &BranchesPanel, name: &str) -> String {
         let line = panel.branch_line(name, false, 200);
-        line.spans.iter().map(|span| span.content.as_ref()).collect()
+        line.spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect()
     }
 
     #[test]
     fn a_branch_line_shows_how_it_stands_against_its_upstream() {
         let mut panel = panel_on(&["main"], "main", "main");
         let mut line = |ahead_behind| {
-            panel.set_branches(vec![Branch { ahead_behind: Some(ahead_behind), ..local("main", None) }]);
+            panel.set_branches(vec![Branch {
+                ahead_behind: Some(ahead_behind),
+                ..local("main", None)
+            }]);
             line_text(&panel, "main")
         };
         assert_eq!(line((2, 0)), "* main  ↑2");
@@ -501,13 +584,20 @@ mod tests {
 
     #[test]
     fn remotes_with_a_local_branch_are_not_listed() {
-        let branches = [local("main", None), remote("origin/main"), remote("origin/new")];
+        let branches = [
+            local("main", None),
+            remote("origin/main"),
+            remote("origin/new"),
+        ];
         assert_eq!(listed_names(&branches), ["main", "origin/new"]);
     }
 
     #[test]
     fn a_tracked_remote_with_another_name_is_not_listed() {
-        let branches = [local("mine", Some("origin/theirs")), remote("origin/theirs")];
+        let branches = [
+            local("mine", Some("origin/theirs")),
+            remote("origin/theirs"),
+        ];
         assert_eq!(listed_names(&branches), ["mine"]);
     }
 
@@ -526,7 +616,10 @@ mod tests {
             remote("upstream/main"),
             remote("origin/other"),
         ];
-        let names: Vec<&str> = remotes_of(&branches, &main).iter().map(|b| b.name.as_str()).collect();
+        let names: Vec<&str> = remotes_of(&branches, &main)
+            .iter()
+            .map(|b| b.name.as_str())
+            .collect();
         assert_eq!(names, ["origin/main", "upstream/main"]);
     }
 

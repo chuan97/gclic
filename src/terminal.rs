@@ -2,21 +2,21 @@
 //! while gclic steps aside, and the keyboard flags it sets on the terminal.
 
 use anyhow::Result;
+use ratatui::DefaultTerminal;
 use ratatui::crossterm::cursor::{MoveTo, Show, position};
 use ratatui::crossterm::event::{
-    KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
-    PushKeyboardEnhancementFlags,
+    KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
 };
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
-    Clear as ClearScreen, ClearType, EnterAlternateScreen, enable_raw_mode, supports_keyboard_enhancement,
+    Clear as ClearScreen, ClearType, EnterAlternateScreen, enable_raw_mode,
+    supports_keyboard_enhancement,
 };
-use ratatui::DefaultTerminal;
 use std::io::BufRead;
 use std::path::Path;
 use std::process::Command;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Whether the terminal can report keys apart, asked once: asking means
 /// waiting for its answer, and one that doesn't answer makes gclic wait.
@@ -53,7 +53,9 @@ fn shell(folder: &Path, line: &str) -> Vec<Command> {
             .into_iter()
             .map(|program| {
                 let mut command = Command::new(program);
-                command.args(["-NoLogo", "-Command", line]).current_dir(folder);
+                command
+                    .args(["-NoLogo", "-Command", line])
+                    .current_dir(folder);
                 command
             })
             .collect()
@@ -74,7 +76,11 @@ fn shell(folder: &Path, line: &str) -> Vec<Command> {
 /// moves it. The screen is cleared first, so that printing can't scroll the
 /// cursor back to where it was. Returns a note for the message line, when
 /// gclic came straight back from a command that failed.
-pub fn run_in_terminal(terminal: &mut DefaultTerminal, folder: &Path, line: &str) -> Result<Option<String>> {
+pub fn run_in_terminal(
+    terminal: &mut DefaultTerminal,
+    folder: &Path,
+    line: &str,
+) -> Result<Option<String>> {
     hand_terminal(terminal, line, &format!("!{line}"), shell(folder, line))
 }
 
@@ -89,7 +95,12 @@ pub fn hand_terminal(
 ) -> Result<Option<String>> {
     plain_keys();
     ratatui::restore();
-    let _ = execute!(std::io::stdout(), Show, ClearScreen(ClearType::All), MoveTo(0, 0));
+    let _ = execute!(
+        std::io::stdout(),
+        Show,
+        ClearScreen(ClearType::All),
+        MoveTo(0, 0)
+    );
     println!("$ {shown}");
     let before = position().ok();
     let mut result = Err(std::io::Error::from(std::io::ErrorKind::NotFound));

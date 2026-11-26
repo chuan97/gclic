@@ -6,7 +6,11 @@ use super::*;
 use crate::test_repo::TestRepo;
 
 fn entry(status: char, path: &str) -> FileEntry {
-    FileEntry { status, path: path.to_string(), ..Default::default() }
+    FileEntry {
+        status,
+        path: path.to_string(),
+        ..Default::default()
+    }
 }
 
 fn paths(files: &[FileEntry]) -> Vec<&str> {
@@ -37,7 +41,10 @@ fn two_repos_answer_for_themselves_whatever_the_working_directory() {
     assert_eq!(paths(&status(&a).unwrap().unstaged), ["in-a.txt"]);
     assert_eq!(paths(&status(&b).unwrap().unstaged), ["in-b.txt"]);
     assert_eq!(current_branch(&a).as_deref(), Some("main"));
-    assert!(log(&b, &["HEAD".to_string()], 10).is_err(), "b has no commits");
+    assert!(
+        log(&b, &["HEAD".to_string()], 10).is_err(),
+        "b has no commits"
+    );
 }
 
 #[test]
@@ -76,9 +83,17 @@ fn settings_are_read_and_written_in_the_repo_s_own_config() {
 #[test]
 fn a_command_the_user_types_runs_in_the_repo() {
     let repo = TestRepo::with_history();
-    let output = user_command(&repo, &["rev-parse".to_string(), "--show-toplevel".to_string()]).output().unwrap();
+    let output = user_command(
+        &repo,
+        &["rev-parse".to_string(), "--show-toplevel".to_string()],
+    )
+    .output()
+    .unwrap();
     assert!(output.status.success());
-    assert_eq!(Path::new(String::from_utf8_lossy(&output.stdout).trim()), repo.root());
+    assert_eq!(
+        Path::new(String::from_utf8_lossy(&output.stdout).trim()),
+        repo.root()
+    );
 }
 
 // ---------------------------------------------------------------- staging
@@ -93,7 +108,13 @@ fn status_reads_each_kind_of_change() {
     let status = status(&repo).unwrap();
     assert_eq!(status.staged, [entry('M', "README.md")]);
     // Untracked files are listed one by one, even inside a new folder.
-    assert_eq!(status.unstaged, [entry('M', "src/main.rs"), entry('?', "new folder/new file.txt")]);
+    assert_eq!(
+        status.unstaged,
+        [
+            entry('M', "src/main.rs"),
+            entry('?', "new folder/new file.txt")
+        ]
+    );
     assert!(status.conflicted.is_empty());
 }
 
@@ -104,7 +125,10 @@ fn a_file_changed_after_staging_is_in_both_lists() {
     stage(&repo, "README.md").unwrap();
     repo.write("README.md", "then changed again\n");
     let status = status(&repo).unwrap();
-    assert_eq!((status.staged, status.unstaged), (vec![entry('M', "README.md")], vec![entry('M', "README.md")]));
+    assert_eq!(
+        (status.staged, status.unstaged),
+        (vec![entry('M', "README.md")], vec![entry('M', "README.md")])
+    );
     // Each diff is its own half of the change.
     let staged = diff(&repo, &DiffSource::Staged("README.md".to_string()), false).unwrap();
     let unstaged = diff(&repo, &unstaged("README.md"), false).unwrap();
@@ -120,9 +144,15 @@ fn staging_and_unstaging_move_files_between_the_lists() {
     stage(&repo, "new.txt").unwrap();
     assert_eq!(status(&repo).unwrap().staged, [entry('A', "new.txt")]);
     unstage(&repo, "new.txt").unwrap();
-    assert_eq!(status(&repo).unwrap().unstaged, [entry('M', "README.md"), entry('?', "new.txt")]);
+    assert_eq!(
+        status(&repo).unwrap().unstaged,
+        [entry('M', "README.md"), entry('?', "new.txt")]
+    );
     stage_all(&repo).unwrap();
-    assert_eq!(status(&repo).unwrap().staged, [entry('M', "README.md"), entry('A', "new.txt")]);
+    assert_eq!(
+        status(&repo).unwrap().staged,
+        [entry('M', "README.md"), entry('A', "new.txt")]
+    );
     unstage_all(&repo).unwrap();
     assert!(status(&repo).unwrap().staged.is_empty());
 }
@@ -200,10 +230,18 @@ fn each_working_tree_diff_comes_from_its_own_place() {
     let changed = diff(&repo, &unstaged("README.md"), false).unwrap();
     assert!(changed.contains("-More.\n+Edited.\n"), "{changed}");
     // An untracked file, as added to nothing.
-    let new = diff(&repo, &DiffSource::Untracked("docs/new.md".to_string()), false).unwrap();
+    let new = diff(
+        &repo,
+        &DiffSource::Untracked("docs/new.md".to_string()),
+        false,
+    )
+    .unwrap();
     assert!(new.contains("+one\n+two\n"), "{new}");
     // Nothing staged, nothing to show.
-    assert_eq!(diff(&repo, &DiffSource::Staged("README.md".to_string()), false).unwrap(), "");
+    assert_eq!(
+        diff(&repo, &DiffSource::Staged("README.md".to_string()), false).unwrap(),
+        ""
+    );
 }
 
 #[test]
@@ -216,9 +254,18 @@ fn each_side_of_a_working_tree_diff_is_read_from_its_own_place() {
     let versions = |source: DiffSource| file_versions(&repo, &source);
     let some = |text: &str| Some(text.to_string());
     // Staged: from HEAD to the index. Unstaged: from the index to the disk.
-    assert_eq!(versions(DiffSource::Staged("README.md".to_string())), (some("# Test\n\nMore.\n"), some("in the index\n")));
-    assert_eq!(versions(unstaged("README.md")), (some("in the index\n"), some("on disk\n")));
-    assert_eq!(versions(DiffSource::Untracked("new.txt".to_string())), (None, some("new\n")));
+    assert_eq!(
+        versions(DiffSource::Staged("README.md".to_string())),
+        (some("# Test\n\nMore.\n"), some("in the index\n"))
+    );
+    assert_eq!(
+        versions(unstaged("README.md")),
+        (some("in the index\n"), some("on disk\n"))
+    );
+    assert_eq!(
+        versions(DiffSource::Untracked("new.txt".to_string())),
+        (None, some("new\n"))
+    );
 }
 
 #[test]
@@ -227,14 +274,26 @@ fn a_commit_s_diff_is_against_its_first_parent_even_for_a_merge() {
     repo.git(&["merge", "-q", "--no-ff", "-m", "Merge feature", "feature"]);
     let merge = repo.sha("HEAD");
     // The merge brings feature.txt, from its second parent.
-    assert_eq!(commit_files(&repo, &merge).unwrap(), [FileEntry {
-        status: 'A',
+    assert_eq!(
+        commit_files(&repo, &merge).unwrap(),
+        [FileEntry {
+            status: 'A',
+            path: "feature.txt".to_string(),
+            lines: Lines::Counted {
+                added: 1,
+                removed: 0
+            },
+        }]
+    );
+    let source = DiffSource::Commit {
+        sha: merge,
         path: "feature.txt".to_string(),
-        lines: Lines::Counted { added: 1, removed: 0 },
-    }]);
-    let source = DiffSource::Commit { sha: merge, path: "feature.txt".to_string() };
+    };
     assert!(diff(&repo, &source, false).unwrap().contains("+new"));
-    assert_eq!(file_versions(&repo, &source), (None, Some("new\n".to_string())));
+    assert_eq!(
+        file_versions(&repo, &source),
+        (None, Some("new\n".to_string()))
+    );
 }
 
 #[test]
@@ -252,10 +311,27 @@ fn comparing_two_refs_counts_their_commits_and_lists_their_files() {
     assert_eq!(ahead_behind(&repo, "feature", "main").unwrap(), (1, 0));
     assert_eq!(merge_base(&repo, "main", "feature"), Some(repo.sha("main")));
     let files = changed_files(&repo, "main", "feature").unwrap();
-    assert_eq!(files, [FileEntry { status: 'A', path: "feature.txt".to_string(), lines: Lines::Counted { added: 1, removed: 0 } }]);
+    assert_eq!(
+        files,
+        [FileEntry {
+            status: 'A',
+            path: "feature.txt".to_string(),
+            lines: Lines::Counted {
+                added: 1,
+                removed: 0
+            }
+        }]
+    );
     // The other way round, the file goes.
-    assert_eq!(changed_files(&repo, "feature", "main").unwrap()[0].status, 'D');
-    let source = DiffSource::Refs { a: "main".to_string(), b: "feature".to_string(), path: "feature.txt".to_string() };
+    assert_eq!(
+        changed_files(&repo, "feature", "main").unwrap()[0].status,
+        'D'
+    );
+    let source = DiffSource::Refs {
+        a: "main".to_string(),
+        b: "feature".to_string(),
+        path: "feature.txt".to_string(),
+    };
     assert!(diff(&repo, &source, false).unwrap().contains("+new"));
 }
 
@@ -272,7 +348,10 @@ fn a_merge_conflict_is_listed_apart_and_shows_both_sides() {
     // The file itself, markers and all.
     let source = DiffSource::Conflict("clash.txt".to_string());
     let text = diff(&repo, &source, false).unwrap();
-    assert!(text.contains("<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> other\n"), "{text}");
+    assert!(
+        text.contains("<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> other\n"),
+        "{text}"
+    );
     let (old, new) = file_versions(&repo, &source);
     assert_eq!(old.as_deref(), Some(text.as_str()));
     assert_eq!(new.as_deref(), Some(text.as_str()));
@@ -291,7 +370,12 @@ fn staging_a_conflicted_file_marks_it_resolved() {
     assert_eq!(operation_in_progress(&repo), Some("merging"));
     commit(&repo, "Merge other").unwrap();
     assert_eq!(operation_in_progress(&repo), None);
-    assert_eq!(log(&repo, &["HEAD".to_string()], 1).unwrap()[0].parents.len(), 2);
+    assert_eq!(
+        log(&repo, &["HEAD".to_string()], 1).unwrap()[0]
+            .parents
+            .len(),
+        2
+    );
 }
 
 #[test]
@@ -305,7 +389,10 @@ fn a_conflict_deleted_on_one_side_shows_the_file_left() {
     repo.commit("Edit the README");
     assert!(!repo.git_may_fail(&["merge", "other"]));
     assert_eq!(status(&repo).unwrap().conflicted, [entry('U', "README.md")]);
-    assert_eq!(diff(&repo, &DiffSource::Conflict("README.md".to_string()), false).unwrap(), "edited\n");
+    assert_eq!(
+        diff(&repo, &DiffSource::Conflict("README.md".to_string()), false).unwrap(),
+        "edited\n"
+    );
 }
 
 #[test]
@@ -324,7 +411,10 @@ fn each_operation_that_stops_on_a_conflict_is_told_apart() {
     assert_eq!(operation_in_progress(&repo), None);
 
     let stops = |args: &[&str], name: &str, abort: &str| {
-        assert!(!repo.git_may_fail(args), "git {args:?} should stop on the conflict");
+        assert!(
+            !repo.git_may_fail(args),
+            "git {args:?} should stop on the conflict"
+        );
         assert_eq!(operation_in_progress(&repo), Some(name));
         assert_eq!(status(&repo).unwrap().conflicted, [entry('U', "clash.txt")]);
         repo.git(&[abort, "--abort"]);
@@ -344,37 +434,93 @@ fn stashed() -> TestRepo {
     let repo = TestRepo::with_history();
     repo.write("README.md", "# Test\n\nStashed.\n");
     repo.write("untracked.txt", "new\nfile\n");
-    repo.git(&["stash", "push", "-q", "--include-untracked", "-m", "try this"]);
+    repo.git(&[
+        "stash",
+        "push",
+        "-q",
+        "--include-untracked",
+        "-m",
+        "try this",
+    ]);
     repo
 }
 
 #[test]
 fn a_stash_lists_its_base_and_its_files_tracked_and_untracked() {
     let repo = stashed();
-    assert_eq!(status(&repo).unwrap(), Status::default(), "the changes were put aside");
+    assert_eq!(
+        status(&repo).unwrap(),
+        Status::default(),
+        "the changes were put aside"
+    );
     let stashes = stashes(&repo).unwrap();
     assert_eq!(stashes.len(), 1);
     let stash = &stashes[0];
-    assert_eq!((stash.name.as_str(), stash.message.as_str()), ("stash@{0}", "On main: try this"));
+    assert_eq!(
+        (stash.name.as_str(), stash.message.as_str()),
+        ("stash@{0}", "On main: try this")
+    );
     assert_eq!(stash.base, repo.sha("main"));
     assert!(stash.has_untracked);
-    assert_eq!(stash_files(&repo, stash).unwrap(), [
-        FileEntry { status: 'M', path: "README.md".to_string(), lines: Lines::Counted { added: 1, removed: 1 } },
-        FileEntry { status: '?', path: "untracked.txt".to_string(), lines: Lines::Counted { added: 2, removed: 0 } },
-    ]);
+    assert_eq!(
+        stash_files(&repo, stash).unwrap(),
+        [
+            FileEntry {
+                status: 'M',
+                path: "README.md".to_string(),
+                lines: Lines::Counted {
+                    added: 1,
+                    removed: 1
+                }
+            },
+            FileEntry {
+                status: '?',
+                path: "untracked.txt".to_string(),
+                lines: Lines::Counted {
+                    added: 2,
+                    removed: 0
+                }
+            },
+        ]
+    );
 }
 
 #[test]
 fn a_stash_s_files_diff_against_its_base_or_against_nothing() {
     let repo = stashed();
     let stash = stashes(&repo).unwrap().remove(0);
-    let tracked = DiffSource::Stash { sha: stash.sha.clone(), path: "README.md".to_string(), untracked: false };
-    assert!(diff(&repo, &tracked, false).unwrap().contains("-More.\n+Stashed.\n"));
+    let tracked = DiffSource::Stash {
+        sha: stash.sha.clone(),
+        path: "README.md".to_string(),
+        untracked: false,
+    };
+    assert!(
+        diff(&repo, &tracked, false)
+            .unwrap()
+            .contains("-More.\n+Stashed.\n")
+    );
     let versions = file_versions(&repo, &tracked);
-    assert_eq!(versions, (Some("# Test\n\nMore.\n".to_string()), Some("# Test\n\nStashed.\n".to_string())));
-    let untracked = DiffSource::Stash { sha: stash.sha, path: "untracked.txt".to_string(), untracked: true };
-    assert!(diff(&repo, &untracked, false).unwrap().contains("+new\n+file\n"));
-    assert_eq!(file_versions(&repo, &untracked), (None, Some("new\nfile\n".to_string())));
+    assert_eq!(
+        versions,
+        (
+            Some("# Test\n\nMore.\n".to_string()),
+            Some("# Test\n\nStashed.\n".to_string())
+        )
+    );
+    let untracked = DiffSource::Stash {
+        sha: stash.sha,
+        path: "untracked.txt".to_string(),
+        untracked: true,
+    };
+    assert!(
+        diff(&repo, &untracked, false)
+            .unwrap()
+            .contains("+new\n+file\n")
+    );
+    assert_eq!(
+        file_versions(&repo, &untracked),
+        (None, Some("new\nfile\n".to_string()))
+    );
 }
 
 #[test]
@@ -392,15 +538,26 @@ fn applying_keeps_the_stash_and_popping_drops_it() {
     let repo = stashed();
     let stash = stashes(&repo).unwrap().remove(0);
     stash_apply(&repo, &stash).unwrap();
-    assert_eq!(repo.read("README.md").as_deref(), Some("# Test\n\nStashed.\n"));
+    assert_eq!(
+        repo.read("README.md").as_deref(),
+        Some("# Test\n\nStashed.\n")
+    );
     assert_eq!(repo.read("untracked.txt").as_deref(), Some("new\nfile\n"));
     assert_eq!(shas(&stashes(&repo).unwrap()), [stash.sha.as_str()]);
     // Everything comes back unstaged.
     assert!(status(&repo).unwrap().staged.is_empty());
 
-    discard_all(&repo, &["README.md".to_string()], &["untracked.txt".to_string()]).unwrap();
+    discard_all(
+        &repo,
+        &["README.md".to_string()],
+        &["untracked.txt".to_string()],
+    )
+    .unwrap();
     stash_pop(&repo, &stash).unwrap();
-    assert_eq!(repo.read("README.md").as_deref(), Some("# Test\n\nStashed.\n"));
+    assert_eq!(
+        repo.read("README.md").as_deref(),
+        Some("# Test\n\nStashed.\n")
+    );
     assert!(stashes(&repo).unwrap().is_empty());
 }
 
@@ -466,7 +623,11 @@ fn branches_know_their_upstream_and_how_far_apart_they_are() {
     assert_eq!(tracked_remotes(&clone), ["origin"]);
     // A branch without an upstream has no counts.
     clone.git(&["branch", "-q", "loose"]);
-    let loose = super::branches(&clone).unwrap().into_iter().find(|b| b.name == "loose").unwrap();
+    let loose = super::branches(&clone)
+        .unwrap()
+        .into_iter()
+        .find(|b| b.name == "loose")
+        .unwrap();
     assert_eq!((loose.upstream, loose.ahead_behind), (None, None));
 }
 
@@ -476,7 +637,11 @@ fn a_branch_whose_upstream_was_deleted_has_no_counts() {
     clone.git(&["switch", "-q", "--track", "origin/feature"]);
     origin.git(&["branch", "-q", "-D", "feature"]);
     clone.git(&["fetch", "-q", "--prune"]);
-    let feature = branches(&clone).unwrap().into_iter().find(|b| b.name == "feature").unwrap();
+    let feature = branches(&clone)
+        .unwrap()
+        .into_iter()
+        .find(|b| b.name == "feature")
+        .unwrap();
     assert_eq!(feature.upstream.as_deref(), Some("origin/feature"));
     assert_eq!(feature.ahead_behind, None);
 }
@@ -486,7 +651,11 @@ fn unpushed_commits_are_the_ones_on_no_remote_branch() {
     let (_origin, clone) = diverged_clone();
     let unpushed = unpushed(&clone, &["main".to_string()]).unwrap();
     assert_eq!(unpushed, HashSet::from([clone.sha("main")]));
-    assert!(super::unpushed(&clone, &["origin/main".to_string()]).unwrap().is_empty());
+    assert!(
+        super::unpushed(&clone, &["origin/main".to_string()])
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]
@@ -507,8 +676,15 @@ fn the_background_fetch_brings_the_remote_s_new_commits() {
 #[test]
 fn a_failed_fetch_says_why_in_a_line() {
     let repo = TestRepo::with_history();
-    repo.git(&["remote", "add", "gone", &repo.file("no-such-repo").display().to_string()]);
-    let error = background_fetch(&repo, &["gone".to_string()]).unwrap_err().to_string();
+    repo.git(&[
+        "remote",
+        "add",
+        "gone",
+        &repo.file("no-such-repo").display().to_string(),
+    ]);
+    let error = background_fetch(&repo, &["gone".to_string()])
+        .unwrap_err()
+        .to_string();
     assert!(!error.is_empty() && !error.contains('\n'), "{error}");
 }
 
@@ -539,7 +715,11 @@ fn switching_checks_out_a_branch_or_tracks_a_remote_one() {
     let (_origin, clone) = diverged_clone();
     switch_track(&clone, "origin/feature").unwrap();
     assert_eq!(current_branch(&clone).as_deref(), Some("feature"));
-    let feature = branches(&clone).unwrap().into_iter().find(|b| b.name == "feature").unwrap();
+    let feature = branches(&clone)
+        .unwrap()
+        .into_iter()
+        .find(|b| b.name == "feature")
+        .unwrap();
     assert_eq!(feature.upstream.as_deref(), Some("origin/feature"));
     switch(&clone, "main").unwrap();
     assert_eq!(current_branch(&clone).as_deref(), Some("main"));
@@ -559,8 +739,17 @@ fn switching_with_changes_in_the_way_fails_and_says_why() {
 #[test]
 fn a_branch_in_another_worktree_says_where_it_is() {
     let repo = TestRepo::with_history();
-    let elsewhere = repo.root().with_file_name(format!("{}-wt", repo.root().file_name().unwrap().to_string_lossy()));
-    repo.git(&["worktree", "add", "-q", &elsewhere.display().to_string(), "feature"]);
+    let elsewhere = repo.root().with_file_name(format!(
+        "{}-wt",
+        repo.root().file_name().unwrap().to_string_lossy()
+    ));
+    repo.git(&[
+        "worktree",
+        "add",
+        "-q",
+        &elsewhere.display().to_string(),
+        "feature",
+    ]);
     let branches = branches(&repo).unwrap();
     assert_eq!(names(&branches), ["feature", "main"]);
     let (feature, main) = (&branches[0], &branches[1]);
@@ -607,12 +796,19 @@ fn the_log_lists_children_before_parents_with_each_one_s_parents() {
     assert_eq!(subjects.len(), 5);
     assert_eq!(subjects[0], "Merge feature");
     assert_eq!(subjects[4], "First");
-    assert_eq!(commits[0].parents, [repo.sha("main^1"), repo.sha("feature")]);
+    assert_eq!(
+        commits[0].parents,
+        [repo.sha("main^1"), repo.sha("feature")]
+    );
     assert!(commits[4].parents.is_empty());
     assert!(commits.iter().all(|commit| commit.author == "Test"));
     let position = |sha: &str| commits.iter().position(|c| c.sha == sha).unwrap();
     for (index, commit) in commits.iter().enumerate() {
-        assert!(commit.parents.iter().all(|parent| position(parent) > index), "{} before its parents", commit.subject);
+        assert!(
+            commit.parents.iter().all(|parent| position(parent) > index),
+            "{} before its parents",
+            commit.subject
+        );
     }
     assert_eq!(log(&repo, &["main".to_string()], 2).unwrap().len(), 2);
 }
@@ -621,12 +817,19 @@ fn the_log_lists_children_before_parents_with_each_one_s_parents() {
 fn a_commit_is_named_by_its_short_sha_and_subject() {
     let repo = TestRepo::with_history();
     let sha = repo.sha("main");
-    assert_eq!(commit_label(&repo, &sha), Some(format!("{}  Third", short(&sha))));
+    assert_eq!(
+        commit_label(&repo, &sha),
+        Some(format!("{}  Third", short(&sha)))
+    );
     assert_eq!(commit_label(&repo, "no-such-commit"), None);
     // Shas show short, and names as they are.
     assert_eq!(display_ref(&repo, &sha), short(&sha));
     assert_eq!(display_ref(&repo, "feature"), "feature");
-    assert_eq!(display_ref(&repo, "abcdef1234"), "abcdef1234", "not a commit here");
+    assert_eq!(
+        display_ref(&repo, "abcdef1234"),
+        "abcdef1234",
+        "not a commit here"
+    );
     let details = commit_details(&repo, &sha).unwrap();
     assert_eq!((details.sha, details.message), (sha, "Third".to_string()));
     assert!(commit_details(&repo, "no-such-commit").is_err());

@@ -47,8 +47,14 @@ fn theme() -> &'static Theme {
 fn syntax_for(path: &str, text: &str) -> Option<&'static SyntaxReference> {
     let syntaxes = syntaxes();
     let path = Path::new(path);
-    let extension = path.extension().and_then(|e| e.to_str()).unwrap_or_default();
-    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+    let extension = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or_default();
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
     let syntax = syntaxes
         .find_syntax_by_extension(extension)
         .or_else(|| syntaxes.find_syntax_by_extension(name))
@@ -70,14 +76,20 @@ pub fn highlight(path: &str, text: &str, line_count: usize) -> Vec<ColoredLine> 
         let Ok(regions) = highlighter.highlight_line(line, syntaxes()) else {
             break;
         };
-        let mut colored = ColoredLine { text: String::new(), colors: Vec::new() };
+        let mut colored = ColoredLine {
+            text: String::new(),
+            colors: Vec::new(),
+        };
         for (style, piece) in regions {
             // Expanded like the diff's text, so that the ranges match it.
             let piece = piece.trim_end_matches(['\n', '\r']).replace('\t', "    ");
             let start = colored.text.len();
             colored.text.push_str(&piece);
             let color = style.foreground;
-            colored.colors.push((start..colored.text.len(), Color::Rgb(color.r, color.g, color.b)));
+            colored.colors.push((
+                start..colored.text.len(),
+                Color::Rgb(color.r, color.g, color.b),
+            ));
         }
         lines.push(colored);
     }
@@ -96,14 +108,25 @@ mod tests {
         let covered: usize = lines[1].colors.iter().map(|(range, _)| range.len()).sum();
         assert_eq!(covered, lines[1].text.len());
         // A keyword and a comment get different colours.
-        let color_at = |at: usize| lines[1].colors.iter().find(|(r, _)| r.contains(&at)).unwrap().1;
+        let color_at = |at: usize| {
+            lines[1]
+                .colors
+                .iter()
+                .find(|(r, _)| r.contains(&at))
+                .unwrap()
+                .1
+        };
         assert_ne!(color_at(4), color_at(18));
     }
 
     /// The colour of the first piece of `line` whose text is `token`.
     fn color_of(line: &ColoredLine, token: &str) -> Color {
         let start = line.text.find(token).unwrap();
-        line.colors.iter().find(|(range, _)| range.contains(&start)).unwrap().1
+        line.colors
+            .iter()
+            .find(|(range, _)| range.contains(&start))
+            .unwrap()
+            .1
     }
 
     #[test]

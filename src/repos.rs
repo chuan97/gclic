@@ -11,7 +11,14 @@ pub const PICKER_KEYS: [(&str, &str); 3] = [("i", "type"), ("enter", "open"), ("
 const MAX_DEPTH: usize = 5;
 /// Folders that hold dependencies or build output, never a repo worth opening,
 /// and can be huge.
-const SKIPPED: &[&str] = &["node_modules", "target", "venv", "__pycache__", "build", "dist"];
+const SKIPPED: &[&str] = &[
+    "node_modules",
+    "target",
+    "venv",
+    "__pycache__",
+    "build",
+    "dist",
+];
 
 /// The entry that moves the search up a folder.
 pub const UP: &str = "..";
@@ -54,11 +61,15 @@ fn search(folder: &Path, depth: usize, repos: &mut Vec<PathBuf>) {
 /// as git shows paths, so `:cd group/repo` works on Windows too.
 pub fn label(root: &Path, repo: &Path) -> String {
     match repo.strip_prefix(root) {
-        Ok(relative) if relative.as_os_str().is_empty() => {
-            repo.file_name().map_or_else(|| repo.display().to_string(), |name| name.to_string_lossy().into_owned())
-        }
+        Ok(relative) if relative.as_os_str().is_empty() => repo.file_name().map_or_else(
+            || repo.display().to_string(),
+            |name| name.to_string_lossy().into_owned(),
+        ),
         Ok(relative) => {
-            let folders: Vec<_> = relative.components().map(|part| part.as_os_str().to_string_lossy()).collect();
+            let folders: Vec<_> = relative
+                .components()
+                .map(|part| part.as_os_str().to_string_lossy())
+                .collect();
             folders.join("/")
         }
         Err(_) => repo.display().to_string(),
@@ -68,8 +79,12 @@ pub fn label(root: &Path, repo: &Path) -> String {
 /// What the finder lists for a search folder: `..` for the folder above, if
 /// there is one, then each repo, as its label and where it is.
 pub fn entries(root: &Path) -> Vec<(String, PathBuf)> {
-    let up = root.parent().map(|parent| (UP.to_string(), parent.to_path_buf()));
-    let repos = find(root).into_iter().map(|repo| (label(root, &repo), repo));
+    let up = root
+        .parent()
+        .map(|parent| (UP.to_string(), parent.to_path_buf()));
+    let repos = find(root)
+        .into_iter()
+        .map(|repo| (label(root, &repo), repo));
     up.into_iter().chain(repos).collect()
 }
 
@@ -88,15 +103,26 @@ pub enum Target {
 pub fn target(name: &str, entries: &[(String, PathBuf)]) -> Target {
     // On Windows, a typed \ means the same as the labels' /. Elsewhere it can
     // be part of a folder's name.
-    let name = if cfg!(windows) { name.replace('\\', "/") } else { name.to_string() };
+    let name = if cfg!(windows) {
+        name.replace('\\', "/")
+    } else {
+        name.to_string()
+    };
     let name = name.as_str();
     let repos: Vec<&(String, PathBuf)> = entries.iter().filter(|(label, _)| label != UP).collect();
-    let folder_name = |repo: &Path| repo.file_name().map(|name| name.to_string_lossy().into_owned());
-    let exact = repos.iter().find(|(label, repo)| label == name || folder_name(repo).as_deref() == Some(name));
+    let folder_name = |repo: &Path| {
+        repo.file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+    };
+    let exact = repos
+        .iter()
+        .find(|(label, repo)| label == name || folder_name(repo).as_deref() == Some(name));
     if let Some((_, repo)) = exact {
         return Target::Repo(repo.clone());
     }
-    let mut matching = repos.iter().filter(|(label, _)| crate::picker::fuzzy_score(name, label).is_some());
+    let mut matching = repos
+        .iter()
+        .filter(|(label, _)| crate::picker::fuzzy_score(name, label).is_some());
     match (matching.next(), matching.next()) {
         (Some((_, repo)), None) => Target::Repo(repo.clone()),
         (Some(_), Some(_)) => Target::Choose,
@@ -138,7 +164,8 @@ mod tests {
 
     /// A fresh, empty folder for one test.
     fn scratch(name: &str) -> PathBuf {
-        let folder = std::env::temp_dir().join(format!("gclic-repos-{name}-{}", std::process::id()));
+        let folder =
+            std::env::temp_dir().join(format!("gclic-repos-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&folder);
         fs::create_dir_all(&folder).unwrap();
         folder
@@ -170,7 +197,11 @@ mod tests {
         fs::create_dir_all(&worktree_git).unwrap();
         fs::write(worktree_git.join("HEAD"), "ref: refs/heads/feature\n").unwrap();
         fs::create_dir_all(root.join("wt")).unwrap();
-        fs::write(root.join("wt/.git"), format!("gitdir: {}\n", worktree_git.display())).unwrap();
+        fs::write(
+            root.join("wt/.git"),
+            format!("gitdir: {}\n", worktree_git.display()),
+        )
+        .unwrap();
         assert_eq!(find(&root), [root.join("main"), root.join("wt")]);
         let _ = fs::remove_dir_all(&root);
     }
@@ -183,7 +214,10 @@ mod tests {
         // separator in it, which the label doesn't.
         let found = root.join("group").join("b");
         assert_eq!(label(&root, &found), "group/b");
-        assert_eq!(label(&root, &root), root.file_name().unwrap().to_string_lossy());
+        assert_eq!(
+            label(&root, &root),
+            root.file_name().unwrap().to_string_lossy()
+        );
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -192,15 +226,26 @@ mod tests {
         let root = scratch("entries");
         repo(&root.join("a"), "ref: refs/heads/main\n");
         let entries = entries(&root);
-        assert_eq!(entries[0], (UP.to_string(), root.parent().unwrap().to_path_buf()));
+        assert_eq!(
+            entries[0],
+            (UP.to_string(), root.parent().unwrap().to_path_buf())
+        );
         assert_eq!(entries[1], ("a".to_string(), root.join("a")));
-        assert!(super::entries(Path::new("/")).iter().all(|(label, _)| label != UP));
+        assert!(
+            super::entries(Path::new("/"))
+                .iter()
+                .all(|(label, _)| label != UP)
+        );
         let _ = fs::remove_dir_all(&root);
     }
 
     fn listed(paths: &[&str]) -> Vec<(String, PathBuf)> {
         let mut entries = vec![(UP.to_string(), PathBuf::from("/"))];
-        entries.extend(paths.iter().map(|path| (path.to_string(), Path::new("/code").join(path))));
+        entries.extend(
+            paths
+                .iter()
+                .map(|path| (path.to_string(), Path::new("/code").join(path))),
+        );
         entries
     }
 
@@ -208,11 +253,20 @@ mod tests {
     fn a_name_leads_straight_to_the_repo_it_can_only_mean() {
         let entries = listed(&["skycast", "skycast-conflict", "work/gclic"]);
         // Exact, though skycast-conflict matches too.
-        assert_eq!(target("skycast", &entries), Target::Repo("/code/skycast".into()));
+        assert_eq!(
+            target("skycast", &entries),
+            Target::Repo("/code/skycast".into())
+        );
         // The folder's name, without the folders around it.
-        assert_eq!(target("gclic", &entries), Target::Repo("/code/work/gclic".into()));
+        assert_eq!(
+            target("gclic", &entries),
+            Target::Repo("/code/work/gclic".into())
+        );
         // The only fuzzy match.
-        assert_eq!(target("conf", &entries), Target::Repo("/code/skycast-conflict".into()));
+        assert_eq!(
+            target("conf", &entries),
+            Target::Repo("/code/skycast-conflict".into())
+        );
         assert_eq!(target("sky", &entries), Target::Choose);
         assert_eq!(target("zzz", &entries), Target::None);
     }
@@ -221,7 +275,10 @@ mod tests {
     #[test]
     fn on_windows_a_backslash_works_as_the_labels_slash() {
         let entries = listed(&["group/b", "other"]);
-        assert_eq!(target(r"group\b", &entries), Target::Repo(Path::new("/code").join("group/b")));
+        assert_eq!(
+            target(r"group\b", &entries),
+            Target::Repo(Path::new("/code").join("group/b"))
+        );
     }
 
     #[test]

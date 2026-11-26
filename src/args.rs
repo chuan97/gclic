@@ -18,7 +18,8 @@ pub fn split_args(line: &str) -> Result<Vec<String>, String> {
         match (quote, ch) {
             (Some('\''), '\'') | (Some('"'), '"') => quote = None,
             (Some('\''), _) => current.push(ch),
-            (_, '\\') if matches!(chars.peek(), Some(next) if next.is_whitespace() || matches!(next, '\'' | '"' | '\\')) => {
+            (_, '\\') if matches!(chars.peek(), Some(next) if next.is_whitespace() || matches!(next, '\'' | '"' | '\\')) =>
+            {
                 current.extend(chars.next());
                 started = true;
             }
@@ -58,10 +59,16 @@ mod tests {
 
     #[test]
     fn arguments_split_on_spaces_and_keep_quoted_ones_whole() {
-        assert_eq!(split("commit -m \"fix the  bug\""), ["commit", "-m", "fix the  bug"]);
+        assert_eq!(
+            split("commit -m \"fix the  bug\""),
+            ["commit", "-m", "fix the  bug"]
+        );
         assert_eq!(split("log  --format='%h %s'"), ["log", "--format=%h %s"]);
         assert_eq!(split("commit -m \"\""), ["commit", "-m", ""]);
-        assert_eq!(split(r#"commit -m "say \"hi\"""#), ["commit", "-m", "say \"hi\""]);
+        assert_eq!(
+            split(r#"commit -m "say \"hi\"""#),
+            ["commit", "-m", "say \"hi\""]
+        );
         assert_eq!(split(r"add my\ file"), ["add", "my file"]);
         assert!(split_args("commit -m \"open").is_err());
     }

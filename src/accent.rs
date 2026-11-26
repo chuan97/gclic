@@ -37,7 +37,10 @@ impl Accent {
         let custom = git::local_config(repo, CONFIG_KEY).and_then(|value| parse_hex(&value));
         match custom {
             Some(rgb) => Accent { rgb, custom: true },
-            None => Accent { rgb: from_name(&repo_name(repo)), custom: false },
+            None => Accent {
+                rgb: from_name(&repo_name(repo)),
+                custom: false,
+            },
         }
     }
 
@@ -103,7 +106,10 @@ pub fn parse_hex(text: &str) -> Option<(u8, u8, u8)> {
 fn oklch_to_rgb(lightness: f64, chroma: f64, hue: f64) -> (u8, u8, u8) {
     let mut chroma = chroma;
     loop {
-        let (a, b) = (chroma * hue.to_radians().cos(), chroma * hue.to_radians().sin());
+        let (a, b) = (
+            chroma * hue.to_radians().cos(),
+            chroma * hue.to_radians().sin(),
+        );
         let linear = oklab_to_linear(lightness, a, b);
         if linear.iter().all(|c| (0.0..=1.0).contains(c)) || chroma <= 0.0 {
             let [r, g, b] = linear.map(|c| (gamma(c.clamp(0.0, 1.0)) * 255.0).round() as u8);
@@ -126,7 +132,11 @@ fn oklab_to_linear(l: f64, a: f64, b: f64) -> [f64; 3] {
 
 /// Linear light to sRGB's encoding.
 fn gamma(c: f64) -> f64 {
-    if c <= 0.0031308 { 12.92 * c } else { 1.055 * c.powf(1.0 / 2.4) - 0.055 }
+    if c <= 0.0031308 {
+        12.92 * c
+    } else {
+        1.055 * c.powf(1.0 / 2.4) - 0.055
+    }
 }
 
 #[cfg(test)]
@@ -143,8 +153,18 @@ mod tests {
         assert_eq!(Accent::of(&clone), Accent::of(&origin));
         assert!(!Accent::of(&clone).custom);
         git::set_local_config(&clone, CONFIG_KEY, Some("#ff8800")).unwrap();
-        assert_eq!(Accent::of(&clone), Accent { rgb: (0xff, 0x88, 0x00), custom: true });
-        assert_ne!(Accent::of(&origin), Accent::of(&clone), "only the clone's changed");
+        assert_eq!(
+            Accent::of(&clone),
+            Accent {
+                rgb: (0xff, 0x88, 0x00),
+                custom: true
+            }
+        );
+        assert_ne!(
+            Accent::of(&origin),
+            Accent::of(&clone),
+            "only the clone's changed"
+        );
         // A colour that isn't one is passed over.
         git::set_local_config(&clone, CONFIG_KEY, Some("orange")).unwrap();
         assert_eq!(Accent::of(&clone), Accent::of(&origin));
@@ -162,7 +182,12 @@ mod tests {
 
     #[test]
     fn the_name_comes_from_the_remote_url_in_any_form() {
-        for url in ["git@github.com:me/gclic.git", "https://github.com/me/gclic/", "/srv/git/gclic.git", "gclic"] {
+        for url in [
+            "git@github.com:me/gclic.git",
+            "https://github.com/me/gclic/",
+            "/srv/git/gclic.git",
+            "gclic",
+        ] {
             assert_eq!(name_from_url(url).as_deref(), Some("gclic"), "{url}");
         }
         assert_eq!(name_from_url(""), None);
@@ -181,7 +206,14 @@ mod tests {
         assert_eq!(parse_hex("ff8800"), Some((255, 136, 0)));
         assert_eq!(parse_hex("#f80"), None);
         assert_eq!(parse_hex("#gg8800"), None);
-        assert_eq!(Accent { rgb: (255, 136, 0), custom: true }.hex(), "#ff8800");
+        assert_eq!(
+            Accent {
+                rgb: (255, 136, 0),
+                custom: true
+            }
+            .hex(),
+            "#ff8800"
+        );
     }
 
     #[test]

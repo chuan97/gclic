@@ -117,8 +117,14 @@ const RIGHT: &[Section] = &[
             ("ctrl-d u", "half a page down/up"),
             ("n N", "next/previous change, from any pane"),
             ("space", "stage or unstage the change, in a file's changes"),
-            ("d", "discard the change, after asking, in its unstaged changes"),
-            ("u ctrl-r", "undo the last staging or discard, redo it, in a file's changes"),
+            (
+                "d",
+                "discard the change, after asking, in its unstaged changes",
+            ),
+            (
+                "u ctrl-r",
+                "undo the last staging or discard, redo it, in a file's changes",
+            ),
             ("h l", "scroll sideways"),
             ("e", "whole file, or just the changes, from any pane"),
             ("s", "side by side, or unified, from any pane"),
@@ -127,7 +133,11 @@ const RIGHT: &[Section] = &[
     },
     Section {
         title: "Commit details",
-        keys: &[("j k gg G", "scroll"), ("ctrl-d u", "half a page down/up"), ("y", "copy the sha")],
+        keys: &[
+            ("j k gg G", "scroll"),
+            ("ctrl-d u", "half a page down/up"),
+            ("y", "copy the sha"),
+        ],
     },
     Section {
         title: "Pickers",
@@ -142,7 +152,10 @@ const RIGHT: &[Section] = &[
     },
     Section {
         title: "Comment",
-        keys: &[("ctrl-enter", "save; saved empty, it's removed"), ("esc", "cancel")],
+        keys: &[
+            ("ctrl-enter", "save; saved empty, it's removed"),
+            ("esc", "cancel"),
+        ],
     },
     Section {
         title: "Commit message",
@@ -179,7 +192,10 @@ pub struct HelpPopup {
 
 impl HelpPopup {
     pub fn new(here: &'static str) -> HelpPopup {
-        HelpPopup { here, scroll: ui::Scroll::default() }
+        HelpPopup {
+            here,
+            scroll: ui::Scroll::default(),
+        }
     }
 
     /// Scrolls with the usual keys. Any other key closes the popup, which
@@ -190,7 +206,9 @@ impl HelpPopup {
 
     /// A column of sections as lines, each as wide as `width`.
     fn column(&self, sections: &[Section], width: usize) -> Vec<Line<'static>> {
-        let heading = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
+        let heading = Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD);
         let key = Style::default().fg(ui::KEY);
         let mut lines = Vec::new();
         for section in sections {
@@ -249,7 +267,13 @@ impl HelpPopup {
         let lines = self.lines(width.saturating_sub(2) as usize);
         let height = (lines.len() as u16 + 2).min(area.height.saturating_sub(2));
         let popup = ui::centered(area, width, height);
-        ui::text_popup(frame, popup, ui::panel(" Help ".to_string(), true), lines, &mut self.scroll);
+        ui::text_popup(
+            frame,
+            popup,
+            ui::panel(" Help ".to_string(), true),
+            lines,
+            &mut self.scroll,
+        );
     }
 }
 
@@ -261,7 +285,10 @@ fn widest(sections: &[Section]) -> usize {
     sections
         .iter()
         .flat_map(|section| {
-            let entries = section.keys.iter().map(|(_, description)| entry(description));
+            let entries = section
+                .keys
+                .iter()
+                .map(|(_, description)| entry(description));
             entries.chain([heading(section)])
         })
         .max()
@@ -274,14 +301,20 @@ mod tests {
     use ratatui::crossterm::event::KeyCode;
 
     fn text(line: &Line) -> String {
-        line.spans.iter().map(|span| span.content.as_ref()).collect()
+        line.spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect()
     }
 
     #[test]
     fn keys_fit_their_column() {
         for section in LEFT.iter().chain(RIGHT) {
             for (keys, _) in section.keys {
-                assert!(keys.len() < KEY_WIDTH, "{keys} is too long for the key column");
+                assert!(
+                    keys.len() < KEY_WIDTH,
+                    "{keys} is too long for the key column"
+                );
             }
         }
     }
@@ -293,27 +326,45 @@ mod tests {
         let narrow = help.lines(40);
         assert!(text(&wide[0]).contains("Everywhere") && text(&wide[0]).contains("Compare"));
         assert!(narrow.len() > wide.len());
-        assert!(narrow.iter().any(|line| text(line).contains("Commit message")));
+        assert!(
+            narrow
+                .iter()
+                .any(|line| text(line).contains("Commit message"))
+        );
     }
 
     #[test]
     fn the_section_for_where_help_was_opened_is_marked() {
         let lines = HelpPopup::new("Diff").lines(200);
-        let marked: Vec<String> = lines.iter().map(text).filter(|line| line.contains('▸')).collect();
+        let marked: Vec<String> = lines
+            .iter()
+            .map(text)
+            .filter(|line| line.contains('▸'))
+            .collect();
         assert_eq!(marked.len(), 1);
         assert!(marked[0].contains("▸ Diff  you are here"));
     }
 
     #[test]
     fn the_second_column_starts_at_the_same_place_on_every_row() {
-        let lines: Vec<String> = HelpPopup::new("Graph").lines(200).iter().map(text).collect();
+        let lines: Vec<String> = HelpPopup::new("Graph")
+            .lines(200)
+            .iter()
+            .map(text)
+            .collect();
         let column = |title: &str| -> usize {
             let line = lines.iter().find(|line| line.contains(title)).unwrap();
             line.chars().count() - line[line.find(title).unwrap()..].chars().count()
         };
         // The headings are indented by two, past the left column and the gap.
         let start = widest(LEFT).max(widest(RIGHT)) + GAP + 2;
-        for title in ["Compare", "Diff", "Commit details", "Pickers", "Commit message"] {
+        for title in [
+            "Compare",
+            "Diff",
+            "Commit details",
+            "Pickers",
+            "Commit message",
+        ] {
             assert_eq!(column(title), start, "{title}");
         }
     }

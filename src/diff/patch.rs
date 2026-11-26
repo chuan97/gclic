@@ -30,7 +30,12 @@ pub enum Direction {
 /// must read as the side the patch is applied to has them: going forward,
 /// their removed lines are still there, so they become context, and their
 /// added lines aren't yet, so they go. In reverse it's the other way round.
-pub fn change_patch(diff: &str, path: &str, change: &ChangeLines, direction: Direction) -> Option<String> {
+pub fn change_patch(
+    diff: &str,
+    path: &str,
+    change: &ChangeLines,
+    direction: Direction,
+) -> Option<String> {
     let mut hunk: Option<Hunk> = None;
     for line in diff.lines() {
         if line.starts_with("@@ ") {
@@ -42,7 +47,8 @@ pub fn change_patch(diff: &str, path: &str, change: &ChangeLines, direction: Dir
             hunk.add(line, change, direction);
         }
     }
-    hunk.filter(|hunk| hunk.has_change).map(|hunk| hunk.patch(path, direction))
+    hunk.filter(|hunk| hunk.has_change)
+        .map(|hunk| hunk.patch(path, direction))
 }
 
 /// A hunk of the patch being written.
@@ -121,7 +127,12 @@ impl Hunk {
     }
 
     fn patch(&self, path: &str, direction: Direction) -> String {
-        let count = |kind: char| self.lines.iter().filter(|line| line.starts_with(kind) || line.starts_with(' ')).count();
+        let count = |kind: char| {
+            self.lines
+                .iter()
+                .filter(|line| line.starts_with(kind) || line.starts_with(' '))
+                .count()
+        };
         let (old_count, new_count) = (count('-'), count('+'));
         // Only this hunk is in the patch, so both sides start where the side
         // it's applied to has the hunk.
@@ -150,7 +161,11 @@ fn quoted(path: &str) -> String {
     if !path.contains(['"', '\\', '\n', '\t']) {
         return path.to_string();
     }
-    let escaped = path.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n").replace('\t', "\\t");
+    let escaped = path
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\t', "\\t");
     format!("\"{escaped}\"")
 }
 
@@ -159,7 +174,10 @@ mod tests {
     use super::*;
 
     fn lines(old: &[usize], new: &[usize]) -> ChangeLines {
-        ChangeLines { old: old.iter().copied().collect(), new: new.iter().copied().collect() }
+        ChangeLines {
+            old: old.iter().copied().collect(),
+            new: new.iter().copied().collect(),
+        }
     }
 
     /// A hunk with two changes: line 2 edited, and a line added after line 4.
@@ -180,21 +198,36 @@ diff --git a/f b/f
     #[test]
     fn staging_one_change_turns_the_others_into_what_the_index_has() {
         let patch = change_patch(TWO_CHANGES, "f", &lines(&[2], &[2]), Direction::Forward).unwrap();
-        assert_eq!(patch, "--- a/f\n+++ b/f\n@@ -1,5 +1,5 @@\n one\n-two\n+TWO\n three\n four\n five\n");
+        assert_eq!(
+            patch,
+            "--- a/f\n+++ b/f\n@@ -1,5 +1,5 @@\n one\n-two\n+TWO\n three\n four\n five\n"
+        );
         let patch = change_patch(TWO_CHANGES, "f", &lines(&[], &[5]), Direction::Forward).unwrap();
-        assert_eq!(patch, "--- a/f\n+++ b/f\n@@ -1,5 +1,6 @@\n one\n two\n three\n four\n+four and a half\n five\n");
+        assert_eq!(
+            patch,
+            "--- a/f\n+++ b/f\n@@ -1,5 +1,6 @@\n one\n two\n three\n four\n+four and a half\n five\n"
+        );
     }
 
     #[test]
     fn unstaging_one_change_keeps_the_others_as_the_index_has_them() {
         let patch = change_patch(TWO_CHANGES, "f", &lines(&[2], &[2]), Direction::Reverse).unwrap();
-        assert_eq!(patch, "--- a/f\n+++ b/f\n@@ -1,6 +1,6 @@\n one\n-two\n+TWO\n three\n four\n four and a half\n five\n");
+        assert_eq!(
+            patch,
+            "--- a/f\n+++ b/f\n@@ -1,6 +1,6 @@\n one\n-two\n+TWO\n three\n four\n four and a half\n five\n"
+        );
     }
 
     #[test]
     fn a_change_not_in_the_diff_makes_no_patch() {
-        assert_eq!(change_patch(TWO_CHANGES, "f", &lines(&[9], &[9]), Direction::Forward), None);
-        assert_eq!(change_patch("", "f", &lines(&[1], &[]), Direction::Forward), None);
+        assert_eq!(
+            change_patch(TWO_CHANGES, "f", &lines(&[9], &[9]), Direction::Forward),
+            None
+        );
+        assert_eq!(
+            change_patch("", "f", &lines(&[1], &[]), Direction::Forward),
+            None
+        );
     }
 
     #[test]
@@ -203,7 +236,10 @@ diff --git a/f b/f
         // down in the new file than in the old.
         let diff = "@@ -1,2 +1,4 @@\n a\n+new\n+new\n b\n@@ -10,3 +12,3 @@\n j\n-k\n+K\n l\n";
         let forward = change_patch(diff, "f", &lines(&[11], &[13]), Direction::Forward).unwrap();
-        assert!(forward.contains("@@ -10,3 +10,3 @@\n j\n-k\n+K\n l\n"), "{forward}");
+        assert!(
+            forward.contains("@@ -10,3 +10,3 @@\n j\n-k\n+K\n l\n"),
+            "{forward}"
+        );
         let reverse = change_patch(diff, "f", &lines(&[11], &[13]), Direction::Reverse).unwrap();
         assert!(reverse.contains("@@ -12,3 +12,3 @@\n"), "{reverse}");
     }
@@ -223,11 +259,20 @@ diff --git a/f b/f
         let diff = "@@ -1,2 +1,2 @@\n a\n-b\n\\ No newline at end of file\n+B\n\\ No newline at end of file\n";
         // Staging it, both lines and both notes go in.
         let patch = change_patch(diff, "f", &lines(&[2], &[2]), Direction::Forward).unwrap();
-        assert!(patch.ends_with(" a\n-b\n\\ No newline at end of file\n+B\n\\ No newline at end of file\n"), "{patch}");
+        assert!(
+            patch.ends_with(
+                " a\n-b\n\\ No newline at end of file\n+B\n\\ No newline at end of file\n"
+            ),
+            "{patch}"
+        );
         // An added line left out takes its note with it.
         let diff = "@@ -1 +1,2 @@\n-a\n\\ No newline at end of file\n+a\n+b\n\\ No newline at end of file\n";
         let patch = change_patch(diff, "f", &lines(&[1], &[1, 2]), Direction::Forward).unwrap();
-        assert!(patch.ends_with("-a\n\\ No newline at end of file\n+a\n+b\n\\ No newline at end of file\n"));
+        assert!(
+            patch.ends_with(
+                "-a\n\\ No newline at end of file\n+a\n+b\n\\ No newline at end of file\n"
+            )
+        );
     }
 
     #[test]

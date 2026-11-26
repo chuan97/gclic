@@ -2,8 +2,8 @@
 //! over commits; `GraphPanel` holds the state and draws them.
 
 use crate::app::Action;
-use crate::file_list::{FOLDER, NAME, NAME_KEPT, file_line};
 use crate::app::StashAction;
+use crate::file_list::{FOLDER, NAME, NAME_KEPT, file_line};
 use crate::git::{self, Branch, Commit, DiffSource, FileEntry, Repo, Stash};
 use crate::ui;
 use anyhow::Result;
@@ -110,11 +110,14 @@ pub fn layout(commits: &[Commit]) -> Vec<Row> {
         // Merge commits send a line to each further parent.
         for parent in commit.parents.iter().skip(1) {
             let parent = parent.as_str();
-            let lane = lanes.iter().position(|lane| *lane == Some(parent)).unwrap_or_else(|| {
-                let new = free_lane(&mut lanes, column + 1);
-                lanes[new] = Some(parent);
-                new
-            });
+            let lane = lanes
+                .iter()
+                .position(|lane| *lane == Some(parent))
+                .unwrap_or_else(|| {
+                    let new = free_lane(&mut lanes, column + 1);
+                    lanes[new] = Some(parent);
+                    new
+                });
             if lane != column {
                 sideways.push((lane, index_of.get(parent).copied()));
             }
@@ -127,7 +130,10 @@ pub fn layout(commits: &[Commit]) -> Vec<Row> {
         }
 
         let glyphs = commit_glyphs(index, column, &above, &lanes, sideways, &index_of);
-        rows.push(Row { glyphs, below: lane_glyphs(&lanes, &index_of) });
+        rows.push(Row {
+            glyphs,
+            below: lane_glyphs(&lanes, &index_of),
+        });
 
         while lanes.last() == Some(&None) {
             lanes.pop();
@@ -153,10 +159,19 @@ fn lane_glyphs(lanes: &[Option<&str>], index_of: &HashMap<&str, usize>) -> Vec<G
     let mut glyphs = Vec::with_capacity(lanes.len() * 2);
     for lane in lanes {
         match lane {
-            Some(sha) => glyphs.push(Glyph { ch: '│', commit: index_of.get(*sha).copied() }),
-            None => glyphs.push(Glyph { ch: ' ', commit: None }),
+            Some(sha) => glyphs.push(Glyph {
+                ch: '│',
+                commit: index_of.get(*sha).copied(),
+            }),
+            None => glyphs.push(Glyph {
+                ch: ' ',
+                commit: None,
+            }),
         }
-        glyphs.push(Glyph { ch: ' ', commit: None });
+        glyphs.push(Glyph {
+            ch: ' ',
+            commit: None,
+        });
     }
     glyphs
 }
@@ -171,11 +186,18 @@ fn commit_glyphs(
     mut sideways: Vec<(usize, Option<usize>)>,
     index_of: &HashMap<&str, usize>,
 ) -> Vec<Glyph> {
-    let is_active = |lanes: &[Option<&str>], lane: usize| lanes.get(lane).is_some_and(|l| l.is_some());
+    let is_active =
+        |lanes: &[Option<&str>], lane: usize| lanes.get(lane).is_some_and(|l| l.is_some());
 
     // New lanes only exist below, the ones that just ended only above.
     let lanes: Vec<Option<&str>> = (0..above.len().max(below.len()))
-        .map(|lane| below.get(lane).copied().flatten().or(above.get(lane).copied().flatten()))
+        .map(|lane| {
+            below
+                .get(lane)
+                .copied()
+                .flatten()
+                .or(above.get(lane).copied().flatten())
+        })
         .collect();
     let mut glyphs = lane_glyphs(&lanes, index_of);
 
@@ -193,7 +215,9 @@ fn commit_glyphs(
     }
 
     let reach = |pick: fn(usize, usize) -> usize| {
-        sideways.iter().fold(column, |far, (lane, _)| pick(far, *lane))
+        sideways
+            .iter()
+            .fold(column, |far, (lane, _)| pick(far, *lane))
     };
     let (left, right) = (reach(usize::min), reach(usize::max));
     for lane in left..=right {
@@ -206,7 +230,10 @@ fn commit_glyphs(
         left < column,
         right > column,
     );
-    glyphs[column * 2] = Glyph { ch, commit: Some(index) };
+    glyphs[column * 2] = Glyph {
+        ch,
+        commit: Some(index),
+    };
     glyphs
 }
 
@@ -315,7 +342,9 @@ pub fn reach_masks(commits: &[Commit], tips: &[String]) -> Vec<u64> {
 /// from its remote is then the point of the view, so each ref gets its own color.
 fn ref_colors(keys: &[String]) -> Vec<Color> {
     if keys.iter().all(|key| *key == keys[0]) {
-        return (0..keys.len()).map(|i| PALETTE[i % PALETTE.len()]).collect();
+        return (0..keys.len())
+            .map(|i| PALETTE[i % PALETTE.len()])
+            .collect();
     }
     let mut seen: Vec<&String> = Vec::new();
     keys.iter()
@@ -452,7 +481,9 @@ impl GraphPanel {
 
     /// The commit under the cursor, or the one its file belongs to.
     pub fn selected_sha(&self) -> Option<&str> {
-        self.commits.get(self.selected).map(|commit| commit.sha.as_str())
+        self.commits
+            .get(self.selected)
+            .map(|commit| commit.sha.as_str())
     }
 
     fn is_selected_expanded(&self) -> bool {
@@ -466,7 +497,11 @@ impl GraphPanel {
     /// The keys that do something now, for the status line. Some depend on
     /// what's open on the right: the diff `shown`, and the commit whose
     /// details show.
-    pub fn hints(&self, shown: Option<&DiffSource>, details: Option<&str>) -> Vec<ui::Hint<'static>> {
+    pub fn hints(
+        &self,
+        shown: Option<&DiffSource>,
+        details: Option<&str>,
+    ) -> Vec<ui::Hint<'static>> {
         // i shows the selected commit's details, or moves into them if they show.
         let details = if details.is_some() && details == self.selected_sha() {
             ("i", "focus details")
@@ -482,11 +517,20 @@ impl GraphPanel {
             hints.extend([details, ("y", "copy sha")]);
             return hints;
         }
-        hints.push(if self.is_selected_expanded() { ("enter", "collapse") } else { ("enter", "expand") });
+        hints.push(if self.is_selected_expanded() {
+            ("enter", "collapse")
+        } else {
+            ("enter", "expand")
+        });
         if self.is_on_stash() {
             hints.extend([("a", "apply"), ("p", "pop"), ("d", "drop")]);
         }
-        hints.extend([details, ("c", "compare"), ("y", "copy sha"), ("b", "choose branches")]);
+        hints.extend([
+            details,
+            ("c", "compare"),
+            ("y", "copy sha"),
+            ("b", "choose branches"),
+        ]);
         // Only worth it when open commits' files are in the way.
         if self.has_expanded() && shown.is_none() {
             hints.push(("n/N", "commit"));
@@ -539,14 +583,20 @@ impl GraphPanel {
                 // Without them the graph still shows the history.
                 let stashes = scope.spawn(|| git::stashes(repo).unwrap_or_default());
                 let commits = git::log(repo, &names, COMMIT_LIMIT);
-                let unpushed = unpushed.join().unwrap_or_else(|_| Err(anyhow::anyhow!("git crashed")));
+                let unpushed = unpushed
+                    .join()
+                    .unwrap_or_else(|_| Err(anyhow::anyhow!("git crashed")));
                 let stashes = stashes.join().unwrap_or_default();
                 Ok::<_, anyhow::Error>((commits?, unpushed?, stashes))
             })?
         };
         (self.commits, self.stashes) = with_stashes(commits, stashes);
         self.rows = layout(&self.commits);
-        self.unpushed = self.commits.iter().map(|commit| unpushed.contains(&commit.sha)).collect();
+        self.unpushed = self
+            .commits
+            .iter()
+            .map(|commit| unpushed.contains(&commit.sha))
+            .collect();
 
         let commits = &self.commits;
         self.expanded
@@ -554,7 +604,9 @@ impl GraphPanel {
 
         if follow_tip {
             // The tip, below any stashes made on it.
-            self.selected = (0..self.commits.len()).find(|&index| self.stash_at(index).is_none()).unwrap_or(0);
+            self.selected = (0..self.commits.len())
+                .find(|&index| self.stash_at(index).is_none())
+                .unwrap_or(0);
         } else {
             let same_commit = selected_sha
                 .and_then(|sha| self.commits.iter().position(|commit| commit.sha == sha));
@@ -594,7 +646,10 @@ impl GraphPanel {
     /// picked, or the sha if none does. A comparison then names the branch,
     /// and follows it if it moves.
     fn name_for(&self, sha: String) -> String {
-        self.tips.iter().find(|tip| tip.sha == sha).map_or(sha, |tip| tip.name.clone())
+        self.tips
+            .iter()
+            .find(|tip| tip.sha == sha)
+            .map_or(sha, |tip| tip.name.clone())
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Action {
@@ -735,11 +790,17 @@ impl GraphPanel {
             }
             None => {
                 let below = files.iter().find(|(commit, _)| *commit == self.selected);
-                let above = files.iter().rev().find(|(commit, _)| commit + 1 == self.selected);
+                let above = files
+                    .iter()
+                    .rev()
+                    .find(|(commit, _)| commit + 1 == self.selected);
                 below.into_iter().chain(above).copied().collect()
             }
         };
-        picks.into_iter().filter_map(|(commit, file)| self.file_source(commit, file)).collect()
+        picks
+            .into_iter()
+            .filter_map(|(commit, file)| self.file_source(commit, file))
+            .collect()
     }
 
     fn file_source(&self, commit: usize, file: usize) -> Option<DiffSource> {
@@ -747,7 +808,11 @@ impl GraphPanel {
         let entry = expanded.files.get(file)?;
         let (sha, path) = (expanded.sha.clone(), entry.path.clone());
         Some(match self.stash_at(commit) {
-            Some(_) => DiffSource::Stash { sha, path, untracked: entry.status == '?' },
+            Some(_) => DiffSource::Stash {
+                sha,
+                path,
+                untracked: entry.status == '?',
+            },
             None => DiffSource::Commit { sha, path },
         })
     }
@@ -823,7 +888,9 @@ impl GraphPanel {
             .take(height)
             .map(|row| match row {
                 Display::Commit(index) => self.commit_line(*index, focused, width),
-                Display::File { commit, file } => self.file_row_line(*commit, *file, focused, width),
+                Display::File { commit, file } => {
+                    self.file_row_line(*commit, *file, focused, width)
+                }
             })
             .collect();
         let at_end = self.scroll + lines.len() == display.len();
@@ -839,14 +906,17 @@ impl GraphPanel {
         for commit in 0..self.rows.len() {
             display.push(Display::Commit(commit));
             if let Some(expanded) = self.expanded_at(commit) {
-                display.extend((0..expanded.files.len()).map(|file| Display::File { commit, file }));
+                display
+                    .extend((0..expanded.files.len()).map(|file| Display::File { commit, file }));
             }
         }
         display
     }
 
     fn glyph_span(&self, glyph: &Glyph) -> Span<'static> {
-        let color = glyph.commit.and_then(|i| self.commit_colors.get(i).copied());
+        let color = glyph
+            .commit
+            .and_then(|i| self.commit_colors.get(i).copied());
         let color = color.unwrap_or(PALETTE[0]);
         let unpushed = glyph.commit.is_some_and(|i| self.unpushed[i]);
         let ch = match (is_bead(glyph.ch), unpushed, draws_branch_symbols()) {
@@ -870,17 +940,29 @@ impl GraphPanel {
         spans.push(Span::raw(GAP));
 
         let commit = &self.commits[index];
-        let subject = if selected && focused { Color::White } else { Color::Gray };
+        let subject = if selected && focused {
+            Color::White
+        } else {
+            Color::Gray
+        };
         let subject_at = spans.len();
-        spans.push(Span::styled(commit.subject.as_str(), Style::default().fg(subject)));
+        spans.push(Span::styled(
+            commit.subject.as_str(),
+            Style::default().fg(subject),
+        ));
         // Expanded, what it changes in all, as its files show what each does.
         if let Some(expanded) = self.expanded_at(index) {
             let total = ui::total_lines(expanded.files.iter().map(|f| f.lines));
             spans.extend(ui::with_line_counts(Line::default(), total).spans);
         }
-        spans.push(Span::styled(format!("  {}", commit.author), Style::default().fg(ui::DIM)));
+        spans.push(Span::styled(
+            format!("  {}", commit.author),
+            Style::default().fg(ui::DIM),
+        ));
         if let Some(stash) = self.stash_at(index) {
-            let style = Style::default().fg(STASH_COLOR).add_modifier(Modifier::BOLD);
+            let style = Style::default()
+                .fg(STASH_COLOR)
+                .add_modifier(Modifier::BOLD);
             spans.push(Span::raw("  "));
             spans.push(Span::styled(stash.name.as_str(), style));
         }
@@ -920,9 +1002,14 @@ impl GraphPanel {
     /// its message starts, for the rows under it.
     fn lines_below(&self, commit: usize) -> Vec<Span<'_>> {
         let row = &self.rows[commit];
-        let (below, message_at) = (&row.below[..drawn_width(&row.below)], drawn_width(&row.glyphs));
+        let (below, message_at) = (
+            &row.below[..drawn_width(&row.below)],
+            drawn_width(&row.glyphs),
+        );
         let mut spans: Vec<Span> = below.iter().map(|g| self.glyph_span(g)).collect();
-        spans.push(Span::raw(" ".repeat(message_at.saturating_sub(below.len()))));
+        spans.push(Span::raw(
+            " ".repeat(message_at.saturating_sub(below.len())),
+        ));
         spans.push(Span::raw(GAP));
         spans
     }
@@ -937,7 +1024,10 @@ const SUBJECT_KEPT: usize = 24;
 
 /// How much of a row the graph draws on: up to its rightmost line or bead.
 fn drawn_width(glyphs: &[Glyph]) -> usize {
-    glyphs.iter().rposition(|glyph| glyph.ch != ' ').map_or(0, |last| last + 1)
+    glyphs
+        .iter()
+        .rposition(|glyph| glyph.ch != ' ')
+        .map_or(0, |last| last + 1)
 }
 
 #[cfg(test)]
@@ -958,8 +1048,11 @@ mod tests {
         layout(commits)
             .iter()
             .map(|row| {
-                let text: String =
-                    row.glyphs.iter().map(|g| if is_bead(g.ch) { '●' } else { g.ch }).collect();
+                let text: String = row
+                    .glyphs
+                    .iter()
+                    .map(|g| if is_bead(g.ch) { '●' } else { g.ch })
+                    .collect();
                 text.trim_end().to_string()
             })
             .collect()
@@ -1096,7 +1189,10 @@ mod tests {
             commit("r1", &["base"]),
             commit("base", &[]),
         ];
-        let widths: Vec<usize> = layout(&commits).iter().map(|row| drawn_width(&row.glyphs)).collect();
+        let widths: Vec<usize> = layout(&commits)
+            .iter()
+            .map(|row| drawn_width(&row.glyphs))
+            .collect();
         assert_eq!(widths, [1, 1, 3, 3]);
     }
 
@@ -1107,9 +1203,15 @@ mod tests {
 
     #[test]
     fn a_bead_reaches_left_when_merging_into_a_lane_on_its_left() {
-        let commits = [commit("tip", &["shared"]), commit("m", &["first", "shared"])];
+        let commits = [
+            commit("tip", &["shared"]),
+            commit("m", &["first", "shared"]),
+        ];
         // m is a new tip in the second lane, so nothing comes in from above.
-        assert_eq!(layout(&commits)[1].glyphs[2].ch, bead_char(false, true, true, false));
+        assert_eq!(
+            layout(&commits)[1].glyphs[2].ch,
+            bead_char(false, true, true, false)
+        );
     }
 
     #[test]
@@ -1121,7 +1223,12 @@ mod tests {
     }
 
     fn env<'a>(pairs: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
-        move |name| pairs.iter().find(|(n, _)| *n == name).map(|(_, v)| v.to_string())
+        move |name| {
+            pairs
+                .iter()
+                .find(|(n, _)| *n == name)
+                .map(|(_, v)| v.to_string())
+        }
     }
 
     #[test]
@@ -1129,7 +1236,10 @@ mod tests {
         assert!(branch_symbols_from(env(&[("TERM_PROGRAM", "ghostty")])));
         assert!(branch_symbols_from(env(&[("TERM_PROGRAM", "rex")])));
         assert!(branch_symbols_from(env(&[("TERM", "xterm-kitty")])));
-        assert!(!branch_symbols_from(env(&[("TERM_PROGRAM", "Apple_Terminal")])));
+        assert!(!branch_symbols_from(env(&[(
+            "TERM_PROGRAM",
+            "Apple_Terminal"
+        )])));
         assert!(!branch_symbols_from(env(&[])));
     }
 
@@ -1191,13 +1301,19 @@ mod tests {
     #[test]
     fn local_ahead_shows_shared_history_in_the_remote_color() {
         // A commit only on local, then history on both.
-        assert_eq!(commit_colors(&[0b01, 0b11], &[LOCAL, REMOTE]), [LOCAL, REMOTE]);
+        assert_eq!(
+            commit_colors(&[0b01, 0b11], &[LOCAL, REMOTE]),
+            [LOCAL, REMOTE]
+        );
     }
 
     #[test]
     fn remote_ahead_shows_shared_history_in_the_local_color() {
         // A commit only on the remote, then history on both.
-        assert_eq!(commit_colors(&[0b10, 0b11], &[LOCAL, REMOTE]), [REMOTE, LOCAL]);
+        assert_eq!(
+            commit_colors(&[0b10, 0b11], &[LOCAL, REMOTE]),
+            [REMOTE, LOCAL]
+        );
     }
 
     #[test]
@@ -1208,7 +1324,10 @@ mod tests {
 
     #[test]
     fn in_sync_is_all_the_first_color() {
-        assert_eq!(commit_colors(&[0b11, 0b11], &[LOCAL, REMOTE]), [LOCAL, LOCAL]);
+        assert_eq!(
+            commit_colors(&[0b11, 0b11], &[LOCAL, REMOTE]),
+            [LOCAL, LOCAL]
+        );
     }
 
     #[test]
@@ -1240,11 +1359,27 @@ mod tests {
 
     #[test]
     fn lines_take_the_color_of_the_commit_they_lead_to() {
-        let commits = [commit("a", &["base"]), commit("b", &["base"]), commit("base", &[])];
+        let commits = [
+            commit("a", &["base"]),
+            commit("b", &["base"]),
+            commit("base", &[]),
+        ];
         let rows = layout(&commits);
-        assert_eq!(rows[2].glyphs[2], Glyph { ch: '╯', commit: Some(2) });
+        assert_eq!(
+            rows[2].glyphs[2],
+            Glyph {
+                ch: '╯',
+                commit: Some(2)
+            }
+        );
         // The line passing `b` is also heading for `base`.
-        assert_eq!(rows[1].glyphs[0], Glyph { ch: '│', commit: Some(2) });
+        assert_eq!(
+            rows[1].glyphs[0],
+            Glyph {
+                ch: '│',
+                commit: Some(2)
+            }
+        );
     }
 
     #[test]
@@ -1271,7 +1406,11 @@ mod tests {
 
     #[test]
     fn a_merges_second_line_runs_beside_its_drop_down() {
-        let commits = [commit("m", &["p1", "p2"]), commit("p1", &[]), commit("p2", &[])];
+        let commits = [
+            commit("m", &["p1", "p2"]),
+            commit("p1", &[]),
+            commit("p2", &[]),
+        ];
         let rows = layout(&commits);
         let below: String = rows[0].below.iter().map(|g| g.ch).collect();
         assert_eq!(below.trim_end(), "│ │");
@@ -1286,7 +1425,11 @@ mod tests {
                 sha: sha.to_string(),
                 files: files
                     .iter()
-                    .map(|path| FileEntry { status: 'M', path: path.to_string(), ..Default::default() })
+                    .map(|path| FileEntry {
+                        status: 'M',
+                        path: path.to_string(),
+                        ..Default::default()
+                    })
                     .collect(),
             });
         }
@@ -1300,17 +1443,27 @@ mod tests {
     #[test]
     fn a_long_message_gives_way_to_the_author_and_branch_but_keeps_its_first_words() {
         let mut panel = panel_with_expanded(&["a"], &[], &[]);
-        panel.commits[0].subject = "Migrate to zarr 3 and move hazard models to the async interface".to_string();
+        panel.commits[0].subject =
+            "Migrate to zarr 3 and move hazard models to the async interface".to_string();
         panel.commits[0].author = "Joe".to_string();
-        panel.tips = vec![Tip { name: "main".to_string(), sha: "a".to_string() }];
+        panel.tips = vec![Tip {
+            name: "main".to_string(),
+            sha: "a".to_string(),
+        }];
         panel.colors = vec![Color::Green];
         panel.unpushed = vec![false];
         panel.rows = layout(&panel.commits);
         // Without the bead, which differs between terminals.
         let text = |width| -> String {
-            panel.commit_line(0, false, width).spans[1..].iter().map(|span| span.content.as_ref()).collect()
+            panel.commit_line(0, false, width).spans[1..]
+                .iter()
+                .map(|span| span.content.as_ref())
+                .collect()
         };
-        assert_eq!(text(200), "  Migrate to zarr 3 and move hazard models to the async interface  Joe  main");
+        assert_eq!(
+            text(200),
+            "  Migrate to zarr 3 and move hazard models to the async interface  Joe  main"
+        );
         assert_eq!(text(40), "  Migrate to zarr 3 and mov…  Joe  main");
         // Short of room even for its first words, the end is what's cut off.
         assert_eq!(text(20), "  Migrate to zarr 3 and m…  Joe  main");
@@ -1319,8 +1472,15 @@ mod tests {
     #[test]
     fn comparing_a_branch_tip_names_the_branch() {
         let mut panel = panel_with_expanded(&["a", "b"], &[], &[]);
-        let tip = |name: &str, sha: &str| Tip { name: name.to_string(), sha: sha.to_string() };
-        panel.tips = vec![tip("feature", "a"), tip("origin/feature", "a"), tip("main", "b")];
+        let tip = |name: &str, sha: &str| Tip {
+            name: name.to_string(),
+            sha: sha.to_string(),
+        };
+        panel.tips = vec![
+            tip("feature", "a"),
+            tip("origin/feature", "a"),
+            tip("main", "b"),
+        ];
         assert_eq!(panel.name_for("a".to_string()), "feature");
         assert_eq!(panel.name_for("b".to_string()), "main");
         assert_eq!(panel.name_for("c".to_string()), "c");
@@ -1370,10 +1530,19 @@ mod tests {
     }
 
     fn paths(sources: Vec<DiffSource>) -> Vec<String> {
-        sources.iter().map(|source| format!("{}:{}", match source {
-            DiffSource::Commit { sha, .. } => sha.as_str(),
-            _ => "?",
-        }, source.path())).collect()
+        sources
+            .iter()
+            .map(|source| {
+                format!(
+                    "{}:{}",
+                    match source {
+                        DiffSource::Commit { sha, .. } => sha.as_str(),
+                        _ => "?",
+                    },
+                    source.path()
+                )
+            })
+            .collect()
     }
 
     #[test]
@@ -1462,7 +1631,10 @@ mod tests {
         let mut panel = panel_with_expanded_first_commit(&["a", "b"], &["x"]);
         assert_eq!(panel.selected_file_source(), None);
         panel.move_down();
-        let expected = DiffSource::Commit { sha: "a".to_string(), path: "x".to_string() };
+        let expected = DiffSource::Commit {
+            sha: "a".to_string(),
+            path: "x".to_string(),
+        };
         assert_eq!(panel.selected_file_source(), Some(expected));
     }
 }

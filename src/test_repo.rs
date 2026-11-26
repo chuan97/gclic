@@ -53,7 +53,13 @@ fn git_command(folder: &Path, args: &[&str]) -> Command {
 fn git_in(folder: &Path, args: &[&str]) -> String {
     let output = git_command(folder, args).output().unwrap();
     let text = |bytes: &[u8]| String::from_utf8_lossy(bytes).into_owned();
-    assert!(output.status.success(), "git {} failed: {}{}", args.join(" "), text(&output.stderr), text(&output.stdout));
+    assert!(
+        output.status.success(),
+        "git {} failed: {}{}",
+        args.join(" "),
+        text(&output.stderr),
+        text(&output.stdout)
+    );
     text(&output.stdout)
 }
 
@@ -96,7 +102,10 @@ impl TestRepo {
         repo.write("src/main.rs", "fn main() {\n    println!(\"one\");\n}\n");
         repo.write("README.md", "# Test\n");
         repo.commit("First");
-        repo.write("src/main.rs", "fn main() {\n    let n = 2;\n    println!(\"{n}\");\n}\n");
+        repo.write(
+            "src/main.rs",
+            "fn main() {\n    let n = 2;\n    println!(\"{n}\");\n}\n",
+        );
         repo.commit("Second");
         repo.write("README.md", "# Test\n\nMore.\n");
         repo.commit("Third");
@@ -110,7 +119,10 @@ impl TestRepo {
     /// Another repo, a clone of this one, with this one as its `origin`.
     pub fn clone_of(&self) -> TestRepo {
         let folder = fresh_folder();
-        git_in(&folder, &["clone", "-q", &self.root().display().to_string(), "."]);
+        git_in(
+            &folder,
+            &["clone", "-q", &self.root().display().to_string(), "."],
+        );
         for (key, value) in CONFIG {
             git_in(&folder, &["config", key, value]);
         }
@@ -127,7 +139,11 @@ impl TestRepo {
     /// Like `git`, but for commands expected to fail, as a merge that stops on
     /// conflicts does. Whether it succeeded.
     pub fn git_may_fail(&self, args: &[&str]) -> bool {
-        git_command(self.root(), args).output().unwrap().status.success()
+        git_command(self.root(), args)
+            .output()
+            .unwrap()
+            .status
+            .success()
     }
 
     /// Writes a file, by its path from the root, making its folders.
@@ -150,7 +166,9 @@ impl TestRepo {
 
     /// The commit a ref points at.
     pub fn sha(&self, reference: &str) -> String {
-        self.git(&["rev-parse", &format!("{reference}^{{commit}}")]).trim().to_string()
+        self.git(&["rev-parse", &format!("{reference}^{{commit}}")])
+            .trim()
+            .to_string()
     }
 
     /// Changes `path` differently on `main` and on a new branch, `other`, then
@@ -164,7 +182,10 @@ impl TestRepo {
         self.git(&["switch", "-q", "main"]);
         self.write(path, "ours\n");
         self.commit("Ours");
-        assert!(!self.git_may_fail(&["merge", "other"]), "the merge should stop on the conflict");
+        assert!(
+            !self.git_may_fail(&["merge", "other"]),
+            "the merge should stop on the conflict"
+        );
     }
 }
 
@@ -181,7 +202,9 @@ impl Drop for TestFolder {
 
 impl TestFolder {
     pub fn new() -> TestFolder {
-        TestFolder { path: fresh_folder() }
+        TestFolder {
+            path: fresh_folder(),
+        }
     }
 
     /// A repo with a history, as `TestRepo::with_history` makes, in a folder

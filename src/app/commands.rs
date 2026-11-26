@@ -24,12 +24,36 @@ impl CommandInfo {
 /// and the message for an unknown command are all made from. A new command
 /// goes here, besides doing something in `App::run_command`.
 pub const COMMANDS: [CommandInfo; 6] = [
-    CommandInfo { key: ":cd", args: "[name | ..]", about: "switch to another repo" },
-    CommandInfo { key: ":git", args: "<arguments>", about: "run git in the background" },
-    CommandInfo { key: ":!", args: "<command>", about: "run a command in your shell" },
-    CommandInfo { key: ":stash", args: "", about: "list the stashes" },
-    CommandInfo { key: ":fetch", args: "[on | off]", about: "fetch now, or every minute" },
-    CommandInfo { key: ":color", args: "[#rrggbb | reset | on | off]", about: "this repo's colour" },
+    CommandInfo {
+        key: ":cd",
+        args: "[name | ..]",
+        about: "switch to another repo",
+    },
+    CommandInfo {
+        key: ":git",
+        args: "<arguments>",
+        about: "run git in the background",
+    },
+    CommandInfo {
+        key: ":!",
+        args: "<command>",
+        about: "run a command in your shell",
+    },
+    CommandInfo {
+        key: ":stash",
+        args: "",
+        about: "list the stashes",
+    },
+    CommandInfo {
+        key: ":fetch",
+        args: "[on | off]",
+        about: "fetch now, or every minute",
+    },
+    CommandInfo {
+        key: ":color",
+        args: "[#rrggbb | reset | on | off]",
+        about: "this repo's colour",
+    },
 ];
 
 /// The commands as the help lists them: each with what it does.
@@ -45,23 +69,42 @@ pub const COMMAND_HELP: [(&str, &str); COMMANDS.len()] = {
 
 /// `:cd, :git, …`, for the message about an unknown command.
 pub fn command_list() -> String {
-    COMMANDS.iter().map(|command| command.key).collect::<Vec<_>>().join(", ")
+    COMMANDS
+        .iter()
+        .map(|command| command.key)
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// The commands whose names start with what's typed.
 fn matching(typed: &str) -> Vec<&'static CommandInfo> {
-    COMMANDS.iter().filter(|command| command.name().starts_with(typed)).collect()
+    COMMANDS
+        .iter()
+        .filter(|command| command.name().starts_with(typed))
+        .collect()
 }
 
 /// Names, separated by dots, as many as fit in `width`, then `…`.
 fn fit_names(names: &[&str], width: usize) -> String {
     let mut text = String::new();
     for (i, name) in names.iter().enumerate() {
-        let next = if text.is_empty() { name.to_string() } else { format!("{text} · {name}") };
+        let next = if text.is_empty() {
+            name.to_string()
+        } else {
+            format!("{text} · {name}")
+        };
         // Room for " · …" after it, unless it's the last.
-        let room = if i + 1 == names.len() { width } else { width.saturating_sub(4) };
+        let room = if i + 1 == names.len() {
+            width
+        } else {
+            width.saturating_sub(4)
+        };
         if next.chars().count() > room {
-            return if text.is_empty() { "…".to_string() } else { format!("{text} · …") };
+            return if text.is_empty() {
+                "…".to_string()
+            } else {
+                format!("{text} · …")
+            };
         }
         text = next;
     }
@@ -76,7 +119,11 @@ fn fit_names(names: &[&str], width: usize) -> String {
 pub fn command_hint(line: &str, width: usize) -> (String, String) {
     let names: Vec<&str> = COMMANDS.iter().map(CommandInfo::name).collect();
     let about = |command: &CommandInfo| {
-        if command.args.is_empty() { command.about.to_string() } else { format!("{}   {}", command.args, command.about) }
+        if command.args.is_empty() {
+            command.about.to_string()
+        } else {
+            format!("{}   {}", command.args, command.about)
+        }
     };
     if line.is_empty() {
         let keys = "   tab completes · esc cancel";
@@ -100,7 +147,13 @@ pub fn command_hint(line: &str, width: usize) -> (String, String) {
         Some((word, rest)) => (word, Some(rest)),
         None => (line, None),
     };
-    let fits = |text: String| if text.chars().count() <= width { text } else { String::new() };
+    let fits = |text: String| {
+        if text.chars().count() <= width {
+            text
+        } else {
+            String::new()
+        }
+    };
     match rest {
         // The arguments, until they're typed.
         Some(rest) => match COMMANDS.iter().find(|command| command.name() == word) {
@@ -111,7 +164,11 @@ pub fn command_hint(line: &str, width: usize) -> (String, String) {
             [] => (String::new(), "no such command".to_string()),
             [command] => {
                 let ghost = command.name()[word.len()..].to_string();
-                let keys = if ghost.is_empty() { "" } else { "   tab completes" };
+                let keys = if ghost.is_empty() {
+                    ""
+                } else {
+                    "   tab completes"
+                };
                 let hint = fits(format!("  {}{keys}", about(command)));
                 (ghost, hint.trim_start().to_string())
             }
@@ -139,7 +196,11 @@ pub fn complete_command(line: &str) -> Option<String> {
             let first = several[0].name();
             let shared = (line.len()..=first.len())
                 .rev()
-                .find(|&end| several.iter().all(|command| command.name().starts_with(&first[..end])))
+                .find(|&end| {
+                    several
+                        .iter()
+                        .all(|command| command.name().starts_with(&first[..end]))
+                })
                 .unwrap_or(line.len());
             first[..shared].to_string()
         }
@@ -156,7 +217,11 @@ impl App {
             KeyCode::Esc => {}
             // A suggestion from git first, or else the command being typed.
             KeyCode::Tab => {
-                if let Some(suggestion) = self.suggestion.as_ref().filter(|suggestion| suggestion.starts_with(&line)) {
+                if let Some(suggestion) = self
+                    .suggestion
+                    .as_ref()
+                    .filter(|suggestion| suggestion.starts_with(&line))
+                {
                     line = suggestion.clone();
                 } else if let Some(completed) = complete_command(&line) {
                     line = completed;
@@ -210,7 +275,11 @@ impl App {
                 return;
             }
             "" => {
-                let from = if self.accent.custom { "set with :color" } else { "from the repo's name" };
+                let from = if self.accent.custom {
+                    "set with :color"
+                } else {
+                    "from the repo's name"
+                };
                 self.message = format!(
                     "This repo's colour is {}, {from}. :color #rrggbb sets another, :color off hides the bar",
                     self.accent.hex()
@@ -224,7 +293,9 @@ impl App {
                         self.accent_bar = accent::bar_shown(&self.repo);
                         self.tell_editor_about_color();
                         self.message = match (off, self.accent_bar) {
-                            (true, false) => "The colour bar is off in every repo. :color on shows it again",
+                            (true, false) => {
+                                "The colour bar is off in every repo. :color on shows it again"
+                            }
                             (false, true) => "The colour bar is on",
                             // A repo's own config can still say otherwise.
                             _ => "This repo's git config overrides that, with gclic.colorBar",
@@ -239,8 +310,9 @@ impl App {
             hex => match accent::parse_hex(hex) {
                 Some(_) => Some(hex.trim_start_matches('#').to_lowercase()),
                 None => {
-                    self.message =
-                        format!("{hex} isn't a colour. Try :color #rrggbb, as in :color #e0a040, :color reset or :color off");
+                    self.message = format!(
+                        "{hex} isn't a colour. Try :color #rrggbb, as in :color #e0a040, :color reset or :color off"
+                    );
                     return;
                 }
             },
@@ -252,9 +324,16 @@ impl App {
                 self.tell_editor_about_color();
                 let colour = match value {
                     Some(_) => format!("This repo's colour is now {}", self.accent.hex()),
-                    None => format!("This repo's colour is back to {}, from its name", self.accent.hex()),
+                    None => format!(
+                        "This repo's colour is back to {}, from its name",
+                        self.accent.hex()
+                    ),
                 };
-                let hidden = if self.accent_bar { "" } else { ". The bar is off: :color on shows it" };
+                let hidden = if self.accent_bar {
+                    ""
+                } else {
+                    ". The bar is off: :color on shows it"
+                };
                 self.message = format!("{colour}{hidden}");
             }
             Err(error) => self.message = format!("Couldn't save the colour: {error}"),
@@ -265,7 +344,10 @@ impl App {
     /// it printed when it ends. One at a time, as git commands often lock.
     pub(super) fn run_git(&mut self, args: &str) {
         if let Some(running) = &self.running {
-            self.message = format!("{} is still running: wait, or stop it with ctrl-c", running.label);
+            self.message = format!(
+                "{} is still running: wait, or stop it with ctrl-c",
+                running.label
+            );
             return;
         }
         let args = match crate::args::split_args(args) {
@@ -308,7 +390,12 @@ impl App {
         }
         let stashes: Vec<(String, Stash)> = stashes
             .into_iter()
-            .map(|stash| (format!("{}  {}  {}", stash.name, stash.message, stash.age), stash))
+            .map(|stash| {
+                (
+                    format!("{}  {}  {}", stash.name, stash.message, stash.age),
+                    stash,
+                )
+            })
             .collect();
         let labels = stashes.iter().map(|(label, _)| label.clone()).collect();
         let picker = Picker::single("Stashes", labels).with_hints(&STASH_PICKER_KEYS);
@@ -348,7 +435,10 @@ impl App {
             StashAction::Pop => format!("Popped {}", stash.name),
             StashAction::Drop => format!("Dropped {}", stash.name),
         };
-        let shown = self.compare.as_ref().and_then(|compare| compare.stash_shown());
+        let shown = self
+            .compare
+            .as_ref()
+            .and_then(|compare| compare.stash_shown());
         if action != StashAction::Apply && shown.is_some_and(|shown| shown.sha == stash.sha) {
             self.close_compare();
         }
@@ -387,14 +477,21 @@ impl App {
         if stopped {
             self.message = format!("{label}: stopped");
         } else if finished.succeeded() && finished.lines.len() <= 1 {
-            let line = finished.lines.first().map(|line| crate::ansi::strip_ansi(line));
+            let line = finished
+                .lines
+                .first()
+                .map(|line| crate::ansi::strip_ansi(line));
             self.message = line.unwrap_or_else(|| format!("{label}: done"));
         } else if matches!(self.modal, Modal::None) {
             let output = OutputPopup::new(&label, finished);
             self.suggestion = output.suggestion();
             self.modal = Modal::Output(output);
         } else {
-            let outcome = if finished.succeeded() { "finished" } else { "failed" };
+            let outcome = if finished.succeeded() {
+                "finished"
+            } else {
+                "failed"
+            };
             self.message = format!("{label} {outcome}");
         }
         true
@@ -418,7 +515,10 @@ impl App {
             repos::Target::Repo(repo) => self.switch_repo(&repo, true),
             repos::Target::Choose => self.open_repo_picker(name),
             repos::Target::None => {
-                self.message = format!("No repo matches {name} in {}", repos::tilde(&self.search_root));
+                self.message = format!(
+                    "No repo matches {name} in {}",
+                    repos::tilde(&self.search_root)
+                );
             }
         }
     }
@@ -430,13 +530,17 @@ impl App {
         let repos = repos::entries(&self.search_root);
         let labels = repos.iter().map(|(label, _)| label.clone()).collect();
         let title = format!("Switch repo, in {}", repos::tilde(&self.search_root));
-        let mut picker = Picker::single(&title, labels).with_hints(&repos::PICKER_KEYS).with_dimmed_folders();
+        let mut picker = Picker::single(&title, labels)
+            .with_hints(&repos::PICKER_KEYS)
+            .with_dimmed_folders();
         if !query.is_empty() {
             picker.set_query(query.to_string());
         }
         let current = self.repo.root();
         if query.is_empty()
-            && let Some((label, _)) = repos.iter().find(|(_, repo)| repos::same_folder(repo, current))
+            && let Some((label, _)) = repos
+                .iter()
+                .find(|(_, repo)| repos::same_folder(repo, current))
         {
             picker.select_item(&label.clone());
         }
@@ -450,7 +554,10 @@ impl App {
     /// perhaps in a folder inside the repo, which telling it would undo.
     pub(super) fn switch_repo(&mut self, folder: &Path, tell_nvim: bool) {
         let Some(repo) = Repo::discover(folder) else {
-            self.modal = Modal::Error(format!("Can't open {}: it isn't a git repo", folder.display()));
+            self.modal = Modal::Error(format!(
+                "Can't open {}: it isn't a git repo",
+                folder.display()
+            ));
             return;
         };
         let mut fresh = App::new(repo, self.search_root.clone());
@@ -478,7 +585,9 @@ impl App {
         };
         let line = match self.view.diff() {
             Some(diff) if diff.source == source => diff.active_line(),
-            _ => DiffPane::load(&self.repo, self.view_of(&source)).ok().and_then(|diff| diff.active_line()),
+            _ => DiffPane::load(&self.repo, self.view_of(&source))
+                .ok()
+                .and_then(|diff| diff.active_line()),
         };
         let path = self.repo.file(source.path());
         if !path.exists() {
@@ -509,7 +618,11 @@ impl App {
     /// Starts an editor, or a message to one, leaving it running, to collect
     /// once it ends.
     pub(super) fn start_in_background(&mut self, name: &str, mut command: Command) {
-        let started = command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
+        let started = command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
         match started {
             Ok(child) => self.editor_commands.push(child),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -537,7 +650,10 @@ mod tests {
     #[test]
     fn with_nothing_typed_the_hint_lists_the_commands_as_far_as_they_fit() {
         let (_, wide) = command_hint("", 100);
-        assert_eq!(wide, "cd · git · ! · stash · fetch · color   tab completes · esc cancel");
+        assert_eq!(
+            wide,
+            "cd · git · ! · stash · fetch · color   tab completes · esc cancel"
+        );
         let (_, narrow) = command_hint("", 20);
         assert_eq!(narrow, "cd · git · ! · …");
         assert!(narrow.chars().count() <= 20);
@@ -545,19 +661,31 @@ mod tests {
 
     #[test]
     fn typing_a_name_narrows_the_hint_down_to_one_command() {
-        assert_eq!(command_hint("c", 100), (String::new(), "cd · color".to_string()));
+        assert_eq!(
+            command_hint("c", 100),
+            (String::new(), "cd · color".to_string())
+        );
         let (ghost, hint) = command_hint("co", 100);
         assert_eq!(ghost, "lor");
-        assert_eq!(hint, "[#rrggbb | reset | on | off]   this repo's colour   tab completes");
+        assert_eq!(
+            hint,
+            "[#rrggbb | reset | on | off]   this repo's colour   tab completes"
+        );
         assert_eq!(command_hint("zz", 100).1, "no such command");
     }
 
     #[test]
     fn arguments_are_shown_until_they_are_typed() {
-        assert_eq!(command_hint("fetch ", 100).1, "[on | off]   fetch now, or every minute");
+        assert_eq!(
+            command_hint("fetch ", 100).1,
+            "[on | off]   fetch now, or every minute"
+        );
         assert_eq!(command_hint("fetch o", 100).1, "");
         assert_eq!(command_hint("stash", 100).1, "list the stashes");
-        assert_eq!(command_hint("!", 100).1, "<command>   run a command in your shell");
+        assert_eq!(
+            command_hint("!", 100).1,
+            "<command>   run a command in your shell"
+        );
         assert_eq!(command_hint("!ls", 100).1, "");
     }
 
@@ -575,5 +703,4 @@ mod tests {
         assert_eq!(COMMAND_HELP.len(), COMMANDS.len());
         assert_eq!(command_list(), ":cd, :git, :!, :stash, :fetch, :color");
     }
-
 }

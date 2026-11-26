@@ -18,7 +18,11 @@ pub fn selected(line: Line<'_>, selected: bool, focused: bool) -> Line<'_> {
     match (selected, focused) {
         (false, _) => line,
         (true, false) => line.style(Style::default().bg(SELECTED_BG)),
-        (true, true) => line.style(Style::default().bg(SELECTED_BG).add_modifier(Modifier::BOLD)),
+        (true, true) => line.style(
+            Style::default()
+                .bg(SELECTED_BG)
+                .add_modifier(Modifier::BOLD),
+        ),
     }
 }
 /// What a set of changes adds and removes together: the files' counts summed,
@@ -27,9 +31,16 @@ pub fn total_lines(lines: impl IntoIterator<Item = Lines>) -> Lines {
     let mut total = Lines::Unknown;
     for lines in lines {
         total = match (total, lines) {
-            (Lines::Counted { added, removed }, Lines::Counted { added: a, removed: r }) => {
-                Lines::Counted { added: added + a, removed: removed + r }
-            }
+            (
+                Lines::Counted { added, removed },
+                Lines::Counted {
+                    added: a,
+                    removed: r,
+                },
+            ) => Lines::Counted {
+                added: added + a,
+                removed: removed + r,
+            },
             (Lines::Counted { .. }, _) => total,
             (_, Lines::Counted { .. }) => lines,
             (Lines::Binary, _) | (_, Lines::Binary) => Lines::Binary,
@@ -49,13 +60,19 @@ pub fn line_count_spans(lines: Lines) -> Vec<Span<'static>> {
     };
     let mut spans = Vec::new();
     if added > 0 {
-        spans.push(Span::styled(format!("+{added}"), Style::default().fg(Color::Green)));
+        spans.push(Span::styled(
+            format!("+{added}"),
+            Style::default().fg(Color::Green),
+        ));
     }
     if removed > 0 {
         if added > 0 {
             spans.push(Span::raw(" "));
         }
-        spans.push(Span::styled(format!("−{removed}"), Style::default().fg(Color::Red)));
+        spans.push(Span::styled(
+            format!("−{removed}"),
+            Style::default().fg(Color::Red),
+        ));
     }
     spans
 }
@@ -82,7 +99,9 @@ pub fn fit<'a>(mut line: Line<'a>, shrinkable: &[(usize, usize)], width: usize) 
         if over == 0 {
             break;
         }
-        let Some(span) = line.spans.get_mut(index) else { continue };
+        let Some(span) = line.spans.get_mut(index) else {
+            continue;
+        };
         let text = span.content.as_ref();
         let text_start = text.len() - text.trim_start_matches(' ').len();
         let (gap, text) = text.split_at(text_start);
@@ -91,7 +110,12 @@ pub fn fit<'a>(mut line: Line<'a>, shrinkable: &[(usize, usize)], width: usize) 
         if room >= length {
             continue;
         }
-        span.content = if room == 0 { String::new() } else { format!("{gap}{}", shorten(text, room)) }.into();
+        span.content = if room == 0 {
+            String::new()
+        } else {
+            format!("{gap}{}", shorten(text, room))
+        }
+        .into();
     }
     line
 }
@@ -113,7 +137,10 @@ pub fn files_summary(files: &[FileEntry]) -> Vec<Span<'static>> {
         spans.push(Span::styled(" · ", Style::default().fg(DIM)));
     }
     let noun = if files.len() == 1 { "file" } else { "files" };
-    spans.push(Span::styled(format!("{} {noun}", files.len()), Style::default().fg(DIM)));
+    spans.push(Span::styled(
+        format!("{} {noun}", files.len()),
+        Style::default().fg(DIM),
+    ));
     spans
 }
 
@@ -233,7 +260,13 @@ impl Scroll {
 /// A popup of text that scrolls when it doesn't fit, such as the help: drawn
 /// over what's at `popup`, in `block`, whose bottom border says how to
 /// scroll it and that any other key closes it.
-pub fn text_popup(frame: &mut Frame, popup: Rect, block: Block, lines: Vec<Line>, scroll: &mut Scroll) {
+pub fn text_popup(
+    frame: &mut Frame,
+    popup: Rect,
+    block: Block,
+    lines: Vec<Line>,
+    scroll: &mut Scroll,
+) {
     scroll.fit(popup.height.saturating_sub(2) as usize, lines.len());
     let closing = if scroll.max > 0 {
         key_hints(&[("j/k", "scroll"), ("any other key", "closes")], None)
@@ -244,7 +277,11 @@ pub fn text_popup(frame: &mut Frame, popup: Rect, block: Block, lines: Vec<Line>
     let block = block.title_bottom(closing);
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
-    render_lines(frame, inner, lines.into_iter().skip(scroll.offset).collect());
+    render_lines(
+        frame,
+        inner,
+        lines.into_iter().skip(scroll.offset).collect(),
+    );
 }
 
 /// The colour of keys wherever they're listed: popups and the help.
@@ -256,9 +293,16 @@ pub type Hint<'a> = (&'a str, &'a str);
 
 /// Enter on a file shows its diff, or moves into the diff if it's the one
 /// showing, `shown`.
-pub fn enter_diff_hint(selected: Option<DiffSource>, shown: Option<&DiffSource>) -> Option<Hint<'static>> {
+pub fn enter_diff_hint(
+    selected: Option<DiffSource>,
+    shown: Option<&DiffSource>,
+) -> Option<Hint<'static>> {
     let selected = selected?;
-    Some(if shown == Some(&selected) { ("enter", "focus diff") } else { ("enter", "diff") })
+    Some(if shown == Some(&selected) {
+        ("enter", "focus diff")
+    } else {
+        ("enter", "diff")
+    })
 }
 
 /// Keys and what they do, for a popup's bottom border: keys in `KEY` and
@@ -281,7 +325,10 @@ pub fn key_hints(hints: &[(&str, &str)], danger: Option<&str>) -> Line<'static> 
         };
         spans.push(Span::styled(key.to_string(), key_style));
         // Reset rather than left unset, as a border's colour would show through.
-        spans.push(Span::styled(format!(" {action}"), Style::default().fg(Color::Reset)));
+        spans.push(Span::styled(
+            format!(" {action}"),
+            Style::default().fg(Color::Reset),
+        ));
     }
     spans.push(Span::raw(" "));
     Line::from(spans).right_aligned()
@@ -326,7 +373,11 @@ pub fn next_index(index: usize, len: usize) -> usize {
 /// The previous position among `len` places to cycle through, wrapping past
 /// the start to the end.
 pub fn previous_index(index: usize, len: usize) -> usize {
-    if index == 0 { len.saturating_sub(1) } else { index - 1 }
+    if index == 0 {
+        len.saturating_sub(1)
+    } else {
+        index - 1
+    }
 }
 
 /// The positions one key away in a list of `len`, most likely first: the
@@ -349,7 +400,11 @@ fn one_key_away(selected: usize, len: usize) -> Vec<usize> {
 /// fills its whole row, which is what makes a selection bar span the panel.
 pub fn render_lines(frame: &mut Frame, area: Rect, lines: Vec<Line>) {
     for (i, line) in lines.into_iter().take(area.height as usize).enumerate() {
-        let row = Rect { y: area.y + i as u16, height: 1, ..area };
+        let row = Rect {
+            y: area.y + i as u16,
+            height: 1,
+            ..area
+        };
         frame.render_widget(line, row);
     }
 }
@@ -367,11 +422,18 @@ pub fn wrap(text: &str, width: usize) -> Vec<String> {
             if !line.is_empty() {
                 lines.push(std::mem::take(&mut line));
             }
-            let cut = word.char_indices().nth(width).map_or(word.len(), |(i, _)| i);
+            let cut = word
+                .char_indices()
+                .nth(width)
+                .map_or(word.len(), |(i, _)| i);
             lines.push(word[..cut].to_string());
             word = word[cut..].to_string();
         }
-        let needed = if line.is_empty() { word.chars().count() } else { line.chars().count() + 1 + word.chars().count() };
+        let needed = if line.is_empty() {
+            word.chars().count()
+        } else {
+            line.chars().count() + 1 + word.chars().count()
+        };
         if needed > width && !line.is_empty() {
             lines.push(std::mem::take(&mut line));
         }
@@ -413,11 +475,16 @@ mod tests {
 
     #[test]
     fn text_wraps_at_spaces_and_cuts_words_too_long_for_a_line() {
-        assert_eq!(wrap("Is thirty seconds enough", 12), ["Is thirty", "seconds", "enough"]);
+        assert_eq!(
+            wrap("Is thirty seconds enough", 12),
+            ["Is thirty", "seconds", "enough"]
+        );
         assert_eq!(wrap("", 12), [""]);
-        assert_eq!(wrap("a abcdefghijklmnop b", 10), ["a", "abcdefghij", "klmnop b"]);
+        assert_eq!(
+            wrap("a abcdefghijklmnop b", 10),
+            ["a", "abcdefghij", "klmnop b"]
+        );
     }
-
 
     #[test]
     fn moving_in_a_list_stops_at_both_ends() {
@@ -439,9 +506,19 @@ mod tests {
     #[test]
     fn key_hints_colour_keys_and_the_dangerous_action() {
         let line = key_hints(&[("enter", "discard"), ("esc", "cancel")], Some("discard"));
-        let text: String = line.spans.iter().map(|span| span.content.as_ref()).collect();
+        let text: String = line
+            .spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect();
         assert_eq!(text, " enter discard · esc cancel ");
-        let style_of = |content: &str| line.spans.iter().find(|s| s.content == content).unwrap().style;
+        let style_of = |content: &str| {
+            line.spans
+                .iter()
+                .find(|s| s.content == content)
+                .unwrap()
+                .style
+        };
         assert_eq!(style_of("enter").fg, Some(Color::Red));
         assert_eq!(style_of("esc").fg, Some(KEY));
         assert_eq!(style_of(" discard").fg, Some(Color::Reset));
@@ -474,7 +551,10 @@ mod tests {
     #[test]
     fn totals_add_the_known_counts_and_ignore_the_rest() {
         let counted = |added, removed| Lines::Counted { added, removed };
-        assert_eq!(total_lines([counted(3, 1), Lines::Binary, counted(2, 0)]), counted(5, 1));
+        assert_eq!(
+            total_lines([counted(3, 1), Lines::Binary, counted(2, 0)]),
+            counted(5, 1)
+        );
         assert_eq!(total_lines([Lines::Binary, Lines::Unknown]), Lines::Binary);
         assert_eq!(total_lines([]), Lines::Unknown);
     }
@@ -488,12 +568,30 @@ mod tests {
 
     #[test]
     fn fitting_shortens_the_spans_given_in_turn() {
-        let text = |line: Line| line.spans.iter().map(|span| span.content.to_string()).collect::<String>();
-        let row = || Line::from(vec![Span::raw(" M "), Span::raw("model.py"), Span::raw("  src/data"), Span::raw("  +3 −20")]);
+        let text = |line: Line| {
+            line.spans
+                .iter()
+                .map(|span| span.content.to_string())
+                .collect::<String>()
+        };
+        let row = || {
+            Line::from(vec![
+                Span::raw(" M "),
+                Span::raw("model.py"),
+                Span::raw("  src/data"),
+                Span::raw("  +3 −20"),
+            ])
+        };
         // It fits already.
-        assert_eq!(text(fit(row(), &[(2, 0), (1, 1)], 40)), " M model.py  src/data  +3 −20");
+        assert_eq!(
+            text(fit(row(), &[(2, 0), (1, 1)], 40)),
+            " M model.py  src/data  +3 −20"
+        );
         // The folder gives way first, keeping its gap.
-        assert_eq!(text(fit(row(), &[(2, 0), (1, 1)], 26)), " M model.py  src/…  +3 −20");
+        assert_eq!(
+            text(fit(row(), &[(2, 0), (1, 1)], 26)),
+            " M model.py  src/…  +3 −20"
+        );
         // Then it goes, and the name is cut.
         assert_eq!(text(fit(row(), &[(2, 0), (1, 1)], 16)), " M mode…  +3 −20");
         // Never past what a span keeps: the end is cut off then.
@@ -502,15 +600,38 @@ mod tests {
 
     #[test]
     fn counts_follow_the_name() {
-        let text = |line: Line| line.spans.iter().map(|span| span.content.to_string()).collect::<String>();
+        let text = |line: Line| {
+            line.spans
+                .iter()
+                .map(|span| span.content.to_string())
+                .collect::<String>()
+        };
         let counted = |added, removed| Lines::Counted { added, removed };
-        assert_eq!(text(with_line_counts(Line::raw(" M a.rs"), counted(4, 3))), " M a.rs  +4 −3");
+        assert_eq!(
+            text(with_line_counts(Line::raw(" M a.rs"), counted(4, 3))),
+            " M a.rs  +4 −3"
+        );
         // A side that's 0 is left out.
-        assert_eq!(text(with_line_counts(Line::raw(" A b.rs"), counted(4, 0))), " A b.rs  +4");
-        assert_eq!(text(with_line_counts(Line::raw(" D c.rs"), counted(0, 3))), " D c.rs  −3");
-        assert_eq!(text(with_line_counts(Line::raw(" M d.sh"), counted(0, 0))), " M d.sh");
-        assert_eq!(text(with_line_counts(Line::raw(" M a.png"), Lines::Binary)), " M a.png  binary");
-        assert_eq!(text(with_line_counts(Line::raw(" M a.rs"), Lines::Unknown)), " M a.rs");
+        assert_eq!(
+            text(with_line_counts(Line::raw(" A b.rs"), counted(4, 0))),
+            " A b.rs  +4"
+        );
+        assert_eq!(
+            text(with_line_counts(Line::raw(" D c.rs"), counted(0, 3))),
+            " D c.rs  −3"
+        );
+        assert_eq!(
+            text(with_line_counts(Line::raw(" M d.sh"), counted(0, 0))),
+            " M d.sh"
+        );
+        assert_eq!(
+            text(with_line_counts(Line::raw(" M a.png"), Lines::Binary)),
+            " M a.png  binary"
+        );
+        assert_eq!(
+            text(with_line_counts(Line::raw(" M a.rs"), Lines::Unknown)),
+            " M a.rs"
+        );
     }
 
     #[test]

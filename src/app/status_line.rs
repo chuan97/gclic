@@ -7,15 +7,26 @@ impl App {
     pub(super) fn render_status_line(&self, frame: &mut Frame, area: Rect) {
         // A column of margin at each end, which also lines the text up with
         // the text inside the panes' borders.
-        let area = Rect { x: area.x + 1, width: area.width.saturating_sub(2), ..area };
+        let area = Rect {
+            x: area.x + 1,
+            width: area.width.saturating_sub(2),
+            ..area
+        };
         // The command line takes the place of the hints, as in vim.
         if let Modal::Command(line) = &self.modal {
             let cyan = Style::default().fg(Color::Cyan);
             let dim = Style::default().fg(ui::DIM);
-            let mut spans = vec![Span::styled(":", cyan), Span::raw(line.as_str()), Span::styled("▏", cyan)];
+            let mut spans = vec![
+                Span::styled(":", cyan),
+                Span::raw(line.as_str()),
+                Span::styled("▏", cyan),
+            ];
             // The rest of a suggested command, after what's typed, as fish
             // shows its suggestions.
-            let rest = self.suggestion.as_deref().and_then(|suggestion| suggestion.strip_prefix(line.as_str()));
+            let rest = self
+                .suggestion
+                .as_deref()
+                .and_then(|suggestion| suggestion.strip_prefix(line.as_str()));
             if let Some(rest) = rest.filter(|rest| !rest.is_empty()) {
                 spans.push(Span::styled(rest, dim));
                 spans.push(Span::styled("   tab use it · esc cancel", dim));
@@ -23,7 +34,8 @@ impl App {
                 // What the commands are, or the one being typed takes, in the
                 // room left after the cursor.
                 let used = 2 + line.chars().count();
-                let (ghost, hint) = commands::command_hint(line, (area.width as usize).saturating_sub(used + 3));
+                let (ghost, hint) =
+                    commands::command_hint(line, (area.width as usize).saturating_sub(used + 3));
                 if !hint.is_empty() || !ghost.is_empty() {
                     spans.push(Span::styled(ghost, dim));
                     spans.push(Span::styled(format!("  {hint}"), dim));
@@ -45,18 +57,28 @@ impl App {
             frame.render_widget(Line::from(hint_spans(&hints)), area);
             return;
         }
-        let (mut spans, empty) = if let Some(running) = self.running.as_ref().filter(|_| self.message.is_empty()) {
-            let running = format!("running {}… ", running.label);
-            (vec![Span::styled(running, Style::default().fg(Color::Yellow))]
-                .into_iter()
-                .chain(hint_spans(&[("ctrl-c", "stop")]))
-                .collect(), false)
-        } else if self.message.is_empty() {
-            let hints = self.hints();
-            (hint_spans(&hints), hints.is_empty())
-        } else {
-            (vec![Span::styled(self.message.clone(), Style::default().fg(Color::Yellow))], false)
-        };
+        let (mut spans, empty) =
+            if let Some(running) = self.running.as_ref().filter(|_| self.message.is_empty()) {
+                let running = format!("running {}… ", running.label);
+                (
+                    vec![Span::styled(running, Style::default().fg(Color::Yellow))]
+                        .into_iter()
+                        .chain(hint_spans(&[("ctrl-c", "stop")]))
+                        .collect(),
+                    false,
+                )
+            } else if self.message.is_empty() {
+                let hints = self.hints();
+                (hint_spans(&hints), hints.is_empty())
+            } else {
+                (
+                    vec![Span::styled(
+                        self.message.clone(),
+                        Style::default().fg(Color::Yellow),
+                    )],
+                    false,
+                )
+            };
         // The keys that work everywhere follow, set apart from the pane's own.
         // While typing a branch search, ? and q are typed into it instead.
         if !(self.view.focused(Pane::Branches) && self.branches.is_typing()) {
@@ -93,7 +115,11 @@ impl App {
             } else {
                 hints.push(("y", "copy sha"));
             }
-            hints.push(if self.view.zoomed { ("z", "unzoom") } else { ("z", "zoom") });
+            hints.push(if self.view.zoomed {
+                ("z", "unzoom")
+            } else {
+                ("z", "zoom")
+            });
             esc = Some("back");
         } else {
             match self.view.pane {
@@ -154,9 +180,15 @@ impl App {
             Pane::Branches => None,
             Pane::Changes => self.staging.selected_source(),
             Pane::Graph => self.graph.selected_file_source(),
-            Pane::Compare => self.compare.as_ref().and_then(|compare| compare.selected_source()),
+            Pane::Compare => self
+                .compare
+                .as_ref()
+                .and_then(|compare| compare.selected_source()),
             Pane::Review => {
-                let comment = self.review_list.selected(&self.review).and_then(|index| self.review.get(index));
+                let comment = self
+                    .review_list
+                    .selected(&self.review)
+                    .and_then(|index| self.review.get(index));
                 comment.map(|comment| self.review_source(comment))
             }
         }
@@ -165,7 +197,11 @@ impl App {
     /// The help section for where the user is, which help marks.
     pub(super) fn help_section(&self) -> &'static str {
         if self.view.in_preview {
-            return if self.view.diff().is_some() { "Diff" } else { "Commit details" };
+            return if self.view.diff().is_some() {
+                "Diff"
+            } else {
+                "Commit details"
+            };
         }
         match self.view.pane {
             Pane::Branches => "Branches",
@@ -186,12 +222,21 @@ impl App {
             return Vec::new();
         }
         let mut hints = Vec::new();
-        let on_line = diff.shows_active_line(self.view.in_preview) && diff.active_anchor().is_some();
+        let on_line =
+            diff.shows_active_line(self.view.in_preview) && diff.active_anchor().is_some();
         if on_line {
-            hints.push(if diff.comment_at_active().is_some() { ("gc", "edit comment") } else { ("gc", "comment") });
+            hints.push(if diff.comment_at_active().is_some() {
+                ("gc", "edit comment")
+            } else {
+                ("gc", "comment")
+            });
         }
         let on_file = self.review.find(&diff.source, None).is_some();
-        hints.push(if on_file { ("gC", "edit file comment") } else { ("gC", "comment file") });
+        hints.push(if on_file {
+            ("gC", "edit file comment")
+        } else {
+            ("gC", "comment file")
+        });
         hints
     }
 
@@ -202,11 +247,18 @@ impl App {
         };
         vec![
             ("n/N", "change"),
-            if self.whole { ("e", "changes only") } else { ("e", "whole file") },
-            if diff.is_split() { ("s", "unified") } else { ("s", "side by side") },
+            if self.whole {
+                ("e", "changes only")
+            } else {
+                ("e", "whole file")
+            },
+            if diff.is_split() {
+                ("s", "unified")
+            } else {
+                ("s", "side by side")
+            },
         ]
     }
-
 }
 
 /// Hints as popups show keys, `space stage · enter diff`: each key in the key

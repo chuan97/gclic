@@ -21,7 +21,10 @@ pub struct Repo {
 impl Repo {
     /// The repo `folder` is in, if it's in one with a working tree.
     pub fn discover(folder: &Path) -> Option<Repo> {
-        let text = output(command(&["rev-parse", "--show-toplevel", "--absolute-git-dir"]).current_dir(folder)).ok()?;
+        let text = output(
+            command(&["rev-parse", "--show-toplevel", "--absolute-git-dir"]).current_dir(folder),
+        )
+        .ok()?;
         let mut lines = text.lines();
         let root = PathBuf::from(lines.next()?.trim());
         let git_dir = PathBuf::from(lines.next()?.trim());
@@ -44,7 +47,10 @@ impl Repo {
     #[cfg(test)]
     pub fn nowhere() -> Repo {
         let root = std::env::temp_dir().join("gclic-no-repo-here");
-        Repo { git_dir: root.join(".git"), root }
+        Repo {
+            git_dir: root.join(".git"),
+            root,
+        }
     }
 
     /// A git command run in the repo's root.
@@ -70,7 +76,10 @@ pub enum Lines {
     #[default]
     Unknown,
     Binary,
-    Counted { added: usize, removed: usize },
+    Counted {
+        added: usize,
+        removed: usize,
+    },
 }
 
 #[derive(Debug, Default, PartialEq)]
@@ -122,11 +131,22 @@ pub enum DiffSource {
     Untracked(String),
     /// A file with merge conflicts: its two sides, from the conflict markers.
     Conflict(String),
-    Commit { sha: String, path: String },
-    Refs { a: String, b: String, path: String },
+    Commit {
+        sha: String,
+        path: String,
+    },
+    Refs {
+        a: String,
+        b: String,
+        path: String,
+    },
     /// A file in a stash: tracked changes against the commit it was made on,
     /// or an untracked file, kept in a commit of its own.
-    Stash { sha: String, path: String, untracked: bool },
+    Stash {
+        sha: String,
+        path: String,
+        untracked: bool,
+    },
 }
 
 impl DiffSource {
@@ -134,7 +154,10 @@ impl DiffSource {
     pub fn is_working_tree(&self) -> bool {
         matches!(
             self,
-            DiffSource::Unstaged(_) | DiffSource::Staged(_) | DiffSource::Untracked(_) | DiffSource::Conflict(_)
+            DiffSource::Unstaged(_)
+                | DiffSource::Staged(_)
+                | DiffSource::Untracked(_)
+                | DiffSource::Conflict(_)
         )
     }
 
@@ -145,7 +168,9 @@ impl DiffSource {
             | DiffSource::Staged(path)
             | DiffSource::Untracked(path)
             | DiffSource::Conflict(path) => path,
-            DiffSource::Commit { path, .. } | DiffSource::Refs { path, .. } | DiffSource::Stash { path, .. } => path,
+            DiffSource::Commit { path, .. }
+            | DiffSource::Refs { path, .. }
+            | DiffSource::Stash { path, .. } => path,
         }
     }
 }
@@ -171,18 +196,26 @@ fn command(args: &[&str]) -> Command {
 /// user's, a hook or commit signing, say, could make them fail.
 #[cfg(test)]
 pub fn without_user_config(command: &mut Command) {
-    command.env("GIT_CONFIG_GLOBAL", "/dev/null").env("GIT_CONFIG_NOSYSTEM", "1");
+    command
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_NOSYSTEM", "1");
 }
 
 /// Runs a command to the end: what it printed, or why it failed.
 fn output(command: &mut Command) -> Result<String> {
-    let output = command.output().map_err(|e| anyhow!("could not run git: {e}"))?;
+    let output = command
+        .output()
+        .map_err(|e| anyhow!("could not run git: {e}"))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
         // Most failures explain themselves on stderr, but `git commit` reports
         // things like "nothing to commit" on stdout.
-        let text = if stderr.trim().is_empty() { stdout } else { stderr };
+        let text = if stderr.trim().is_empty() {
+            stdout
+        } else {
+            stderr
+        };
         bail!("{}", text.trim());
     }
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
@@ -230,7 +263,12 @@ pub fn set_global_config(key: &str, value: Option<&str>) -> Result<()> {
     set_config(command, "--global", key, value)
 }
 
-fn set_config(command: impl Fn(&[&str]) -> Command, scope: &str, key: &str, value: Option<&str>) -> Result<()> {
+fn set_config(
+    command: impl Fn(&[&str]) -> Command,
+    scope: &str,
+    key: &str,
+    value: Option<&str>,
+) -> Result<()> {
     match value {
         Some(value) => output(&mut command(&["config", scope, key, value])).map(|_| ()),
         // Removing one that isn't there fails, which is fine.
@@ -271,7 +309,10 @@ fn no_prompts(repo: &Repo, command: &mut Command) {
     command
         .stdin(Stdio::null())
         .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GIT_SSH_COMMAND", format!("{} -o BatchMode=yes", ssh_command(repo)));
+        .env(
+            "GIT_SSH_COMMAND",
+            format!("{} -o BatchMode=yes", ssh_command(repo)),
+        );
 }
 
 // ---------------------------------------------------------------- fetching
@@ -279,7 +320,14 @@ fn no_prompts(repo: &Repo, command: &mut Command) {
 /// The remotes that local branches track, each once: what the background
 /// fetch keeps up to date. Others are fetched by hand.
 pub fn tracked_remotes(repo: &Repo) -> Vec<String> {
-    let text = try_run(repo, &["for-each-ref", "--format=%(upstream:remotename)", "refs/heads"]);
+    let text = try_run(
+        repo,
+        &[
+            "for-each-ref",
+            "--format=%(upstream:remotename)",
+            "refs/heads",
+        ],
+    );
     parse_tracked_remotes(&text.unwrap_or_default())
 }
 
@@ -287,7 +335,11 @@ pub fn tracked_remotes(repo: &Repo) -> Vec<String> {
 /// branch has `.`, neither of which is a remote.
 fn parse_tracked_remotes(text: &str) -> Vec<String> {
     let mut remotes: Vec<String> = Vec::new();
-    for remote in text.lines().map(str::trim).filter(|remote| !remote.is_empty() && *remote != ".") {
+    for remote in text
+        .lines()
+        .map(str::trim)
+        .filter(|remote| !remote.is_empty() && *remote != ".")
+    {
         if !remotes.iter().any(|known| known == remote) {
             remotes.push(remote.to_string());
         }
@@ -314,7 +366,10 @@ pub fn background_fetch(repo: &Repo, remotes: &[String]) -> Result<()> {
     // Its first line is enough for the Branches title.
     output(&mut fetch).map(|_| ()).map_err(|error| {
         let error = error.to_string();
-        anyhow!("{}", error.lines().next().unwrap_or("git fetch failed").trim())
+        anyhow!(
+            "{}",
+            error.lines().next().unwrap_or("git fetch failed").trim()
+        )
     })
 }
 
@@ -330,13 +385,16 @@ fn ssh_command(repo: &Repo) -> String {
 // ---------------------------------------------------------------- staging
 
 pub fn status(repo: &Repo) -> Result<Status> {
-    let text = run(repo, &[
-        "status",
-        "--porcelain=v1",
-        "-z",
-        "--no-renames",
-        "--untracked-files=all",
-    ])?;
+    let text = run(
+        repo,
+        &[
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--no-renames",
+            "--untracked-files=all",
+        ],
+    )?;
     Ok(parse_status(&text))
 }
 
@@ -350,15 +408,31 @@ fn parse_status(text: &str) -> Status {
         let path = entry[3..].to_string();
         let conflicted = x == 'U' || y == 'U' || (x == y && (x == 'A' || x == 'D'));
         if conflicted {
-            status.conflicted.push(FileEntry { status: 'U', path, ..Default::default() });
+            status.conflicted.push(FileEntry {
+                status: 'U',
+                path,
+                ..Default::default()
+            });
         } else if x == '?' {
-            status.unstaged.push(FileEntry { status: '?', path, ..Default::default() });
+            status.unstaged.push(FileEntry {
+                status: '?',
+                path,
+                ..Default::default()
+            });
         } else if x != '!' {
             if x != ' ' {
-                status.staged.push(FileEntry { status: x, path: path.clone(), ..Default::default() });
+                status.staged.push(FileEntry {
+                    status: x,
+                    path: path.clone(),
+                    ..Default::default()
+                });
             }
             if y != ' ' {
-                status.unstaged.push(FileEntry { status: y, path, ..Default::default() });
+                status.unstaged.push(FileEntry {
+                    status: y,
+                    path,
+                    ..Default::default()
+                });
             }
         }
     }
@@ -374,7 +448,15 @@ pub fn stage(repo: &Repo, path: &str) -> Result<()> {
 /// against the index first, so one made before the file changed fails, and
 /// changes nothing.
 pub fn apply_to_index(repo: &Repo, patch: &str, reverse: bool) -> Result<()> {
-    apply(repo, patch, if reverse { &["--cached", "-R"] } else { &["--cached"] })
+    apply(
+        repo,
+        patch,
+        if reverse {
+            &["--cached", "-R"]
+        } else {
+            &["--cached"]
+        },
+    )
 }
 
 /// Takes a patch back out of the working tree, leaving the index as it is:
@@ -398,8 +480,13 @@ fn apply(repo: &Repo, patch: &str, options: &[&str]) -> Result<()> {
 fn run_with_input(repo: &Repo, args: &[&str], input: &[u8]) -> Result<Vec<u8>> {
     use std::io::Write;
     let mut command = repo.command(args);
-    command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = command.spawn().map_err(|e| anyhow!("could not run git: {e}"))?;
+    command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command
+        .spawn()
+        .map_err(|e| anyhow!("could not run git: {e}"))?;
     let mut stdin = child.stdin.take();
     // Written on a thread of its own, so a git that prints while it reads
     // can't block on a full pipe while gclic blocks on writing.
@@ -428,9 +515,17 @@ pub fn index_entries(repo: &Repo, paths: &[String]) -> Result<String> {
 /// path's entries go, then the saved ones come back.
 pub fn set_index_entries(repo: &Repo, paths: &[String], entries: &str) -> Result<()> {
     let listed: String = paths.iter().map(|path| format!("{path}\0")).collect();
-    run_with_input(repo, &["update-index", "-z", "--force-remove", "--stdin"], listed.as_bytes())?;
+    run_with_input(
+        repo,
+        &["update-index", "-z", "--force-remove", "--stdin"],
+        listed.as_bytes(),
+    )?;
     if !entries.is_empty() {
-        run_with_input(repo, &["update-index", "-z", "--index-info"], entries.as_bytes())?;
+        run_with_input(
+            repo,
+            &["update-index", "-z", "--index-info"],
+            entries.as_bytes(),
+        )?;
     }
     Ok(())
 }
@@ -439,14 +534,22 @@ pub fn set_index_entries(repo: &Repo, paths: &[String], entries: &str) -> Result
 /// back: each one's blob id, or None where there's no file. All in one git
 /// call, as one per file adds up when discarding many.
 pub fn save_files(repo: &Repo, paths: &[String]) -> Result<Vec<Option<String>>> {
-    let present: Vec<&String> = paths.iter().filter(|path| repo.file(path).is_file()).collect();
+    let present: Vec<&String> = paths
+        .iter()
+        .filter(|path| repo.file(path).is_file())
+        .collect();
     // Git reads the paths a line each, which a name with a newline in it
     // would break, so those few go one at a time.
-    let (listed, odd): (Vec<&String>, Vec<&String>) = present.into_iter().partition(|path| !path.contains('\n'));
+    let (listed, odd): (Vec<&String>, Vec<&String>) =
+        present.into_iter().partition(|path| !path.contains('\n'));
     let mut blobs = std::collections::HashMap::new();
     if !listed.is_empty() {
         let input: String = listed.iter().map(|path| format!("{path}\n")).collect();
-        let printed = run_with_input(repo, &["hash-object", "-w", "--no-filters", "--stdin-paths"], input.as_bytes())?;
+        let printed = run_with_input(
+            repo,
+            &["hash-object", "-w", "--no-filters", "--stdin-paths"],
+            input.as_bytes(),
+        )?;
         let printed = String::from_utf8_lossy(&printed);
         if printed.lines().count() != listed.len() {
             bail!("git hash-object didn't save every file");
@@ -454,7 +557,12 @@ pub fn save_files(repo: &Repo, paths: &[String]) -> Result<Vec<Option<String>>> 
         blobs.extend(listed.into_iter().zip(printed.lines().map(str::to_string)));
     }
     for path in odd {
-        blobs.insert(path, run(repo, &["hash-object", "-w", "--no-filters", "--", path])?.trim().to_string());
+        blobs.insert(
+            path,
+            run(repo, &["hash-object", "-w", "--no-filters", "--", path])?
+                .trim()
+                .to_string(),
+        );
     }
     Ok(paths.iter().map(|path| blobs.get(path).cloned()).collect())
 }
@@ -527,14 +635,21 @@ pub fn diff(repo: &Repo, source: &DiffSource, whole: bool) -> Result<String> {
     const EXT: &str = "--no-ext-diff";
     const COLOR: &str = "--no-color";
     // So much context that a hunk takes in the whole file.
-    let context = if whole { "--unified=1000000" } else { "--unified=3" };
+    let context = if whole {
+        "--unified=1000000"
+    } else {
+        "--unified=3"
+    };
     match source {
         DiffSource::Unstaged(path) => run(repo, &["diff", EXT, COLOR, context, "--", path]),
-        DiffSource::Staged(path) => run(repo, &["diff", EXT, COLOR, context, "--cached", "--", path]),
+        DiffSource::Staged(path) => {
+            run(repo, &["diff", EXT, COLOR, context, "--cached", "--", path])
+        }
         DiffSource::Untracked(path) => {
             // --no-index exits with 1 when the files differ, which here is
             // always, so the exit code can't be treated as failure.
-            let output = repo.command(&["diff", EXT, COLOR, "--no-index", "--", "/dev/null", path])
+            let output = repo
+                .command(&["diff", EXT, COLOR, "--no-index", "--", "/dev/null", path])
                 .output()
                 .map_err(|e| anyhow!("could not run git: {e}"))?;
             Ok(String::from_utf8_lossy(&output.stdout).into_owned())
@@ -544,19 +659,28 @@ pub fn diff(repo: &Repo, source: &DiffSource, whole: bool) -> Result<String> {
         DiffSource::Conflict(path) => Ok(std::fs::read(repo.file(path))
             .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
             .unwrap_or_default()),
-        DiffSource::Commit { sha, path } => run(repo, &[
-            "show",
-            EXT,
-            COLOR,
-            "--format=",
-            "--diff-merges=first-parent",
-            context,
+        DiffSource::Commit { sha, path } => run(
+            repo,
+            &[
+                "show",
+                EXT,
+                COLOR,
+                "--format=",
+                "--diff-merges=first-parent",
+                context,
+                sha,
+                "--",
+                path,
+            ],
+        ),
+        DiffSource::Refs { a, b, path } => {
+            run(repo, &["diff", EXT, COLOR, context, a, b, "--", path])
+        }
+        DiffSource::Stash {
             sha,
-            "--",
             path,
-        ]),
-        DiffSource::Refs { a, b, path } => run(repo, &["diff", EXT, COLOR, context, a, b, "--", path]),
-        DiffSource::Stash { sha, path, untracked } => {
+            untracked,
+        } => {
             let (old, new) = stash_sides(sha, *untracked);
             run(repo, &["diff", EXT, COLOR, context, &old, &new, "--", path])
         }
@@ -590,12 +714,18 @@ pub fn file_versions(repo: &Repo, source: &DiffSource) -> (Option<String>, Optio
         // Both sides are lines of the file as it is, markers and all.
         DiffSource::Conflict(_) => (Version::OnDisk, Version::OnDisk),
         // The diff is against the first parent, which `^` names.
-        DiffSource::Commit { sha, .. } => (Version::At(format!("{sha}^")), Version::At(sha.clone())),
+        DiffSource::Commit { sha, .. } => {
+            (Version::At(format!("{sha}^")), Version::At(sha.clone()))
+        }
         DiffSource::Refs { a, b, .. } => (Version::At(a.clone()), Version::At(b.clone())),
         DiffSource::Stash { sha, untracked, .. } => {
             let (from, to) = stash_sides(sha, *untracked);
             // Untracked files come from nothing, which has no file to read.
-            let from = if from == EMPTY_TREE { Version::Missing } else { Version::At(from) };
+            let from = if from == EMPTY_TREE {
+                Version::Missing
+            } else {
+                Version::At(from)
+            };
             (from, Version::At(to))
         }
     };
@@ -646,7 +776,12 @@ fn parse_name_status(text: &str) -> Vec<FileEntry> {
 /// children come before their parents, which the graph layout relies on.
 pub fn log(repo: &Repo, refs: &[String], limit: usize) -> Result<Vec<Commit>> {
     let limit = format!("-n{limit}");
-    let mut args = vec!["log", "--topo-order", limit.as_str(), "--format=%H%x00%P%x00%an%x00%s"];
+    let mut args = vec![
+        "log",
+        "--topo-order",
+        limit.as_str(),
+        "--format=%H%x00%P%x00%an%x00%s",
+    ];
     args.extend(refs.iter().map(String::as_str));
     args.push("--");
     Ok(parse_log(&run(repo, &args)?))
@@ -658,7 +793,11 @@ fn parse_log(text: &str) -> Vec<Commit> {
             let mut fields = line.splitn(4, '\0');
             Some(Commit {
                 sha: fields.next()?.to_string(),
-                parents: fields.next()?.split_whitespace().map(str::to_string).collect(),
+                parents: fields
+                    .next()?
+                    .split_whitespace()
+                    .map(str::to_string)
+                    .collect(),
                 author: fields.next()?.to_string(),
                 subject: fields.next()?.to_string(),
             })
@@ -679,7 +818,11 @@ pub fn unpushed(repo: &Repo, refs: &[String]) -> Result<HashSet<String>> {
 /// the checked-out branch, whose commit is among the refs, or a commit itself.
 pub fn refs_fingerprint(repo: &Repo) -> String {
     let refs = try_run(repo, &["for-each-ref", "--format=%(objectname) %(refname)"]);
-    format!("{}\n{}", refs.unwrap_or_default(), read_head(repo).unwrap_or_default())
+    format!(
+        "{}\n{}",
+        refs.unwrap_or_default(),
+        read_head(repo).unwrap_or_default()
+    )
 }
 
 /// What HEAD holds: `ref: refs/heads/main`, or a commit's sha when detached.
@@ -699,7 +842,10 @@ pub fn operation_in_progress(repo: &Repo) -> Option<&'static str> {
         ("CHERRY_PICK_HEAD", "cherry-picking"),
         ("REVERT_HEAD", "reverting"),
     ];
-    operations.iter().find(|(file, _)| dir.join(file).exists()).map(|(_, name)| *name)
+    operations
+        .iter()
+        .find(|(file, _)| dir.join(file).exists())
+        .map(|(_, name)| *name)
 }
 
 /// Where a branch is checked out, if that's another worktree than this one:
@@ -707,7 +853,9 @@ pub fn operation_in_progress(repo: &Repo) -> Option<&'static str> {
 /// whole path. None for this worktree.
 pub fn other_worktree(repo: &Repo, path: &str) -> Option<String> {
     let here = repo.root.canonicalize().ok()?;
-    let there = Path::new(path).canonicalize().unwrap_or_else(|_| PathBuf::from(path));
+    let there = Path::new(path)
+        .canonicalize()
+        .unwrap_or_else(|_| PathBuf::from(path));
     if there == here {
         return None;
     }
@@ -719,7 +867,9 @@ pub fn other_worktree(repo: &Repo, path: &str) -> Option<String> {
 
 /// The checked-out branch. None on a detached HEAD.
 pub fn current_branch(repo: &Repo) -> Option<String> {
-    read_head(repo)?.strip_prefix("ref: refs/heads/").map(str::to_string)
+    read_head(repo)?
+        .strip_prefix("ref: refs/heads/")
+        .map(str::to_string)
 }
 
 /// The default graph view: the current branch and its remote counterpart,
@@ -730,7 +880,10 @@ pub fn default_refs(repo: &Repo) -> Vec<String> {
     let Some(branch) = current_branch(repo) else {
         return vec!["HEAD".to_string()]; // detached HEAD
     };
-    let upstream = try_run(repo, &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
+    let upstream = try_run(
+        repo,
+        &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+    );
     let remote = upstream.unwrap_or_else(|| format!("origin/{branch}"));
     vec![branch, remote]
 }
@@ -751,7 +904,9 @@ pub fn resolve_all(repo: &Repo, refs: &[String]) -> Vec<Option<String>> {
             }
         }
     }
-    refs.iter().map(|reference| resolve(repo, reference)).collect()
+    refs.iter()
+        .map(|reference| resolve(repo, reference))
+        .collect()
 }
 
 /// A sha as people write it: its first seven characters.
@@ -790,7 +945,16 @@ pub fn commit_label(repo: &Repo, sha: &str) -> Option<String> {
 }
 
 pub fn commit_details(repo: &Repo, sha: &str) -> Result<CommitDetails> {
-    let text = run(repo, &["show", "-s", "--date=iso", "--format=%H%n%an <%ae>%n%ad%n%B", sha])?;
+    let text = run(
+        repo,
+        &[
+            "show",
+            "-s",
+            "--date=iso",
+            "--format=%H%n%an <%ae>%n%ad%n%B",
+            sha,
+        ],
+    )?;
     let mut lines = text.splitn(4, '\n');
     Ok(CommitDetails {
         sha: lines.next().unwrap_or("").to_string(),
@@ -801,7 +965,14 @@ pub fn commit_details(repo: &Repo, sha: &str) -> Result<CommitDetails> {
 }
 
 pub fn commit_files(repo: &Repo, sha: &str) -> Result<Vec<FileEntry>> {
-    let show = ["show", "--format=", "--no-renames", "--diff-merges=first-parent", "-z", sha];
+    let show = [
+        "show",
+        "--format=",
+        "--no-renames",
+        "--diff-merges=first-parent",
+        "-z",
+        sha,
+    ];
     files_with_lines(repo, &show)
 }
 
@@ -827,7 +998,9 @@ fn add_lines(files: &mut [FileEntry], numstat: &str) {
     let mut counts = std::collections::HashMap::new();
     for entry in numstat.split('\0').filter(|entry| !entry.is_empty()) {
         let mut fields = entry.splitn(3, '\t');
-        let (Some(added), Some(removed), Some(path)) = (fields.next(), fields.next(), fields.next()) else {
+        let (Some(added), Some(removed), Some(path)) =
+            (fields.next(), fields.next(), fields.next())
+        else {
             continue;
         };
         let lines = match (added.parse(), removed.parse()) {
@@ -865,7 +1038,10 @@ pub struct Stash {
 
 /// The stashes, newest first.
 pub fn stashes(repo: &Repo) -> Result<Vec<Stash>> {
-    Ok(parse_stashes(&run(repo, &["stash", "list", "--format=%H%x00%P%x00%gd%x00%gs%x00%cr"])?))
+    Ok(parse_stashes(&run(
+        repo,
+        &["stash", "list", "--format=%H%x00%P%x00%gd%x00%gs%x00%cr"],
+    )?))
 }
 
 fn parse_stashes(text: &str) -> Vec<Stash> {
@@ -894,7 +1070,10 @@ pub fn stash_files(repo: &Repo, stash: &Stash) -> Result<Vec<FileEntry>> {
     if stash.has_untracked {
         // Its untracked files, as added to nothing.
         let untracked = format!("{}^3", stash.sha);
-        let mut added = files_with_lines(repo, &["diff", "--no-renames", "-z", EMPTY_TREE, &untracked, "--"])?;
+        let mut added = files_with_lines(
+            repo,
+            &["diff", "--no-renames", "-z", EMPTY_TREE, &untracked, "--"],
+        )?;
         for file in &mut added {
             file.status = '?';
         }
@@ -921,19 +1100,23 @@ pub fn stash_drop(repo: &Repo, stash: &Stash) -> Result<()> {
 /// Found by its sha, as names shift when another stash comes or goes.
 fn stash_name(repo: &Repo, stash: &Stash) -> Result<String> {
     let now = stashes(repo)?.into_iter().find(|now| now.sha == stash.sha);
-    now.map(|now| now.name).ok_or_else(|| anyhow!("{} is gone: it was dropped or popped", stash.name))
+    now.map(|now| now.name)
+        .ok_or_else(|| anyhow!("{} is gone: it was dropped or popped", stash.name))
 }
 
 // --------------------------------------------------------------- branches
 
 /// Local branches first, then remote ones.
 pub fn branches(repo: &Repo) -> Result<Vec<Branch>> {
-    let text = run(repo, &[
-        "for-each-ref",
-        "--format=%(refname)%00%(refname:short)%00%(refname:lstrip=3)%00%(upstream:short)%00%(upstream:track,nobracket)%00%(worktreepath)",
-        "refs/heads",
-        "refs/remotes",
-    ])?;
+    let text = run(
+        repo,
+        &[
+            "for-each-ref",
+            "--format=%(refname)%00%(refname:short)%00%(refname:lstrip=3)%00%(upstream:short)%00%(upstream:track,nobracket)%00%(worktreepath)",
+            "refs/heads",
+            "refs/remotes",
+        ],
+    )?;
     Ok(parse_branches(&text))
 }
 
@@ -941,7 +1124,9 @@ fn parse_branches(text: &str) -> Vec<Branch> {
     let mut branches = Vec::new();
     for line in text.lines() {
         let fields: Vec<&str> = line.split('\0').collect();
-        let [full, short, without_remote, upstream, track, worktree] = fields[..] else { continue };
+        let [full, short, without_remote, upstream, track, worktree] = fields[..] else {
+            continue;
+        };
         if full.starts_with("refs/remotes/") {
             // `origin/HEAD` is only a pointer to the remote's default branch.
             if without_remote != "HEAD" {
@@ -960,7 +1145,11 @@ fn parse_branches(text: &str) -> Vec<Branch> {
                 local_name: short.to_string(),
                 is_remote: false,
                 upstream: (!upstream.is_empty()).then(|| upstream.to_string()),
-                ahead_behind: if upstream.is_empty() { None } else { parse_track(track) },
+                ahead_behind: if upstream.is_empty() {
+                    None
+                } else {
+                    parse_track(track)
+                },
                 worktree: (!worktree.is_empty()).then(|| worktree.to_string()),
             });
         }
@@ -988,21 +1177,32 @@ fn parse_track(track: &str) -> Option<(usize, usize)> {
 /// pointer to one of its branches, is left out, as in `branches`.
 pub fn branches_containing(repo: &Repo, sha: &str) -> Option<Vec<String>> {
     let commit = resolve(repo, sha)?;
-    let text = try_run(repo, &[
-        "for-each-ref",
-        "--format=%(refname)%00%(refname:short)",
-        "--contains",
-        commit.as_str(),
-        "refs/heads",
-        "refs/remotes",
-    ])?;
+    let text = try_run(
+        repo,
+        &[
+            "for-each-ref",
+            "--format=%(refname)%00%(refname:short)",
+            "--contains",
+            commit.as_str(),
+            "refs/heads",
+            "refs/remotes",
+        ],
+    )?;
     let is_remote_head = |full: &str| full.starts_with("refs/remotes/") && full.ends_with("/HEAD");
     let names = text.lines().filter_map(|line| line.split_once('\0'));
-    Some(names.filter(|(full, _)| !is_remote_head(full)).map(|(_, short)| short.to_string()).collect())
+    Some(
+        names
+            .filter(|(full, _)| !is_remote_head(full))
+            .map(|(_, short)| short.to_string())
+            .collect(),
+    )
 }
 
 pub fn tags(repo: &Repo) -> Result<Vec<String>> {
-    let text = run(repo, &["for-each-ref", "--format=%(refname:short)", "refs/tags"])?;
+    let text = run(
+        repo,
+        &["for-each-ref", "--format=%(refname:short)", "refs/tags"],
+    )?;
     Ok(text.lines().map(str::to_string).collect())
 }
 
@@ -1020,8 +1220,13 @@ pub fn switch_track(repo: &Repo, remote_name: &str) -> Result<()> {
 /// How many commits `a` has that `b` doesn't, and the other way around.
 pub fn ahead_behind(repo: &Repo, a: &str, b: &str) -> Result<(usize, usize)> {
     let range = format!("{a}...{b}");
-    let text = run(repo, &["rev-list", "--left-right", "--count", range.as_str(), "--"])?;
-    let mut counts = text.split_whitespace().map(|n| n.parse::<usize>().unwrap_or(0));
+    let text = run(
+        repo,
+        &["rev-list", "--left-right", "--count", range.as_str(), "--"],
+    )?;
+    let mut counts = text
+        .split_whitespace()
+        .map(|n| n.parse::<usize>().unwrap_or(0));
     Ok((counts.next().unwrap_or(0), counts.next().unwrap_or(0)))
 }
 
@@ -1042,16 +1247,27 @@ mod tests {
     use crate::test_repo::TestRepo;
 
     fn entry(status: char, path: &str) -> FileEntry {
-        FileEntry { status, path: path.to_string(), ..Default::default() }
+        FileEntry {
+            status,
+            path: path.to_string(),
+            ..Default::default()
+        }
     }
 
     #[test]
     fn status_splits_entries_into_staged_and_unstaged() {
         let status = parse_status("M  staged.rs\0 M unstaged.rs\0MM both.rs\0?? new file.rs\0");
-        assert_eq!(status.staged, vec![entry('M', "staged.rs"), entry('M', "both.rs")]);
+        assert_eq!(
+            status.staged,
+            vec![entry('M', "staged.rs"), entry('M', "both.rs")]
+        );
         assert_eq!(
             status.unstaged,
-            vec![entry('M', "unstaged.rs"), entry('M', "both.rs"), entry('?', "new file.rs")]
+            vec![
+                entry('M', "unstaged.rs"),
+                entry('M', "both.rs"),
+                entry('?', "new file.rs")
+            ]
         );
     }
 
@@ -1069,7 +1285,10 @@ mod tests {
     fn status_keeps_merge_conflicts_apart() {
         let status = parse_status("UU a\0AA b\0DD c\0 M d\0");
         assert!(status.staged.is_empty());
-        assert_eq!(status.conflicted, vec![entry('U', "a"), entry('U', "b"), entry('U', "c")]);
+        assert_eq!(
+            status.conflicted,
+            vec![entry('U', "a"), entry('U', "b"), entry('U', "c")]
+        );
         assert_eq!(status.unstaged, vec![entry('M', "d")]);
     }
 
@@ -1085,8 +1304,14 @@ mod tests {
                     s2\0base2 index2\0stash@{1}\0On dev: try this\x003 days ago\n";
         let stashes = parse_stashes(text);
         assert_eq!(stashes.len(), 2);
-        assert_eq!((stashes[0].base.as_str(), stashes[0].has_untracked), ("base1", true));
-        assert_eq!((stashes[1].name.as_str(), stashes[1].has_untracked), ("stash@{1}", false));
+        assert_eq!(
+            (stashes[0].base.as_str(), stashes[0].has_untracked),
+            ("base1", true)
+        );
+        assert_eq!(
+            (stashes[1].name.as_str(), stashes[1].has_untracked),
+            ("stash@{1}", false)
+        );
         assert_eq!(stashes[1].message, "On dev: try this");
         assert_eq!(stashes[0].age, "2 hours ago");
     }
@@ -1141,9 +1366,15 @@ mod tests {
     fn a_repo_is_found_from_any_folder_inside_it() {
         let made = TestRepo::new();
         made.write("deep/er/file", "");
-        assert_eq!(Repo::discover(&made.file("deep/er")).as_ref(), Some(&made.repo));
+        assert_eq!(
+            Repo::discover(&made.file("deep/er")).as_ref(),
+            Some(&made.repo)
+        );
         assert!(made.git_dir.ends_with(".git"));
-        assert_eq!(Repo::discover(&std::env::temp_dir().join("gclic-no-such-folder")), None);
+        assert_eq!(
+            Repo::discover(&std::env::temp_dir().join("gclic-no-such-folder")),
+            None
+        );
     }
 
     #[test]
@@ -1157,7 +1388,11 @@ mod tests {
     #[test]
     fn resolving_several_refs_at_once_matches_one_at_a_time() {
         let repo = TestRepo::with_history();
-        let refs = ["HEAD".to_string(), "HEAD~1".to_string(), "feature".to_string()];
+        let refs = [
+            "HEAD".to_string(),
+            "HEAD~1".to_string(),
+            "feature".to_string(),
+        ];
         let expected: Vec<_> = refs.iter().map(|r| resolve(&repo, r)).collect();
         assert!(expected.iter().all(Option::is_some));
         assert_eq!(resolve_all(&repo, &refs), expected);
@@ -1167,7 +1402,11 @@ mod tests {
     #[test]
     fn a_missing_ref_resolves_to_nothing_without_losing_the_others() {
         let repo = TestRepo::with_history();
-        let refs = ["HEAD".to_string(), "no-such-branch-here".to_string(), "-x".to_string()];
+        let refs = [
+            "HEAD".to_string(),
+            "no-such-branch-here".to_string(),
+            "-x".to_string(),
+        ];
         let shas = resolve_all(&repo, &refs);
         assert_eq!(shas[0], Some(repo.sha("HEAD")));
         assert_eq!(shas[1..], [None, None]);
@@ -1178,12 +1417,17 @@ mod tests {
         // The first commit's src/main.rs was edited later, so a diff against
         // it has changes, and unchanged lines that only a whole-file diff shows.
         let repo = TestRepo::with_history();
-        let source = DiffSource::Refs { a: repo.sha("main~2"), b: "HEAD".to_string(), path: "src/main.rs".to_string() };
+        let source = DiffSource::Refs {
+            a: repo.sha("main~2"),
+            b: "HEAD".to_string(),
+            path: "src/main.rs".to_string(),
+        };
         let changes = diff(&repo, &source, false).unwrap();
         let whole = diff(&repo, &source, true).unwrap();
         let lines_now = repo.read("src/main.rs").unwrap().lines().count();
         let shown = |diff: &str| {
-            let new_side = |l: &&str| l.starts_with(' ') || (l.starts_with('+') && !l.starts_with("+++"));
+            let new_side =
+                |l: &&str| l.starts_with(' ') || (l.starts_with('+') && !l.starts_with("+++"));
             diff.lines().filter(new_side).count()
         };
         assert_eq!(shown(&whole), lines_now);
@@ -1194,9 +1438,15 @@ mod tests {
     fn both_versions_of_a_file_come_back() {
         // The second commit changes src/main.rs.
         let repo = TestRepo::with_history();
-        let source = DiffSource::Commit { sha: repo.sha("main~1"), path: "src/main.rs".to_string() };
+        let source = DiffSource::Commit {
+            sha: repo.sha("main~1"),
+            path: "src/main.rs".to_string(),
+        };
         let (old, new) = file_versions(&repo, &source);
-        assert_eq!(old.as_deref(), Some("fn main() {\n    println!(\"one\");\n}\n"));
+        assert_eq!(
+            old.as_deref(),
+            Some("fn main() {\n    println!(\"one\");\n}\n")
+        );
         assert!(new.is_some_and(|text| text.contains("let n = 2;")));
     }
 
@@ -1206,14 +1456,30 @@ mod tests {
         let files = commit_files(&repo, "HEAD").unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].path, "README.md");
-        assert_eq!(files[0].lines, Lines::Counted { added: 2, removed: 0 });
+        assert_eq!(
+            files[0].lines,
+            Lines::Counted {
+                added: 2,
+                removed: 0
+            }
+        );
     }
 
     #[test]
     fn numstat_counts_lines_and_marks_binary_files() {
-        let mut files = vec![entry('M', "a.rs"), entry('A', "logo.png"), entry('M', "b.rs")];
+        let mut files = vec![
+            entry('M', "a.rs"),
+            entry('A', "logo.png"),
+            entry('M', "b.rs"),
+        ];
         add_lines(&mut files, "3\t1\ta.rs\0-\t-\tlogo.png\0");
-        assert_eq!(files[0].lines, Lines::Counted { added: 3, removed: 1 });
+        assert_eq!(
+            files[0].lines,
+            Lines::Counted {
+                added: 3,
+                removed: 1
+            }
+        );
         assert_eq!(files[1].lines, Lines::Binary);
         assert_eq!(files[2].lines, Lines::Unknown);
     }

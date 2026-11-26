@@ -16,7 +16,10 @@ pub struct DetailsPane {
 
 impl DetailsPane {
     pub fn new(details: CommitDetails) -> DetailsPane {
-        DetailsPane { details, scroll: ui::Scroll::default() }
+        DetailsPane {
+            details,
+            scroll: ui::Scroll::default(),
+        }
     }
 
     pub fn sha(&self) -> &str {
@@ -30,18 +33,33 @@ impl DetailsPane {
     fn lines(details: &CommitDetails) -> Vec<Line<'_>> {
         let label = Style::default().fg(ui::DIM);
         let mut lines = vec![
-            Line::from(vec![Span::styled("sha    ", label), Span::raw(details.sha.as_str())]),
-            Line::from(vec![Span::styled("author ", label), Span::raw(details.author.as_str())]),
-            Line::from(vec![Span::styled("date   ", label), Span::raw(details.date.as_str())]),
+            Line::from(vec![
+                Span::styled("sha    ", label),
+                Span::raw(details.sha.as_str()),
+            ]),
+            Line::from(vec![
+                Span::styled("author ", label),
+                Span::raw(details.author.as_str()),
+            ]),
+            Line::from(vec![
+                Span::styled("date   ", label),
+                Span::raw(details.date.as_str()),
+            ]),
             Line::default(),
         ];
         // Terminals can't draw tabs in a cell, and the widget would drop them.
-        lines.extend(details.message.lines().map(|line| Line::raw(line.replace('\t', "    "))));
+        lines.extend(
+            details
+                .message
+                .lines()
+                .map(|line| Line::raw(line.replace('\t', "    "))),
+        );
         lines
     }
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
-        let paragraph = Paragraph::new(DetailsPane::lines(&self.details)).wrap(Wrap { trim: false });
+        let paragraph =
+            Paragraph::new(DetailsPane::lines(&self.details)).wrap(Wrap { trim: false });
         // Borders take a row or column on each side.
         let total = paragraph.line_count(area.width.saturating_sub(2));
         let page = area.height.saturating_sub(2) as usize;
@@ -63,8 +81,8 @@ impl DetailsPane {
 mod tests {
     use super::*;
     use ratatui::Terminal;
-    use ratatui::crossterm::event::KeyCode;
     use ratatui::backend::TestBackend;
+    use ratatui::crossterm::event::KeyCode;
 
     fn popup(message: &str) -> DetailsPane {
         DetailsPane::new(CommitDetails {
@@ -77,7 +95,9 @@ mod tests {
 
     fn draw(popup: &mut DetailsPane, width: u16, height: u16) {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-        terminal.draw(|frame| popup.render(frame, frame.area(), true)).unwrap();
+        terminal
+            .draw(|frame| popup.render(frame, frame.area(), true))
+            .unwrap();
     }
 
     fn press(popup: &mut DetailsPane, ch: char) {
@@ -106,7 +126,11 @@ mod tests {
         draw(&mut popup, 42, 14);
         press(&mut popup, 'G');
         draw(&mut popup, 42, 14);
-        assert!(popup.scroll.offset() > 4, "scroll was {}", popup.scroll.offset());
+        assert!(
+            popup.scroll.offset() > 4,
+            "scroll was {}",
+            popup.scroll.offset()
+        );
     }
 
     #[test]

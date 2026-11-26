@@ -16,7 +16,10 @@ use std::thread;
 
 enum Job {
     /// What auto-refresh checks: the refs, the files' status, and the open diff.
-    Poll { generation: u64, diff: Option<DiffView> },
+    Poll {
+        generation: u64,
+        diff: Option<DiffView>,
+    },
     /// A diff with its syntax colours.
     Highlight(DiffView),
 }
@@ -31,7 +34,11 @@ pub enum Done {
         diff: Option<(DiffView, Result<String>)>,
     },
     /// `text` is the diff the colours belong to.
-    Highlight { view: DiffView, text: String, colored: Colored },
+    Highlight {
+        view: DiffView,
+        text: String,
+        colored: Colored,
+    },
 }
 
 /// The jobs waiting. A poll goes before any highlighting, and there's at most
@@ -44,7 +51,9 @@ struct Queue {
 
 impl Queue {
     fn next(&mut self) -> Option<Job> {
-        self.poll.take().or_else(|| self.highlights.pop_front().map(Job::Highlight))
+        self.poll
+            .take()
+            .or_else(|| self.highlights.pop_front().map(Job::Highlight))
     }
 }
 
@@ -72,7 +81,9 @@ impl Worker {
     fn with_queue(&self, edit: impl FnOnce(&mut Queue)) {
         let (queue, wake) = &*self.shared;
         // A panic on the thread poisons the lock, but the queue stays usable.
-        let mut queue = queue.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut queue = queue
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         edit(&mut queue);
         wake.notify_one();
     }
@@ -108,12 +119,16 @@ fn work(repo: &Repo, shared: &Shared, sender: &Sender<Done>) {
     loop {
         let job = {
             let (queue, wake) = &**shared;
-            let mut queue = queue.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut queue = queue
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             loop {
                 if let Some(job) = queue.next() {
                     break job;
                 }
-                queue = wake.wait(queue).unwrap_or_else(|poisoned| poisoned.into_inner());
+                queue = wake
+                    .wait(queue)
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
             }
         };
         let Some(done) = run(repo, job) else {
@@ -150,7 +165,11 @@ fn run(repo: &Repo, job: Job) -> Option<Done> {
             let text = git::diff(repo, &view.source, view.whole).ok()?;
             let mut rows = diff::rows_for(&view.source, &text);
             let file_lines = diff::highlight_rows(repo, &mut rows, &view.source);
-            Some(Done::Highlight { view, text, colored: Colored { rows, file_lines } })
+            Some(Done::Highlight {
+                view,
+                text,
+                colored: Colored { rows, file_lines },
+            })
         }
     }
 }
@@ -163,13 +182,22 @@ mod tests {
     use crate::test_repo::TestRepo;
 
     fn file(path: &str) -> DiffView {
-        DiffView { source: DiffSource::Unstaged(path.to_string()), whole: false }
+        DiffView {
+            source: DiffSource::Unstaged(path.to_string()),
+            whole: false,
+        }
     }
 
     #[test]
     fn a_poll_goes_before_waiting_highlights() {
-        let mut queue = Queue { poll: None, highlights: VecDeque::from([file("a")]) };
-        queue.poll = Some(Job::Poll { generation: 1, diff: None });
+        let mut queue = Queue {
+            poll: None,
+            highlights: VecDeque::from([file("a")]),
+        };
+        queue.poll = Some(Job::Poll {
+            generation: 1,
+            diff: None,
+        });
         assert!(matches!(queue.next(), Some(Job::Poll { .. })));
         assert!(matches!(queue.next(), Some(Job::Highlight(view)) if view == file("a")));
         assert!(queue.next().is_none());
@@ -177,7 +205,10 @@ mod tests {
 
     #[test]
     fn new_highlights_replace_the_waiting_ones() {
-        let worker = Worker { shared: Arc::default(), results: mpsc::channel().1 };
+        let worker = Worker {
+            shared: Arc::default(),
+            results: mpsc::channel().1,
+        };
         worker.highlight(vec![file("a"), file("b")]);
         worker.highlight(vec![file("c")]);
         let (queue, _) = &*worker.shared;
@@ -191,8 +222,19 @@ mod tests {
         repo.write("README.md", "polled\n");
         let worker = Worker::start(&repo);
         worker.poll(7, Some(file("README.md")));
-        let done = worker.results.recv_timeout(std::time::Duration::from_secs(10)).unwrap();
-        let Done::Poll { generation, fingerprint, status, diff } = done else { panic!("expected a poll") };
+        let done = worker
+            .results
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .unwrap();
+        let Done::Poll {
+            generation,
+            fingerprint,
+            status,
+            diff,
+        } = done
+        else {
+            panic!("expected a poll")
+        };
         assert_eq!(generation, 7);
         assert_eq!(fingerprint, git::refs_fingerprint(&repo));
         assert_eq!(status.unwrap().unstaged.len(), 1);
@@ -205,13 +247,31 @@ mod tests {
     fn colours_a_diff_in_the_background() {
         // The first commit adds a src/main.rs, which is Rust to colour.
         let repo = TestRepo::with_history();
-        let source = DiffSource::Commit { sha: repo.sha("main~2"), path: "src/main.rs".to_string() };
+        let source = DiffSource::Commit {
+            sha: repo.sha("main~2"),
+            path: "src/main.rs".to_string(),
+        };
         let worker = Worker::start(&repo);
-        worker.highlight(vec![DiffView { source: source.clone(), whole: false }]);
-        let done = worker.results.recv_timeout(std::time::Duration::from_secs(10)).unwrap();
-        let Done::Highlight { view, colored: Colored { rows, .. }, .. } = done else { panic!("expected colours") };
+        worker.highlight(vec![DiffView {
+            source: source.clone(),
+            whole: false,
+        }]);
+        let done = worker
+            .results
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .unwrap();
+        let Done::Highlight {
+            view,
+            colored: Colored { rows, .. },
+            ..
+        } = done
+        else {
+            panic!("expected colours")
+        };
         assert_eq!(view.source, source);
-        let colored = rows.iter().any(|row| matches!(row, Row::Lines { right: Some(cell), .. } if !cell.colors.is_empty()));
+        let colored = rows.iter().any(
+            |row| matches!(row, Row::Lines { right: Some(cell), .. } if !cell.colors.is_empty()),
+        );
         assert!(colored);
     }
 }

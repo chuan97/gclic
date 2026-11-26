@@ -94,20 +94,33 @@ impl Picker {
     }
 
     pub fn multi(title: &str, items: Vec<String>, ticked: Vec<String>) -> Picker {
-        Picker { multi: true, ticked, ..Picker::single(title, items) }
+        Picker {
+            multi: true,
+            ticked,
+            ..Picker::single(title, items)
+        }
     }
 
     pub fn with_free_text(title: &str, items: Vec<String>) -> Picker {
-        Picker { free_text: true, ..Picker::single(title, items) }
+        Picker {
+            free_text: true,
+            ..Picker::single(title, items)
+        }
     }
 
     pub fn with_hints(self, hints: &[(&'static str, &'static str)]) -> Picker {
-        Picker { hints: hints.to_vec(), ..self }
+        Picker {
+            hints: hints.to_vec(),
+            ..self
+        }
     }
 
     /// Shows items as paths, the last name in full and the folders before it dimmed.
     pub fn with_dimmed_folders(self) -> Picker {
-        Picker { dim_folders: true, ..self }
+        Picker {
+            dim_folders: true,
+            ..self
+        }
     }
 
     pub fn accepts_free_text(&self) -> bool {
@@ -153,7 +166,10 @@ impl Picker {
 
     /// The items passing the filter, in display order.
     pub fn matched_items(&self) -> Vec<&str> {
-        self.matches.iter().map(|&i| self.items[i].as_str()).collect()
+        self.matches
+            .iter()
+            .map(|&i| self.items[i].as_str())
+            .collect()
     }
 
     /// The position of the cursor in `matched_items`.
@@ -182,7 +198,9 @@ impl Picker {
     fn update_matches(&mut self) {
         self.cursor = ui::Cursor::default();
         if let Some(only) = &self.only {
-            self.matches = (0..self.items.len()).filter(|&i| only.contains(&self.items[i])).collect();
+            self.matches = (0..self.items.len())
+                .filter(|&i| only.contains(&self.items[i]))
+                .collect();
             return;
         }
         let mut scored: Vec<(i32, usize)> = self
@@ -277,14 +295,19 @@ impl Picker {
     }
 
     fn untick_all_matches(&mut self) {
-        let shown: Vec<&String> = self.matches.iter().map(|&index| &self.items[index]).collect();
+        let shown: Vec<&String> = self
+            .matches
+            .iter()
+            .map(|&index| &self.items[index])
+            .collect();
         self.ticked.retain(|item| !shown.contains(&item));
     }
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect) {
         let popup = ui::centered(area, 60, 20);
         frame.render_widget(Clear, popup);
-        let block = ui::panel(self.title.clone(), true).title_bottom(ui::key_hints(&self.shown_hints(), None));
+        let block = ui::panel(self.title.clone(), true)
+            .title_bottom(ui::key_hints(&self.shown_hints(), None));
         let inner = block.inner(popup);
         frame.render_widget(block, popup);
         if inner.height == 0 {
@@ -292,14 +315,26 @@ impl Picker {
         }
         self.render_query(frame, Rect { height: 1, ..inner });
 
-        let list = Rect { y: inner.y + 1, height: inner.height - 1, ..inner };
-        let scroll = self.cursor.scroll_to(self.cursor.index, list.height as usize);
+        let list = Rect {
+            y: inner.y + 1,
+            height: inner.height - 1,
+            ..inner
+        };
+        let scroll = self
+            .cursor
+            .scroll_to(self.cursor.index, list.height as usize);
         let lines: Vec<Line> = self
             .matches
             .iter()
             .enumerate()
             .skip(scroll)
-            .map(|(row, &item)| self.item_line(&self.items[item], row == self.cursor.index, list.width as usize))
+            .map(|(row, &item)| {
+                self.item_line(
+                    &self.items[item],
+                    row == self.cursor.index,
+                    list.width as usize,
+                )
+            })
             .collect();
         if lines.is_empty() {
             let note = if self.free_text {
@@ -324,7 +359,11 @@ impl Picker {
             "esc" => !self.typing,
             _ => true,
         };
-        self.hints.iter().copied().filter(|(key, _)| shown(key)).collect()
+        self.hints
+            .iter()
+            .copied()
+            .filter(|(key, _)| shown(key))
+            .collect()
     }
 
     pub fn render_query(&self, frame: &mut Frame, area: Rect) {
@@ -348,7 +387,11 @@ impl Picker {
     fn item_line<'a>(&self, item: &'a str, selected: bool, width: usize) -> Line<'a> {
         let mut spans = Vec::new();
         if self.multi {
-            let mark = if self.ticked.iter().any(|t| t == item) { "◉ " } else { "○ " };
+            let mark = if self.ticked.iter().any(|t| t == item) {
+                "◉ "
+            } else {
+                "○ "
+            };
             spans.push(Span::styled(mark, Style::default().fg(Color::Green)));
         }
         let mut shrinkable = Vec::new();
@@ -397,7 +440,11 @@ mod tests {
     fn dimmed_folders_leave_the_last_name_in_full() {
         let picker = Picker::single("t", Vec::new()).with_dimmed_folders();
         let line = picker.item_line("group/sub/repo", false, 200);
-        let parts: Vec<(&str, Option<Color>)> = line.spans.iter().map(|span| (span.content.as_ref(), span.style.fg)).collect();
+        let parts: Vec<(&str, Option<Color>)> = line
+            .spans
+            .iter()
+            .map(|span| (span.content.as_ref(), span.style.fg))
+            .collect();
         assert_eq!(parts, [("group/sub/", Some(ui::DIM)), ("repo", None)]);
 
         let plain = Picker::single("t", Vec::new()).item_line("feature/bar", false, 200);
@@ -458,10 +505,16 @@ mod tests {
     fn esc_stops_typing_first_and_cancels_second() {
         let mut picker = Picker::single("t", vec!["main".to_string()]);
         type_text(&mut picker, "m");
-        assert!(matches!(picker.handle_key(key(KeyCode::Esc)), Outcome::Open));
+        assert!(matches!(
+            picker.handle_key(key(KeyCode::Esc)),
+            Outcome::Open
+        ));
         assert!(!picker.typing);
         assert_eq!(picker.query, "m");
-        assert!(matches!(picker.handle_key(key(KeyCode::Esc)), Outcome::Cancelled));
+        assert!(matches!(
+            picker.handle_key(key(KeyCode::Esc)),
+            Outcome::Cancelled
+        ));
     }
 
     fn picked(picker: &mut Picker) -> Vec<String> {
@@ -557,7 +610,10 @@ mod tests {
     fn free_text_is_only_used_when_allowed() {
         let mut strict = Picker::single("t", vec!["main".to_string()]);
         type_text(&mut strict, "xyz123");
-        assert!(matches!(strict.handle_key(key(KeyCode::Enter)), Outcome::Open));
+        assert!(matches!(
+            strict.handle_key(key(KeyCode::Enter)),
+            Outcome::Open
+        ));
 
         let mut free = Picker::with_free_text("t", vec!["main".to_string()]);
         type_text(&mut free, "xyz123");
@@ -580,7 +636,11 @@ mod tests {
 
     #[test]
     fn set_only_lists_those_items_whatever_the_query() {
-        let items = vec!["main".to_string(), "feature".to_string(), "other".to_string()];
+        let items = vec![
+            "main".to_string(),
+            "feature".to_string(),
+            "other".to_string(),
+        ];
         let mut picker = Picker::single("t", items);
         type_text(&mut picker, "abc1234");
         assert!(picker.matches.is_empty());

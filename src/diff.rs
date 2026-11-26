@@ -8,22 +8,31 @@ mod patch;
 
 pub use cache::{ColorCache, Colored, DiffView};
 pub use pane::DiffPane;
-pub use parse::{highlight_rows, rows_for};
-pub use patch::{change_patch, Direction};
 #[cfg(test)]
 pub use parse::Row;
+pub use parse::{highlight_rows, rows_for};
+pub use patch::{Direction, change_patch};
 
 /// Rows for the tests of each part.
 #[cfg(test)]
 mod testing {
-    use super::parse::{Cell, Row};
     use super::Colored;
+    use super::parse::{Cell, Row};
 
     pub fn cell(number: usize, text: &str, changed: bool) -> Option<Cell> {
-        Some(Cell { number, text: text.to_string(), changed, marks: Vec::new(), colors: Vec::new() })
+        Some(Cell {
+            number,
+            text: text.to_string(),
+            changed,
+            marks: Vec::new(),
+            colors: Vec::new(),
+        })
     }
 
     pub fn colored(rows: Vec<Row>) -> Colored {
-        Colored { rows, file_lines: 0 }
+        Colored {
+            rows,
+            file_lines: 0,
+        }
     }
 }

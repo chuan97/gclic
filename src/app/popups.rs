@@ -11,8 +11,12 @@ impl App {
             KeyCode::Enter => {
                 let result = match &confirm {
                     Confirm::Restore(path) => return self.restore_file(path),
-                    Confirm::RestoreChange { path, patch } => return self.restore_change(path, patch),
-                    Confirm::DiscardAll { restore, delete } => return self.discard_all(restore, delete),
+                    Confirm::RestoreChange { path, patch } => {
+                        return self.restore_change(path, patch);
+                    }
+                    Confirm::DiscardAll { restore, delete } => {
+                        return self.discard_all(restore, delete);
+                    }
                     Confirm::DeleteUntracked(path) => git::delete_untracked(&self.repo, path),
                     Confirm::CloseCompare => {
                         self.close_compare();
@@ -79,7 +83,12 @@ impl App {
         self.modal = Modal::CommitBox;
     }
 
-    pub(super) fn handle_picker_key(&mut self, mut picker: Picker, usage: PickerUse, key: KeyEvent) {
+    pub(super) fn handle_picker_key(
+        &mut self,
+        mut picker: Picker,
+        usage: PickerUse,
+        key: KeyEvent,
+    ) {
         // `p` pastes a ref, so a sha yanked in the graph is two keys from comparing.
         let paste = key.code == KeyCode::Char('p') && key.modifiers == KeyModifiers::NONE;
         if paste && picker.accepts_free_text() && !picker.is_typing() {
@@ -100,7 +109,10 @@ impl App {
         {
             let action = StashAction::from_key(key.code);
             let highlighted = picker.highlighted();
-            let stash = stashes.iter().find(|(label, _)| Some(label) == highlighted).map(|(_, stash)| stash.clone());
+            let stash = stashes
+                .iter()
+                .find(|(label, _)| Some(label) == highlighted)
+                .map(|(_, stash)| stash.clone());
             if let (Some(action), Some(stash)) = (action, stash) {
                 self.act_on_stash(action, stash);
                 return;
@@ -115,12 +127,16 @@ impl App {
 
     pub(super) fn use_picked(&mut self, usage: PickerUse, picked: Vec<String>) {
         // Refs have no spaces, so this also takes the sha out of a yank's label.
-        let first = picked.first().and_then(|item| item.split_whitespace().next());
+        let first = picked
+            .first()
+            .and_then(|item| item.split_whitespace().next());
         let first = first.unwrap_or_default().to_string();
         match usage {
             PickerUse::Stash(stashes) => {
                 let picked = picked.first();
-                if let Some((_, stash)) = stashes.into_iter().find(|(label, _)| Some(label) == picked) {
+                if let Some((_, stash)) =
+                    stashes.into_iter().find(|(label, _)| Some(label) == picked)
+                {
                     self.open_stash(stash);
                 }
             }
@@ -139,7 +155,8 @@ impl App {
             PickerUse::GraphBranches => {
                 // Confirming the default view's branches as they were keeps the
                 // default view, which follows a checkout to another branch.
-                let unchanged = self.graph.is_default_view() && same_refs(&picked, &self.graph.shown_refs());
+                let unchanged =
+                    self.graph.is_default_view() && same_refs(&picked, &self.graph.shown_refs());
                 let refs = if unchanged { Vec::new() } else { picked };
                 let result = self.graph.set_refs(refs, self.branches.list());
                 self.report(result);
@@ -181,7 +198,12 @@ impl App {
                 let names = branches.into_iter().map(|b| b.name).collect();
                 // The branches on screen start ticked, the default view's too.
                 let ticked = self.graph.shown_refs();
-                let hints = [("space", "tick"), ("a/A", "all, none"), ("enter", "apply"), ("esc", "close")];
+                let hints = [
+                    ("space", "tick"),
+                    ("a/A", "all, none"),
+                    ("enter", "apply"),
+                    ("esc", "close"),
+                ];
                 let picker = Picker::multi("Graph branches", names, ticked).with_hints(&hints);
                 self.modal = Modal::Picker(picker, PickerUse::GraphBranches);
             }
@@ -192,7 +214,8 @@ impl App {
     pub(super) fn open_compare_picker(&mut self) {
         match compare_items(&self.repo, &self.recent_yanks) {
             Ok(items) => {
-                let picker = Picker::with_free_text("Compare: from", items).with_hints(&COMPARE_PICKER_KEYS);
+                let picker =
+                    Picker::with_free_text("Compare: from", items).with_hints(&COMPARE_PICKER_KEYS);
                 self.modal = Modal::Picker(picker, PickerUse::CompareA);
             }
             Err(error) => self.modal = Modal::Error(error.to_string()),
@@ -226,7 +249,10 @@ impl App {
                                 Span::styled(path.clone(), bold),
                                 Span::raw("?"),
                             ]),
-                            Line::styled("The file's other changes stay. This can't be undone.", Style::default().fg(ui::DIM)),
+                            Line::styled(
+                                "The file's other changes stay. This can't be undone.",
+                                Style::default().fg(ui::DIM),
+                            ),
                         ],
                         "discard",
                     ),
@@ -238,13 +264,20 @@ impl App {
                         let what = match (restore.len(), delete.len()) {
                             (r, 0) => format!("Discard your changes to {}?", files(r, "")),
                             (0, d) => format!("Delete {}?", files(d, "untracked ")),
-                            (r, d) => format!("Discard your changes to {} and delete {}?", files(r, ""), files(d, "untracked ")),
+                            (r, d) => format!(
+                                "Discard your changes to {} and delete {}?",
+                                files(r, ""),
+                                files(d, "untracked ")
+                            ),
                         };
                         (
                             " Discard all ",
                             vec![
                                 Line::styled(what, bold),
-                                Line::styled("Staged changes stay. This can't be undone.", Style::default().fg(ui::DIM)),
+                                Line::styled(
+                                    "Staged changes stay. This can't be undone.",
+                                    Style::default().fg(ui::DIM),
+                                ),
                             ],
                             "discard",
                         )
@@ -252,7 +285,11 @@ impl App {
                     Confirm::DropStash(stash) => (
                         " Drop stash ",
                         vec![
-                            Line::from(vec![Span::raw("Drop "), Span::styled(stash.name.clone(), bold), Span::raw("?")]),
+                            Line::from(vec![
+                                Span::raw("Drop "),
+                                Span::styled(stash.name.clone(), bold),
+                                Span::raw("?"),
+                            ]),
                             Line::styled(stash.message.clone(), Style::default().fg(ui::DIM)),
                         ],
                         "drop",
@@ -267,8 +304,12 @@ impl App {
                     ),
                     Confirm::DeleteComment(index) => {
                         let comment = self.review.get(*index);
-                        let location = comment.map(|comment| comment.location()).unwrap_or_default();
-                        let first = comment.and_then(|comment| comment.body.lines().next()).unwrap_or_default();
+                        let location = comment
+                            .map(|comment| comment.location())
+                            .unwrap_or_default();
+                        let first = comment
+                            .and_then(|comment| comment.body.lines().next())
+                            .unwrap_or_default();
                         let body = vec![
                             Line::from(vec![
                                 Span::raw("Delete the comment on "),
@@ -284,7 +325,11 @@ impl App {
                             1 => "the review's comment".to_string(),
                             n => format!("the review's {n} comments"),
                         };
-                        (" Clear review ", vec![Line::raw(format!("Delete {count}?"))], "clear")
+                        (
+                            " Clear review ",
+                            vec![Line::raw(format!("Delete {count}?"))],
+                            "clear",
+                        )
                     }
                     Confirm::CloseCompare => {
                         let refs = self.compare.as_ref().map(|c| c.refs()).unwrap_or_default();
@@ -318,27 +363,61 @@ impl App {
                     1 => Some("Your review's comment will be lost.".to_string()),
                     n => Some(format!("Your review's {n} comments will be lost.")),
                 };
-                body.extend(lost.map(|lost| Line::styled(lost, Style::default().fg(Color::Yellow))));
+                body.extend(
+                    lost.map(|lost| Line::styled(lost, Style::default().fg(Color::Yellow))),
+                );
                 let height = body.len() as u16 + 3;
-                render_popup(frame, area, " Quit ", body, hints, (44, height), Color::Cyan);
+                render_popup(
+                    frame,
+                    area,
+                    " Quit ",
+                    body,
+                    hints,
+                    (44, height),
+                    Color::Cyan,
+                );
             }
             Modal::CommentBox(comment) => {
                 let location = review::location(comment.source.path(), &comment.anchor);
                 // The line it's on, above, or nothing for the whole file.
-                let quoted = comment.anchor.as_ref().map(|anchor| anchor.text.trim().to_string());
+                let quoted = comment
+                    .anchor
+                    .as_ref()
+                    .map(|anchor| anchor.text.trim().to_string());
                 let hints = ui::key_hints(&[("ctrl-enter", "save"), ("esc", "cancel")], None);
                 let title = format!(" Comment on {location} ");
                 render_text_box(frame, area, &title, quoted, &comment.draft, hints);
             }
             Modal::CommitBox => {
-                let hints = ui::key_hints(&[("ctrl-enter", "commit"), ("esc", "close, keeping it")], None);
-                render_text_box(frame, area, " Commit message ", None, &self.commit_draft, hints);
+                let hints = ui::key_hints(
+                    &[("ctrl-enter", "commit"), ("esc", "close, keeping it")],
+                    None,
+                );
+                render_text_box(
+                    frame,
+                    area,
+                    " Commit message ",
+                    None,
+                    &self.commit_draft,
+                    hints,
+                );
             }
             Modal::Error(error) => {
-                let body: Vec<Line> = error.lines().map(|line| Line::raw(line.to_string())).collect();
+                let body: Vec<Line> = error
+                    .lines()
+                    .map(|line| Line::raw(line.to_string()))
+                    .collect();
                 let height = (body.len() as u16 + 3).min(20);
                 let hints = ui::key_hints(&[("any key", "closes")], None);
-                render_popup(frame, area, " Git error ", body, hints, (72, height), Color::Red);
+                render_popup(
+                    frame,
+                    area,
+                    " Git error ",
+                    body,
+                    hints,
+                    (72, height),
+                    Color::Red,
+                );
             }
             Modal::Help(help) => help.render(frame, area),
         }
@@ -349,7 +428,9 @@ impl App {
 pub(super) enum PickerUse {
     GraphBranches,
     CompareA,
-    CompareB { a: String },
+    CompareB {
+        a: String,
+    },
     /// `:cd`: each repo's label, and where it is.
     Repo(Vec<(String, PathBuf)>),
     /// `:stash`: each stash's label, and the stash.
@@ -423,18 +504,29 @@ pub(super) fn render_text_box(
     let mut lines: Vec<Line<'static>> = Vec::new();
     if let Some(above) = above {
         let dim = Style::default().fg(ui::DIM);
-        lines.extend(ui::wrap(&above, text_width).into_iter().map(|line| Line::styled(line, dim)));
+        lines.extend(
+            ui::wrap(&above, text_width)
+                .into_iter()
+                .map(|line| Line::styled(line, dim)),
+        );
         lines.push(Line::default());
     }
     let typed = format!("{draft}▏");
-    lines.extend(typed.split('\n').flat_map(|line| ui::wrap(line, text_width)).map(Line::raw));
+    lines.extend(
+        typed
+            .split('\n')
+            .flat_map(|line| ui::wrap(line, text_width))
+            .map(Line::raw),
+    );
     let most = (area.height * 4 / 5).max(MIN_HEIGHT.min(area.height));
     let height = (lines.len() as u16 + 2).clamp(MIN_HEIGHT.min(most), most);
     let room = height.saturating_sub(2) as usize;
     let hidden = lines.len().saturating_sub(room);
     let popup = ui::centered(area, width, height);
     frame.render_widget(Clear, popup);
-    let block = ui::panel(title.to_string(), true).border_style(Style::default().fg(Color::Cyan)).title_bottom(hints);
+    let block = ui::panel(title.to_string(), true)
+        .border_style(Style::default().fg(Color::Cyan))
+        .title_bottom(hints);
     frame.render_widget(Paragraph::new(lines.split_off(hidden)).block(block), popup);
 }
 

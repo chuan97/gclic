@@ -41,7 +41,10 @@ impl EditorColors {
     }
 
     fn rgb(&self, group: &str, part: &str) -> Option<(u8, u8, u8)> {
-        self.colors.iter().find(|((g, p), _)| g == group && p == part).map(|(_, rgb)| *rgb)
+        self.colors
+            .iter()
+            .find(|((g, p), _)| g == group && p == part)
+            .map(|(_, rgb)| *rgb)
     }
 
     fn color(&self, group: &str, part: &str) -> Option<Color> {
@@ -109,8 +112,12 @@ impl DiffColors {
             text: editor.color("Normal", "fg").unwrap_or(BUILT_IN.text),
             removed: line("DiffDelete").map(to_color).unwrap_or(BUILT_IN.removed),
             added: line("DiffAdd").map(to_color).unwrap_or(BUILT_IN.added),
-            removed_word: line("DiffDelete").and_then(word).unwrap_or(BUILT_IN.removed_word),
-            added_word: line("DiffAdd").and_then(word).unwrap_or(BUILT_IN.added_word),
+            removed_word: line("DiffDelete")
+                .and_then(word)
+                .unwrap_or(BUILT_IN.removed_word),
+            added_word: line("DiffAdd")
+                .and_then(word)
+                .unwrap_or(BUILT_IN.added_word),
         }
     }
 }
@@ -136,22 +143,43 @@ pub const SCOPES: &[(&str, &str)] = &[
     ("support.constant", "@constant.builtin"),
     ("keyword", "@keyword"),
     ("storage", "@keyword"),
-    ("storage.type.function, keyword.declaration.function", "@keyword.function"),
-    ("keyword.control.import, keyword.control.export", "@keyword.import"),
+    (
+        "storage.type.function, keyword.declaration.function",
+        "@keyword.function",
+    ),
+    (
+        "keyword.control.import, keyword.control.export",
+        "@keyword.import",
+    ),
     ("keyword.control.return", "@keyword.return"),
     ("keyword.operator", "@operator"),
-    ("entity.name.function, meta.function-call.generic", "@function"),
+    (
+        "entity.name.function, meta.function-call.generic",
+        "@function",
+    ),
     ("support.function", "@function.builtin"),
     ("variable.function", "@function.call"),
-    ("entity.name.function.macro, support.macro", "@function.macro"),
-    ("entity.name.type, entity.name.class, entity.name.struct, entity.name.enum, entity.other.inherited-class", "@type"),
+    (
+        "entity.name.function.macro, support.macro",
+        "@function.macro",
+    ),
+    (
+        "entity.name.type, entity.name.class, entity.name.struct, entity.name.enum, entity.other.inherited-class",
+        "@type",
+    ),
     ("support.type, support.class", "@type.builtin"),
     ("variable", "@variable"),
     ("variable.parameter", "@variable.parameter"),
     ("variable.language", "@variable.builtin"),
-    ("variable.other.member, variable.other.property, meta.property-name", "@property"),
+    (
+        "variable.other.member, variable.other.property, meta.property-name",
+        "@property",
+    ),
     ("entity.name.namespace, entity.name.module", "@module"),
-    ("meta.attribute, meta.annotation, entity.name.function.decorator", "@attribute"),
+    (
+        "meta.attribute, meta.annotation, entity.name.function.decorator",
+        "@attribute",
+    ),
     ("entity.name.tag", "@tag"),
     ("entity.other.attribute-name", "@tag.attribute"),
     ("punctuation", "@punctuation"),
@@ -166,7 +194,11 @@ pub fn syntax_theme(editor: &EditorColors) -> Theme {
         .filter_map(|(selectors, group)| {
             Some(ThemeItem {
                 scope: ScopeSelectors::from_str(selectors).ok()?,
-                style: StyleModifier { foreground: Some(color(editor.rgb(group, "fg")?)), background: None, font_style: None },
+                style: StyleModifier {
+                    foreground: Some(color(editor.rgb(group, "fg")?)),
+                    background: None,
+                    font_style: None,
+                },
             })
         })
         .collect();
@@ -207,9 +239,15 @@ mod tests {
         assert_eq!(diff.background, Color::Rgb(0x1e, 0x1e, 0x1e));
         assert_eq!(diff.added, Color::Rgb(0x37, 0x3d, 0x29));
         // A word is its line's colour with some of the text's mixed in.
-        assert_eq!(diff.added_word, to_color(mix((0x37, 0x3d, 0x29), (0xd4, 0xd4, 0xd4), 0.18)));
+        assert_eq!(
+            diff.added_word,
+            to_color(mix((0x37, 0x3d, 0x29), (0xd4, 0xd4, 0xd4), 0.18))
+        );
         let bare = DiffColors::from_editor(&EditorColors::parse("Normal:bg=#000000"));
-        assert_eq!((bare.removed, bare.removed_word, bare.text), (BUILT_IN.removed, BUILT_IN.removed_word, BUILT_IN.text));
+        assert_eq!(
+            (bare.removed, bare.removed_word, bare.text),
+            (BUILT_IN.removed, BUILT_IN.removed_word, BUILT_IN.text)
+        );
     }
 
     #[test]
@@ -221,7 +259,11 @@ mod tests {
         let line = "fn main() { let s = \"hi\"; }\n";
         let regions = highlighter.highlight_line(line, &syntaxes).unwrap();
         let color_of = |word: &str| {
-            let style = regions.iter().find(|(_, piece)| piece.contains(word)).unwrap().0;
+            let style = regions
+                .iter()
+                .find(|(_, piece)| piece.contains(word))
+                .unwrap()
+                .0;
             (style.foreground.r, style.foreground.g, style.foreground.b)
         };
         assert_eq!(color_of("fn"), (0x56, 0x9c, 0xd6)); // @keyword, for want of @keyword.function
@@ -236,7 +278,9 @@ mod tests {
     fn the_plugin_sends_the_groups_gclic_reads() {
         let lua = include_str!("../lua/gclic.lua");
         let list = |name: &str| -> Vec<&str> {
-            let start = lua.find(&format!("local {name} = {{")).unwrap_or_else(|| panic!("{name} not in lua/gclic.lua"));
+            let start = lua
+                .find(&format!("local {name} = {{"))
+                .unwrap_or_else(|| panic!("{name} not in lua/gclic.lua"));
             let rest = &lua[start..];
             let body = &rest[rest.find('{').unwrap() + 1..];
             // The list ends at the first `}` after the last `{`, so nested pairs count.
@@ -244,15 +288,30 @@ mod tests {
             let end = body
                 .char_indices()
                 .find(|&(_, c)| {
-                    depth += match c { '{' => 1, '}' => -1, _ => 0 };
+                    depth += match c {
+                        '{' => 1,
+                        '}' => -1,
+                        _ => 0,
+                    };
                     depth == 0
                 })
                 .unwrap()
                 .0;
             body[..end].split('"').skip(1).step_by(2).collect()
         };
-        let diff: Vec<_> = list("DIFF_GROUPS").chunks(2).map(|pair| (pair[0], pair[1])).collect();
-        assert_eq!(diff, [("Normal", "fg"), ("Normal", "bg"), ("DiffAdd", "bg"), ("DiffDelete", "bg")]);
+        let diff: Vec<_> = list("DIFF_GROUPS")
+            .chunks(2)
+            .map(|pair| (pair[0], pair[1]))
+            .collect();
+        assert_eq!(
+            diff,
+            [
+                ("Normal", "fg"),
+                ("Normal", "bg"),
+                ("DiffAdd", "bg"),
+                ("DiffDelete", "bg")
+            ]
+        );
         let mut syntax: Vec<&str> = Vec::new();
         for (_, group) in SCOPES {
             if !syntax.contains(group) {

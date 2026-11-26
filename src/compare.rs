@@ -39,20 +39,41 @@ pub struct ComparePanel {
 impl ComparePanel {
     pub fn new(repo: &Repo, from: String, to: String) -> Result<ComparePanel> {
         let files = FileList::new(from.clone(), to.clone(), Vec::new());
-        let subject = Subject::Refs { from, to, only_from: 0, only_to: 0, merge_base: None };
-        let mut compare = ComparePanel { repo: repo.clone(), subject, files };
+        let subject = Subject::Refs {
+            from,
+            to,
+            only_from: 0,
+            only_to: 0,
+            merge_base: None,
+        };
+        let mut compare = ComparePanel {
+            repo: repo.clone(),
+            subject,
+            files,
+        };
         compare.refresh()?;
         Ok(compare)
     }
 
     pub fn stash(repo: &Repo, stash: Stash) -> Result<ComparePanel> {
         let files = FileList::stash(stash.sha.clone(), git::stash_files(repo, &stash)?);
-        Ok(ComparePanel { repo: repo.clone(), subject: Subject::Stash(stash), files })
+        Ok(ComparePanel {
+            repo: repo.clone(),
+            subject: Subject::Stash(stash),
+            files,
+        })
     }
 
     /// For a comparison, three separate git calls, so they run at once.
     pub fn refresh(&mut self) -> Result<()> {
-        let Subject::Refs { from, to, only_from, only_to, merge_base } = &mut self.subject else {
+        let Subject::Refs {
+            from,
+            to,
+            only_from,
+            only_to,
+            merge_base,
+        } = &mut self.subject
+        else {
             // A stash never changes, though it may be dropped, which actions
             // on it find out.
             return Ok(());
@@ -63,7 +84,11 @@ impl ComparePanel {
             let files = scope.spawn(|| git::changed_files(repo, a, b));
             let counts = git::ahead_behind(repo, a, b);
             let crashed = || Err(anyhow::anyhow!("git crashed"));
-            (counts, base.join().unwrap_or(None), files.join().unwrap_or_else(|_| crashed()))
+            (
+                counts,
+                base.join().unwrap_or(None),
+                files.join().unwrap_or_else(|_| crashed()),
+            )
         });
         (*only_from, *only_to) = counts?;
         *merge_base = base;
@@ -75,7 +100,14 @@ impl ComparePanel {
     /// ancestor stays, the commit counts trade places, and so do added and
     /// deleted files. An open diff follows, through the action returned.
     pub fn swap(&mut self) -> Action {
-        let Subject::Refs { from, to, only_from, only_to, .. } = &mut self.subject else {
+        let Subject::Refs {
+            from,
+            to,
+            only_from,
+            only_to,
+            ..
+        } = &mut self.subject
+        else {
             return Action::Message("A stash only goes one way".to_string());
         };
         std::mem::swap(from, to);
@@ -117,10 +149,18 @@ impl ComparePanel {
     /// The keys that do something now, for the status line. Enter's depends
     /// on whether the selected file's diff is the one `shown`.
     pub fn hints(&self, shown: Option<&DiffSource>) -> Vec<ui::Hint<'static>> {
-        let mut hints: Vec<ui::Hint> = ui::enter_diff_hint(self.selected_source(), shown).into_iter().collect();
+        let mut hints: Vec<ui::Hint> = ui::enter_diff_hint(self.selected_source(), shown)
+            .into_iter()
+            .collect();
         match self.subject {
-            Subject::Stash(_) => hints.extend([("h/l", "fold"), ("a", "apply"), ("p", "pop"), ("d", "drop")]),
-            Subject::Refs { .. } => hints.extend([("h/l", "fold"), ("r", "swap from and to"), ("c", "new comparison")]),
+            Subject::Stash(_) => {
+                hints.extend([("h/l", "fold"), ("a", "apply"), ("p", "pop"), ("d", "drop")])
+            }
+            Subject::Refs { .. } => hints.extend([
+                ("h/l", "fold"),
+                ("r", "swap from and to"),
+                ("c", "new comparison"),
+            ]),
         }
         hints
     }
@@ -139,7 +179,11 @@ impl ComparePanel {
     pub fn sources_around(&self) -> Vec<DiffSource> {
         let mut sources = self.files.sources_around();
         if let Some(DiffSource::Refs { a, b, path }) = sources.first() {
-            let swapped = DiffSource::Refs { a: b.clone(), b: a.clone(), path: path.clone() };
+            let swapped = DiffSource::Refs {
+                a: b.clone(),
+                b: a.clone(),
+                path: path.clone(),
+            };
             sources.insert(1, swapped);
         }
         sources
@@ -161,7 +205,8 @@ impl ComparePanel {
 
     /// `line`, then what the files change in all: `· +34 −41 · 2 files`.
     fn with_summary<'a>(&self, mut line: Line<'a>) -> Line<'a> {
-        line.spans.push(Span::styled(" · ", Style::default().fg(ui::DIM)));
+        line.spans
+            .push(Span::styled(" · ", Style::default().fg(ui::DIM)));
         line.spans.extend(ui::files_summary(self.files.files()));
         line
     }
@@ -177,7 +222,13 @@ impl ComparePanel {
         let bold = Style::default().add_modifier(Modifier::BOLD);
         let dim = Style::default().fg(ui::DIM);
         let lines = match &self.subject {
-            Subject::Refs { from, to, only_from, only_to, merge_base } => {
+            Subject::Refs {
+                from,
+                to,
+                only_from,
+                only_to,
+                merge_base,
+            } => {
                 let base = match merge_base {
                     Some(sha) => format!("common ancestor {}", git::short(sha)),
                     None => "no common ancestor".to_string(),
@@ -187,9 +238,15 @@ impl ComparePanel {
                     Line::from(vec![
                         Span::styled(to.as_str(), bold),
                         Span::raw(" is "),
-                        Span::styled(format!("{only_to} ahead"), Style::default().fg(Color::Green)),
+                        Span::styled(
+                            format!("{only_to} ahead"),
+                            Style::default().fg(Color::Green),
+                        ),
                         Span::raw(", "),
-                        Span::styled(format!("{only_from} behind"), Style::default().fg(Color::Red)),
+                        Span::styled(
+                            format!("{only_from} behind"),
+                            Style::default().fg(Color::Red),
+                        ),
                         Span::raw(" "),
                         Span::styled(from.as_str(), bold),
                     ]),
@@ -199,7 +256,10 @@ impl ComparePanel {
             }
             Subject::Stash(stash) => vec![
                 Line::styled(stash.message.as_str(), bold),
-                self.with_summary(Line::styled(format!("made on {} · {}", git::short(&stash.base), stash.age), dim)),
+                self.with_summary(Line::styled(
+                    format!("made on {} · {}", git::short(&stash.base), stash.age),
+                    dim,
+                )),
                 Line::default(),
             ],
         };
@@ -216,9 +276,24 @@ mod tests {
     fn panel() -> ComparePanel {
         // Already in the order the list sorts files in.
         let files = vec![
-            FileEntry { status: 'M', path: "edited".to_string(), lines: Lines::Counted { added: 4, removed: 1 } },
-            FileEntry { status: 'D', path: "gone".to_string(), ..Default::default() },
-            FileEntry { status: 'A', path: "new".to_string(), ..Default::default() },
+            FileEntry {
+                status: 'M',
+                path: "edited".to_string(),
+                lines: Lines::Counted {
+                    added: 4,
+                    removed: 1,
+                },
+            },
+            FileEntry {
+                status: 'D',
+                path: "gone".to_string(),
+                ..Default::default()
+            },
+            FileEntry {
+                status: 'A',
+                path: "new".to_string(),
+                ..Default::default()
+            },
         ];
         ComparePanel {
             repo: Repo::nowhere(),
@@ -235,7 +310,9 @@ mod tests {
 
     fn counts(compare: &ComparePanel) -> (usize, usize) {
         match &compare.subject {
-            Subject::Refs { only_from, only_to, .. } => (*only_from, *only_to),
+            Subject::Refs {
+                only_from, only_to, ..
+            } => (*only_from, *only_to),
             Subject::Stash(_) => panic!("not a comparison"),
         }
     }
@@ -247,7 +324,14 @@ mod tests {
         assert_eq!(compare.refs(), "feature → main");
         assert_eq!(counts(&compare), (3, 1));
         let source = compare.selected_source().unwrap();
-        assert_eq!(source, DiffSource::Refs { a: "feature".into(), b: "main".into(), path: "edited".into() });
+        assert_eq!(
+            source,
+            DiffSource::Refs {
+                a: "feature".into(),
+                b: "main".into(),
+                path: "edited".into()
+            }
+        );
     }
 
     #[test]
@@ -262,14 +346,34 @@ mod tests {
     fn swapping_flips_added_and_removed_lines() {
         let mut compare = panel();
         compare.swap();
-        assert_eq!(compare.files.lines()[0], Lines::Counted { added: 1, removed: 4 });
+        assert_eq!(
+            compare.files.lines()[0],
+            Lines::Counted {
+                added: 1,
+                removed: 4
+            }
+        );
     }
 
     #[test]
     fn the_swapped_diff_is_prefetched_right_after_the_selected_one() {
         let sources = panel().sources_around();
-        assert_eq!(sources[0], DiffSource::Refs { a: "main".into(), b: "feature".into(), path: "edited".into() });
-        assert_eq!(sources[1], DiffSource::Refs { a: "feature".into(), b: "main".into(), path: "edited".into() });
+        assert_eq!(
+            sources[0],
+            DiffSource::Refs {
+                a: "main".into(),
+                b: "feature".into(),
+                path: "edited".into()
+            }
+        );
+        assert_eq!(
+            sources[1],
+            DiffSource::Refs {
+                a: "feature".into(),
+                b: "main".into(),
+                path: "edited".into()
+            }
+        );
     }
 
     fn stash_panel() -> ComparePanel {
@@ -282,28 +386,57 @@ mod tests {
             age: "2 hours ago".to_string(),
         };
         let files = vec![
-            FileEntry { status: 'M', path: "edited".to_string(), lines: Lines::Counted { added: 4, removed: 1 } },
-            FileEntry { status: '?', path: "new".to_string(), ..Default::default() },
+            FileEntry {
+                status: 'M',
+                path: "edited".to_string(),
+                lines: Lines::Counted {
+                    added: 4,
+                    removed: 1,
+                },
+            },
+            FileEntry {
+                status: '?',
+                path: "new".to_string(),
+                ..Default::default()
+            },
         ];
-        ComparePanel { repo: Repo::nowhere(), files: FileList::stash(stash.sha.clone(), files), subject: Subject::Stash(stash) }
+        ComparePanel {
+            repo: Repo::nowhere(),
+            files: FileList::stash(stash.sha.clone(), files),
+            subject: Subject::Stash(stash),
+        }
     }
 
     #[test]
     fn a_stash_shows_its_files_as_stashed_changes() {
         let mut stash = stash_panel();
         assert_eq!(stash.title(), "Stash stash@{0}");
-        let tracked = DiffSource::Stash { sha: "s1".into(), path: "edited".into(), untracked: false };
+        let tracked = DiffSource::Stash {
+            sha: "s1".into(),
+            path: "edited".into(),
+            untracked: false,
+        };
         assert_eq!(stash.selected_source(), Some(tracked));
         stash.handle_key(KeyEvent::from(KeyCode::Char('j')));
-        let untracked = DiffSource::Stash { sha: "s1".into(), path: "new".into(), untracked: true };
+        let untracked = DiffSource::Stash {
+            sha: "s1".into(),
+            path: "new".into(),
+            untracked: true,
+        };
         assert_eq!(stash.selected_source(), Some(untracked));
     }
 
     #[test]
     fn a_stash_has_its_own_keys_and_doesnt_swap() {
         let mut stash = stash_panel();
-        assert!(matches!(stash.handle_key(KeyEvent::from(KeyCode::Char('p'))), Action::Stash(StashAction::Pop, _)));
-        assert!(matches!(stash.handle_key(KeyEvent::from(KeyCode::Esc)), Action::CloseStash));
+        assert!(matches!(
+            stash.handle_key(KeyEvent::from(KeyCode::Char('p'))),
+            Action::Stash(StashAction::Pop, _)
+        ));
+        assert!(matches!(
+            stash.handle_key(KeyEvent::from(KeyCode::Esc)),
+            Action::CloseStash
+        ));
         assert!(matches!(stash.swap(), Action::Message(_)));
     }
 }

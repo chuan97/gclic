@@ -12,7 +12,8 @@ impl App {
             return;
         };
         if !diff.shows_active_line(self.view.in_preview) {
-            self.message = "Step to a change with n, or enter the diff, to comment on a line".to_string();
+            self.message =
+                "Step to a change with n, or enter the diff, to comment on a line".to_string();
             return;
         }
         if review::Place::of(&diff.source).is_none() {
@@ -44,9 +45,18 @@ impl App {
     /// The comment box, holding the comment already there, if any.
     pub(super) fn open_comment_box(&mut self, source: DiffSource, anchor: Option<Anchor>) {
         let key = anchor.as_ref().map(|anchor| (anchor.side, anchor.number));
-        let existing = self.review.find(&source, key).and_then(|index| self.review.get(index));
-        let draft = existing.map(|comment| comment.body.clone()).unwrap_or_default();
-        self.modal = Modal::CommentBox(CommentBox { source, anchor, draft });
+        let existing = self
+            .review
+            .find(&source, key)
+            .and_then(|index| self.review.get(index));
+        let draft = existing
+            .map(|comment| comment.body.clone())
+            .unwrap_or_default();
+        self.modal = Modal::CommentBox(CommentBox {
+            source,
+            anchor,
+            draft,
+        });
     }
 
     /// Typing a comment: ctrl-enter saves it, an empty one removing what was
@@ -58,14 +68,20 @@ impl App {
             // ctrl-s for terminals that send ctrl-enter as plain enter.
             KeyCode::Enter | KeyCode::Char('s') if ctrl => {
                 let had = self.review.len();
-                let CommentBox { source, anchor, draft } = comment;
+                let CommentBox {
+                    source,
+                    anchor,
+                    draft,
+                } = comment;
                 if let Some(comment) = Comment::new(&self.repo, source, anchor, draft) {
                     self.review.set(comment);
                 }
                 self.message = match (had, self.review.len()) {
                     (before, after) if after < before => "Comment removed".to_string(),
                     (0, 1) => "Comment saved: tab goes to the Review tab, to copy it".to_string(),
-                    (before, after) if after > before => format!("Comment saved: {after} in the review"),
+                    (before, after) if after > before => {
+                        format!("Comment saved: {after} in the review")
+                    }
                     _ => "Comment saved".to_string(),
                 };
                 self.after_review_change();
@@ -95,8 +111,16 @@ impl App {
             }
             ListAction::Edit(index) => {
                 if let Some(comment) = self.review.get(index) {
-                    let (source, anchor, draft) = (comment.source.clone(), comment.anchor.clone(), comment.body.clone());
-                    self.modal = Modal::CommentBox(CommentBox { source, anchor, draft });
+                    let (source, anchor, draft) = (
+                        comment.source.clone(),
+                        comment.anchor.clone(),
+                        comment.body.clone(),
+                    );
+                    self.modal = Modal::CommentBox(CommentBox {
+                        source,
+                        anchor,
+                        draft,
+                    });
                 }
             }
             ListAction::Delete(index) => self.modal = Modal::Confirm(Confirm::DeleteComment(index)),
@@ -116,7 +140,11 @@ impl App {
 
     /// Shows the selected comment's diff, at its line.
     pub(super) fn show_selected_comment(&mut self) {
-        let Some(comment) = self.review_list.selected(&self.review).and_then(|index| self.review.get(index)) else {
+        let Some(comment) = self
+            .review_list
+            .selected(&self.review)
+            .and_then(|index| self.review.get(index))
+        else {
             return;
         };
         let anchor = comment.anchor.clone();
@@ -131,7 +159,9 @@ impl App {
     /// been staged since, or the other way round: the diff that has it now.
     pub(super) fn review_source(&self, comment: &Comment) -> DiffSource {
         if comment.source.is_working_tree() {
-            self.staging.source_for_path(comment.path(), &comment.source).unwrap_or_else(|| comment.source.clone())
+            self.staging
+                .source_for_path(comment.path(), &comment.source)
+                .unwrap_or_else(|| comment.source.clone())
         } else {
             comment.source.clone()
         }

@@ -51,7 +51,11 @@ fn pieces(line: &str) -> Vec<Piece<'_>> {
         match params.find(|ch: char| ('@'..='~').contains(&ch)) {
             Some(end) => {
                 let is_style = params[end..].starts_with('m');
-                pieces.push(if is_style { Piece::Style(&params[..end]) } else { Piece::Other });
+                pieces.push(if is_style {
+                    Piece::Style(&params[..end])
+                } else {
+                    Piece::Other
+                });
                 rest = &params[end + 1..];
             }
             None => {
@@ -68,7 +72,16 @@ fn pieces(line: &str) -> Vec<Piece<'_>> {
 
 /// A line's text without its escape codes.
 pub fn strip_ansi(line: &str) -> String {
-    pieces(line).into_iter().filter_map(|piece| if let Piece::Text(text) = piece { Some(text) } else { None }).collect()
+    pieces(line)
+        .into_iter()
+        .filter_map(|piece| {
+            if let Piece::Text(text) = piece {
+                Some(text)
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 /// A line with its colour codes turned into styles.
@@ -92,8 +105,16 @@ fn apply_sgr(mut style: Style, params: &str) -> Style {
     use ratatui::style::Modifier;
     let numbers: Vec<u16> = params.split(';').map(|n| n.parse().unwrap_or(0)).collect();
     let basic = |n: u16| {
-        [Color::Black, Color::Red, Color::Green, Color::Yellow, Color::Blue, Color::Magenta, Color::Cyan, Color::Gray]
-            [n as usize]
+        [
+            Color::Black,
+            Color::Red,
+            Color::Green,
+            Color::Yellow,
+            Color::Blue,
+            Color::Magenta,
+            Color::Cyan,
+            Color::Gray,
+        ][n as usize]
     };
     let bright = |n: u16| {
         [
@@ -161,13 +182,22 @@ mod tests {
     #[test]
     fn colour_codes_become_styles() {
         let line = ansi_line("\x1b[33mabc1234\x1b[m \x1b[1;32mmain\x1b[0m done");
-        let pieces: Vec<_> = line.spans.iter().map(|span| (span.content.as_ref(), span.style)).collect();
+        let pieces: Vec<_> = line
+            .spans
+            .iter()
+            .map(|span| (span.content.as_ref(), span.style))
+            .collect();
         assert_eq!(
             pieces,
             [
                 ("abc1234", Style::default().fg(Color::Yellow)),
                 (" ", Style::default()),
-                ("main", Style::default().fg(Color::Green).add_modifier(ratatui::style::Modifier::BOLD)),
+                (
+                    "main",
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(ratatui::style::Modifier::BOLD)
+                ),
                 (" done", Style::default()),
             ]
         );
@@ -184,7 +214,11 @@ mod tests {
 
     #[test]
     fn redrawn_progress_keeps_its_last_state() {
-        let output = b"Receiving objects:  50% (1/2)\rReceiving objects: 100% (2/2), done.\r\nDone\n\n";
-        assert_eq!(clean_output(output), ["Receiving objects: 100% (2/2), done.", "Done"]);
+        let output =
+            b"Receiving objects:  50% (1/2)\rReceiving objects: 100% (2/2), done.\r\nDone\n\n";
+        assert_eq!(
+            clean_output(output),
+            ["Receiving objects: 100% (2/2), done.", "Done"]
+        );
     }
 }

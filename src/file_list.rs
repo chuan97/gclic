@@ -58,15 +58,23 @@ impl FileList {
     /// comparison's is until it loads, puts the cursor on the first file, so
     /// enter opens a diff at once.
     pub fn set_files(&mut self, files: Vec<FileEntry>) {
-        let here = self.visible().get(self.cursor.index).map(|row| self.row_key(row));
+        let here = self
+            .visible()
+            .get(self.cursor.index)
+            .map(|row| self.row_key(row));
         (self.files, self.rows) = tree(files);
         let visible = self.visible();
         self.cursor.index = match here {
             Some(key) => {
                 let found = visible.iter().position(|row| self.row_key(row) == key);
-                found.unwrap_or(self.cursor.index).min(visible.len().saturating_sub(1))
+                found
+                    .unwrap_or(self.cursor.index)
+                    .min(visible.len().saturating_sub(1))
             }
-            None => visible.iter().position(|row| matches!(row, TreeRow::File { .. })).unwrap_or(0),
+            None => visible
+                .iter()
+                .position(|row| matches!(row, TreeRow::File { .. }))
+                .unwrap_or(0),
         };
     }
 
@@ -84,7 +92,10 @@ impl FileList {
                 other => other,
             };
             if let Lines::Counted { added, removed } = file.lines {
-                file.lines = Lines::Counted { added: removed, removed: added };
+                file.lines = Lines::Counted {
+                    added: removed,
+                    removed: added,
+                };
             }
         }
     }
@@ -109,7 +120,9 @@ impl FileList {
                 continue;
             }
             folded_at = match row {
-                TreeRow::Folder { path, depth, .. } if self.collapsed.contains(path) => Some(*depth),
+                TreeRow::Folder { path, depth, .. } if self.collapsed.contains(path) => {
+                    Some(*depth)
+                }
                 _ => None,
             };
             visible.push(row);
@@ -154,8 +167,16 @@ impl FileList {
         let file = self.files.get(index)?;
         let path = file.path.clone();
         Some(match &self.diffs {
-            Diffs::Refs { a, b } => DiffSource::Refs { a: a.clone(), b: b.clone(), path },
-            Diffs::Stash(sha) => DiffSource::Stash { sha: sha.clone(), path, untracked: file.status == '?' },
+            Diffs::Refs { a, b } => DiffSource::Refs {
+                a: a.clone(),
+                b: b.clone(),
+                path,
+            },
+            Diffs::Stash(sha) => DiffSource::Stash {
+                sha: sha.clone(),
+                path,
+                untracked: file.status == '?',
+            },
         })
     }
 
@@ -221,7 +242,9 @@ impl FileList {
         let Some(depth) = visible.get(self.cursor.index).map(|row| row.depth()) else {
             return;
         };
-        let parent = (0..self.cursor.index).rev().find(|&i| visible[i].depth() < depth);
+        let parent = (0..self.cursor.index)
+            .rev()
+            .find(|&i| visible[i].depth() < depth);
         if let Some(parent) = parent {
             self.cursor.index = parent;
         }
@@ -243,7 +266,9 @@ impl FileList {
             frame.render_widget(note, area);
             return;
         }
-        let scroll = self.cursor.scroll_to(self.cursor.index, area.height as usize);
+        let scroll = self
+            .cursor
+            .scroll_to(self.cursor.index, area.height as usize);
         let width = area.width as usize;
         let lines: Vec<Line> = self
             .visible()
@@ -253,17 +278,35 @@ impl FileList {
                 let selected = row_number == self.cursor.index;
                 match row {
                     TreeRow::Folder { name, path, depth } => {
-                        let arrow = if self.collapsed.contains(path) { '▶' } else { '▼' };
+                        let arrow = if self.collapsed.contains(path) {
+                            '▶'
+                        } else {
+                            '▼'
+                        };
                         let indent = "  ".repeat(*depth);
-                        let line = Line::styled(format!(" {indent}{arrow} {name}/"), Style::default().fg(ui::DIM));
+                        let line = Line::styled(
+                            format!(" {indent}{arrow} {name}/"),
+                            Style::default().fg(ui::DIM),
+                        );
                         ui::selected(line, selected, focused)
                     }
                     TreeRow::File { index, depth } => {
                         let file = &self.files[*index];
                         let indent = "  ".repeat(*depth);
-                        let line = styled_file_line(file, name_of(&file.path), None, indent, selected, focused);
+                        let line = styled_file_line(
+                            file,
+                            name_of(&file.path),
+                            None,
+                            indent,
+                            selected,
+                            focused,
+                        );
                         // Most of the name gives way to the counts.
-                        ui::fit(ui::with_line_counts(line, file.lines), &[(NAME, NAME_KEPT)], width)
+                        ui::fit(
+                            ui::with_line_counts(line, file.lines),
+                            &[(NAME, NAME_KEPT)],
+                            width,
+                        )
                     }
                 }
             })
@@ -276,8 +319,15 @@ impl FileList {
 /// file by its index, each at a depth.
 #[derive(Debug, PartialEq)]
 pub enum TreeRow {
-    Folder { name: String, path: String, depth: usize },
-    File { index: usize, depth: usize },
+    Folder {
+        name: String,
+        path: String,
+        depth: usize,
+    },
+    File {
+        index: usize,
+        depth: usize,
+    },
 }
 
 impl TreeRow {
@@ -315,34 +365,58 @@ fn tree(files: Vec<FileEntry>) -> (Vec<FileEntry>, Vec<TreeRow>) {
     (ordered, rows)
 }
 
-fn add_rows(node: &Node, parent: &str, depth: usize, ordered: &mut Vec<FileEntry>, rows: &mut Vec<TreeRow>) {
+fn add_rows(
+    node: &Node,
+    parent: &str,
+    depth: usize,
+    ordered: &mut Vec<FileEntry>,
+    rows: &mut Vec<TreeRow>,
+) {
     for (name, folder) in &node.folders {
         let (mut name, mut folder) = (name.clone(), folder);
         while folder.files.is_empty() && folder.folders.len() == 1 {
-            let Some((inner_name, inner)) = folder.folders.iter().next() else { break };
+            let Some((inner_name, inner)) = folder.folders.iter().next() else {
+                break;
+            };
             name = format!("{name}/{inner_name}");
             folder = inner;
         }
-        let path = if parent.is_empty() { name.clone() } else { format!("{parent}/{name}") };
-        rows.push(TreeRow::Folder { name, path: path.clone(), depth });
+        let path = if parent.is_empty() {
+            name.clone()
+        } else {
+            format!("{parent}/{name}")
+        };
+        rows.push(TreeRow::Folder {
+            name,
+            path: path.clone(),
+            depth,
+        });
         add_rows(folder, &path, depth + 1, ordered, rows);
     }
     let mut files: Vec<&FileEntry> = node.files.iter().collect();
     files.sort_by(|a, b| a.path.cmp(&b.path));
     for file in files {
-        rows.push(TreeRow::File { index: ordered.len(), depth });
+        rows.push(TreeRow::File {
+            index: ordered.len(),
+            depth,
+        });
         ordered.push(file.clone());
     }
 }
 
 /// The file's own name, the last part of its path.
 fn name_of(path: &str) -> &str {
-    path.trim_end_matches('/').rsplit('/').next().unwrap_or(path)
+    path.trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .unwrap_or(path)
 }
 
 /// The folder a file is in, if it's not at the top of the repo.
 fn folder_of(path: &str) -> Option<&str> {
-    path.trim_end_matches('/').rsplit_once('/').map(|(folder, _)| folder)
+    path.trim_end_matches('/')
+        .rsplit_once('/')
+        .map(|(folder, _)| folder)
 }
 
 /// Where a file row built here has its name, and its folder if it has one.
@@ -356,7 +430,14 @@ pub const NAME_KEPT: usize = 12;
 /// A file's row in a flat list, as VS Code lists changes: its name, then the
 /// folder it's in, dimmed, like `app.rs  src/ui`.
 pub fn file_line(file: &FileEntry, selected: bool, focused: bool) -> Line<'_> {
-    styled_file_line(file, name_of(&file.path), folder_of(&file.path), String::new(), selected, focused)
+    styled_file_line(
+        file,
+        name_of(&file.path),
+        folder_of(&file.path),
+        String::new(),
+        selected,
+        focused,
+    )
 }
 
 /// A file's row: its status letter, `name`, and `folder` if given, dimmed,
@@ -375,7 +456,10 @@ fn styled_file_line<'a>(
     );
     let mut spans = vec![letter, Span::raw(name)];
     if let Some(folder) = folder {
-        spans.push(Span::styled(format!("  {folder}"), Style::default().fg(ui::DIM)));
+        spans.push(Span::styled(
+            format!("  {folder}"),
+            Style::default().fg(ui::DIM),
+        ));
     }
     ui::selected(Line::from(spans), selected, focused)
 }
@@ -385,7 +469,14 @@ mod tests {
     use super::*;
 
     fn files(paths: &[&str]) -> Vec<FileEntry> {
-        paths.iter().map(|path| FileEntry { status: 'M', path: path.to_string(), ..Default::default() }).collect()
+        paths
+            .iter()
+            .map(|path| FileEntry {
+                status: 'M',
+                path: path.to_string(),
+                ..Default::default()
+            })
+            .collect()
     }
 
     /// The tree's rows as text, indented by depth.
@@ -394,28 +485,50 @@ mod tests {
         rows.iter()
             .map(|row| match row {
                 TreeRow::Folder { name, depth, .. } => format!("{}{name}/", "  ".repeat(*depth)),
-                TreeRow::File { index, depth } => format!("{}{}", "  ".repeat(*depth), ordered[*index].path),
+                TreeRow::File { index, depth } => {
+                    format!("{}{}", "  ".repeat(*depth), ordered[*index].path)
+                }
             })
             .collect()
     }
 
     fn text(line: &Line) -> String {
-        line.spans.iter().map(|span| span.content.as_ref()).collect()
+        line.spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect()
     }
 
     #[test]
     fn files_nest_under_their_folders_with_folders_first() {
-        let rows = drawn(&["README.md", "src/main.rs", "src/ui/app.rs", "src/ui/diff.rs", "Cargo.toml"]);
+        let rows = drawn(&[
+            "README.md",
+            "src/main.rs",
+            "src/ui/app.rs",
+            "src/ui/diff.rs",
+            "Cargo.toml",
+        ]);
         assert_eq!(
             rows,
-            ["src/", "  ui/", "    src/ui/app.rs", "    src/ui/diff.rs", "  src/main.rs", "Cargo.toml", "README.md"]
+            [
+                "src/",
+                "  ui/",
+                "    src/ui/app.rs",
+                "    src/ui/diff.rs",
+                "  src/main.rs",
+                "Cargo.toml",
+                "README.md"
+            ]
         );
     }
 
     #[test]
     fn a_folder_holding_only_a_folder_shares_its_line() {
         let rows = drawn(&["docs/images/a.svg", "docs/images/b.svg"]);
-        assert_eq!(rows, ["docs/images/", "  docs/images/a.svg", "  docs/images/b.svg"]);
+        assert_eq!(
+            rows,
+            ["docs/images/", "  docs/images/a.svg", "  docs/images/b.svg"]
+        );
     }
 
     #[test]
@@ -431,7 +544,10 @@ mod tests {
 
     /// The visible rows, as a folder's path or a file's path.
     fn shown(list: &FileList) -> Vec<String> {
-        list.visible().into_iter().map(|row| list.row_key(row)).collect()
+        list.visible()
+            .into_iter()
+            .map(|row| list.row_key(row))
+            .collect()
     }
 
     fn list(paths: &[&str]) -> FileList {
@@ -464,7 +580,9 @@ mod tests {
     #[test]
     fn folders_have_no_diff_and_files_keep_theirs() {
         let mut list = list(&["src/a.rs"]);
-        assert!(matches!(list.selected_source(), Some(DiffSource::Refs { path, .. }) if path == "src/a.rs"));
+        assert!(
+            matches!(list.selected_source(), Some(DiffSource::Refs { path, .. }) if path == "src/a.rs")
+        );
         // On the folder, there's no diff, and the one showing stays.
         assert!(matches!(press(&mut list, 'k'), Action::None));
         assert!(list.selected_source().is_none());

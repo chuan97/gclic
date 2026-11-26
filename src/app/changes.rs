@@ -7,7 +7,11 @@ use crate::git::FileEntry;
 impl App {
     /// Inside a diff of the working tree, where space and d take a change.
     pub(super) fn in_working_tree_diff(&self) -> bool {
-        self.view.in_preview && self.view.diff().is_some_and(|diff| diff.source.is_working_tree())
+        self.view.in_preview
+            && self
+                .view
+                .diff()
+                .is_some_and(|diff| diff.source.is_working_tree())
     }
 
     /// Where files and changes are staged and discarded, and so where u and
@@ -27,7 +31,9 @@ impl App {
         operation: impl FnOnce(&Repo) -> Result<()>,
     ) -> bool {
         let repo = self.repo.clone();
-        let result = self.history.record(&repo, label, kind, paths, || operation(&repo));
+        let result = self
+            .history
+            .record(&repo, label, kind, paths, || operation(&repo));
         let worked = result.is_ok();
         self.apply(Action::after_change(result));
         worked
@@ -51,9 +57,15 @@ impl App {
             Staging::Unstage(path) => (format!("unstaging {path}"), vec![path.clone()]),
             Staging::StageAll => {
                 let status = status();
-                ("staging everything".to_string(), paths_of(&[&status.conflicted, &status.unstaged]))
+                (
+                    "staging everything".to_string(),
+                    paths_of(&[&status.conflicted, &status.unstaged]),
+                )
             }
-            Staging::UnstageAll => ("unstaging everything".to_string(), paths_of(&[&status().staged])),
+            Staging::UnstageAll => (
+                "unstaging everything".to_string(),
+                paths_of(&[&status().staged]),
+            ),
         };
         self.record(label, undo::Kind::Index, paths, |repo| match &staging {
             Staging::Stage(path) => git::stage(repo, path),
@@ -76,13 +88,18 @@ impl App {
             self.message = "Not on a change: n goes to the next one".to_string();
             return;
         };
-        let (source, text, whole) = (pane.source.clone(), pane.text().to_string(), pane.change_count() == 1);
+        let (source, text, whole) = (
+            pane.source.clone(),
+            pane.text().to_string(),
+            pane.change_count() == 1,
+        );
         let path = source.path().to_string();
         let staging = match &source {
             DiffSource::Unstaged(_) | DiffSource::Untracked(_) => true,
             DiffSource::Staged(_) => false,
             DiffSource::Conflict(_) => {
-                self.message = "A conflict is staged whole once resolved, with space in the list".to_string();
+                self.message =
+                    "A conflict is staged whole once resolved, with space in the list".to_string();
                 return;
             }
             _ => return,
@@ -92,13 +109,22 @@ impl App {
         let done = if staging { "Staged" } else { "Unstaged" };
         let label = match whole {
             true => format!("{} {path}", if staging { "staging" } else { "unstaging" }),
-            false => format!("{} a change to {path}", if staging { "staging" } else { "unstaging" }),
+            false => format!(
+                "{} a change to {path}",
+                if staging { "staging" } else { "unstaging" }
+            ),
         };
-        let worked = self.record(label, undo::Kind::Index, vec![path.clone()], |repo| match (whole, staging) {
+        let worked = self.record(label, undo::Kind::Index, vec![path.clone()], |repo| match (
+            whole, staging,
+        ) {
             (true, true) => git::stage(repo, &path),
             (true, false) => git::unstage(repo, &path),
             (false, _) => {
-                let direction = if staging { diff::Direction::Forward } else { diff::Direction::Reverse };
+                let direction = if staging {
+                    diff::Direction::Forward
+                } else {
+                    diff::Direction::Reverse
+                };
                 match diff::change_patch(&text, &path, &change, direction) {
                     Some(patch) => git::apply_to_index(repo, &patch, !staging),
                     None => Err(anyhow::anyhow!("That change isn't in the diff any more")),
@@ -106,7 +132,11 @@ impl App {
             }
         });
         if worked {
-            self.message = if whole { format!("{done} {path}") } else { format!("{done} the change") };
+            self.message = if whole {
+                format!("{done} {path}")
+            } else {
+                format!("{done} the change")
+            };
             if let Some(pane) = self.view.diff_mut() {
                 pane.go_to_nearest_change();
             }
@@ -128,11 +158,15 @@ impl App {
         let path = pane.source.path().to_string();
         self.modal = match &pane.source {
             DiffSource::Untracked(_) => Modal::Confirm(Confirm::DeleteUntracked(path)),
-            DiffSource::Unstaged(_) if pane.change_count() == 1 => Modal::Confirm(Confirm::Restore(path)),
-            DiffSource::Unstaged(_) => match diff::change_patch(pane.text(), &path, &change, diff::Direction::Reverse) {
-                Some(patch) => Modal::Confirm(Confirm::RestoreChange { path, patch }),
-                None => Modal::Error("That change isn't in the diff any more".to_string()),
-            },
+            DiffSource::Unstaged(_) if pane.change_count() == 1 => {
+                Modal::Confirm(Confirm::Restore(path))
+            }
+            DiffSource::Unstaged(_) => {
+                match diff::change_patch(pane.text(), &path, &change, diff::Direction::Reverse) {
+                    Some(patch) => Modal::Confirm(Confirm::RestoreChange { path, patch }),
+                    None => Modal::Error("That change isn't in the diff any more".to_string()),
+                }
+            }
             DiffSource::Staged(_) => {
                 self.message = "Staged changes are kept: unstage it first, with space".to_string();
                 return;
@@ -147,14 +181,21 @@ impl App {
     /// A file's changes thrown away, once confirmed, kept to undo.
     pub(super) fn restore_file(&mut self, path: &str) {
         let label = format!("discarding your changes to {path}");
-        self.record(label, undo::Kind::WorkingTree, vec![path.to_string()], |repo| git::restore(repo, path));
+        self.record(
+            label,
+            undo::Kind::WorkingTree,
+            vec![path.to_string()],
+            |repo| git::restore(repo, path),
+        );
     }
 
     /// One change of a file thrown away, once confirmed, kept to undo.
     pub(super) fn restore_change(&mut self, path: &str, patch: &str) {
         let label = format!("discarding a change to {path}");
         let paths = vec![path.to_string()];
-        if self.record(label, undo::Kind::WorkingTree, paths, |repo| git::unapply_from_working_tree(repo, patch)) {
+        if self.record(label, undo::Kind::WorkingTree, paths, |repo| {
+            git::unapply_from_working_tree(repo, patch)
+        }) {
             self.message = "Discarded the change".to_string();
             if let Some(pane) = self.view.diff_mut() {
                 pane.go_to_nearest_change();
@@ -165,20 +206,40 @@ impl App {
     /// D, once confirmed. The changes are kept to undo, but not the untracked
     /// files deleted, which git never had.
     pub(super) fn discard_all(&mut self, restore: &[String], delete: &[String]) {
-        let files = |count: usize, kind: &str| if count == 1 { format!("1 {kind}file") } else { format!("{count} {kind}files") };
+        let files = |count: usize, kind: &str| {
+            if count == 1 {
+                format!("1 {kind}file")
+            } else {
+                format!("{count} {kind}files")
+            }
+        };
         let mut label = format!("discarding your changes to {}", files(restore.len(), ""));
         if !delete.is_empty() {
-            label.push_str(&format!(", though not deleting {}", files(delete.len(), "untracked ")));
+            label.push_str(&format!(
+                ", though not deleting {}",
+                files(delete.len(), "untracked ")
+            ));
         }
-        self.record(label, undo::Kind::WorkingTree, restore.to_vec(), |repo| git::discard_all(repo, restore, delete));
+        self.record(label, undo::Kind::WorkingTree, restore.to_vec(), |repo| {
+            git::discard_all(repo, restore, delete)
+        });
     }
 
     /// u: undoes the latest staging or discard made in gclic, and ctrl-r
     /// redoes the latest undone.
     pub(super) fn undo(&mut self, redo: bool) {
-        let result = if redo { self.history.redo(&self.repo) } else { self.history.undo(&self.repo) };
+        let result = if redo {
+            self.history.redo(&self.repo)
+        } else {
+            self.history.undo(&self.repo)
+        };
         let Some(result) = result else {
-            self.message = if redo { "Nothing to redo" } else { "Nothing to undo" }.to_string();
+            self.message = if redo {
+                "Nothing to redo"
+            } else {
+                "Nothing to undo"
+            }
+            .to_string();
             return;
         };
         self.refresh();

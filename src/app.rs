@@ -13,26 +13,26 @@ mod status_line;
 #[cfg(test)]
 mod tests;
 
+pub(crate) use commands::COMMAND_HELP;
+use commands::read_clipboard;
 use comments::CommentBox;
 use fetcher::Fetcher;
-use commands::read_clipboard;
-pub(crate) use commands::COMMAND_HELP;
 use layout::project_location;
-use popups::{remember_yank, Modal, PickerUse};
+use popups::{Modal, PickerUse, remember_yank};
 
 use crate::accent::{self, Accent};
 use crate::branches::BranchesPanel;
 use crate::compare::ComparePanel;
-use crate::running::{OutputPopup, Running};
 use crate::details::DetailsPane;
-use crate::editor::{self, Launch};
-use crate::repos;
-use crate::review::{self, Anchor, Comment, ListAction, Review, ReviewList};
 use crate::diff::{self, ColorCache, Colored, DiffPane, DiffView};
-use crate::git::{self, Stash, CommitDetails, DiffSource, Repo};
+use crate::editor::{self, Launch};
+use crate::git::{self, CommitDetails, DiffSource, Repo, Stash};
 use crate::graph::GraphPanel;
 use crate::help::HelpPopup;
 use crate::picker::{Outcome, Picker};
+use crate::repos;
+use crate::review::{self, Anchor, Comment, ListAction, Review, ReviewList};
+use crate::running::{OutputPopup, Running};
 use crate::staging::StagingPanel;
 use crate::ui;
 use crate::undo;
@@ -64,11 +64,21 @@ const FOLLOW_EVERY: Duration = Duration::from_millis(500);
 const KEY_WAIT: Duration = Duration::from_millis(30);
 const GLOBAL_HINTS: [ui::Hint; 3] = [(":", "command"), ("?", "help"), ("q", "quit")];
 /// The keys shown on `:stash`'s list.
-const STASH_PICKER_KEYS: [(&str, &str); 6] =
-    [("enter", "files"), ("a", "apply"), ("p", "pop"), ("d", "drop"), ("i", "search"), ("esc", "close")];
+const STASH_PICKER_KEYS: [(&str, &str); 6] = [
+    ("enter", "files"),
+    ("a", "apply"),
+    ("p", "pop"),
+    ("d", "drop"),
+    ("i", "search"),
+    ("esc", "close"),
+];
 /// The keys shown on the pickers that choose refs to compare.
-const COMPARE_PICKER_KEYS: [(&str, &str); 4] =
-    [("i", "type"), ("p", "paste"), ("enter", "choose"), ("esc", "close")];
+const COMPARE_PICKER_KEYS: [(&str, &str); 4] = [
+    ("i", "type"),
+    ("p", "paste"),
+    ("enter", "choose"),
+    ("esc", "close"),
+];
 /// The preview's share of the width, focused or not. Zooming gives it all of it.
 const DIFF_PERCENT: u16 = 80;
 const REVIEW_DIFF_PERCENT: u16 = 60;
@@ -156,10 +166,16 @@ pub enum Confirm {
     Restore(String),
     /// d inside a file's diff: the change the active line is in, as a patch
     /// to take back out of the file.
-    RestoreChange { path: String, patch: String },
+    RestoreChange {
+        path: String,
+        patch: String,
+    },
     DeleteUntracked(String),
     /// D: every change not staged, as d would discard each.
-    DiscardAll { restore: Vec<String>, delete: Vec<String> },
+    DiscardAll {
+        restore: Vec<String>,
+        delete: Vec<String>,
+    },
     /// Closing loses refs the user may have taken a while to pick, and tab
     /// already leaves the comparison without losing it.
     CloseCompare,
@@ -219,7 +235,12 @@ impl View {
             Tab::Compare => Pane::Compare,
             Tab::Review => Pane::Review,
         };
-        View { pane, in_preview: false, preview: Preview::None, zoomed: false }
+        View {
+            pane,
+            in_preview: false,
+            preview: Preview::None,
+            zoomed: false,
+        }
     }
 
     /// Whether this pane has the focus, rather than another or the preview.
@@ -439,7 +460,8 @@ impl App {
                     }
                 }
                 if let Some((shown, name, command)) = self.editor_in_terminal.take() {
-                    let note = crate::terminal::hand_terminal(terminal, &shown, &name, vec![command])?;
+                    let note =
+                        crate::terminal::hand_terminal(terminal, &shown, &name, vec![command])?;
                     // The file may have changed.
                     self.refresh();
                     if let Some(note) = note {
@@ -463,11 +485,12 @@ impl App {
     /// refresh brings the newer version, as for any change made elsewhere.
     fn show_diff(&mut self, source: DiffSource) {
         if let Some(diff) = self.view.diff_mut()
-            && diff.source == source {
-                let result = diff.reload(&self.repo);
-                self.report(result);
-                return;
-            }
+            && diff.source == source
+        {
+            let result = diff.reload(&self.repo);
+            self.report(result);
+            return;
+        }
         let view = self.view_of(&source);
         if let Some((text, colored)) = self.colors.latest(&view) {
             self.view.preview = Preview::Diff(DiffPane::colored(&self.repo, view, text, colored));
@@ -494,7 +517,11 @@ impl App {
         // handle_main_key waits for the second g.
         let takes_gg = matches!(&self.modal, Modal::Help(_) | Modal::Output(_))
             || matches!(&self.modal, Modal::Picker(picker, _) if !picker.is_typing());
-        let key = if takes_gg { ui::gg(&mut self.pending_g, key) } else { Some(key) };
+        let key = if takes_gg {
+            ui::gg(&mut self.pending_g, key)
+        } else {
+            Some(key)
+        };
         let Some(key) = key else {
             return;
         };
@@ -550,24 +577,38 @@ impl App {
             _ if self.pending_g => {
                 self.pending_g = false;
                 match key.code {
-                    KeyCode::Char('g') => self.send_to_focused_panel(KeyEvent::from(KeyCode::Char('g'))),
+                    KeyCode::Char('g') => {
+                        self.send_to_focused_panel(KeyEvent::from(KeyCode::Char('g')))
+                    }
                     KeyCode::Char('c') => self.comment_on_line(),
                     KeyCode::Char('C') => self.comment_on_file(),
                     _ => {}
                 }
             }
             KeyCode::Char('g') => self.pending_g = true,
-            KeyCode::Char('u') if key.modifiers.is_empty() && self.where_staging_is() => self.undo(false),
-            KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL && self.where_staging_is() => self.undo(true),
+            KeyCode::Char('u') if key.modifiers.is_empty() && self.where_staging_is() => {
+                self.undo(false)
+            }
+            KeyCode::Char('r')
+                if key.modifiers == KeyModifiers::CONTROL && self.where_staging_is() =>
+            {
+                self.undo(true)
+            }
             KeyCode::Char('q') => self.modal = Modal::ConfirmQuit,
             // h and l move between the Repo tab's panes. Elsewhere they're the
             // pane's own: a diff scrolls sideways, Compare's tree folds.
-            KeyCode::Char('h') if self.tab == Tab::Repo && !self.view.in_preview => self.move_focus(false),
-            KeyCode::Char('l') if self.tab == Tab::Repo && !self.view.in_preview => self.move_focus(true),
+            KeyCode::Char('h') if self.tab == Tab::Repo && !self.view.in_preview => {
+                self.move_focus(false)
+            }
+            KeyCode::Char('l') if self.tab == Tab::Repo && !self.view.in_preview => {
+                self.move_focus(true)
+            }
             KeyCode::Char('?') => self.modal = Modal::Help(HelpPopup::new(self.help_section())),
             KeyCode::Char(':') => self.modal = Modal::Command(String::new()),
             KeyCode::Char('o') => self.open_in_editor(),
-            KeyCode::Char('r') if self.tab == Tab::Compare && self.compare.is_some() => self.swap_compare(),
+            KeyCode::Char('r') if self.tab == Tab::Compare && self.compare.is_some() => {
+                self.swap_compare()
+            }
             KeyCode::Tab => self.cycle_tab(true),
             KeyCode::BackTab => self.cycle_tab(false),
             KeyCode::Char('e') if self.view.diff().is_some() => self.toggle_whole_files(),
@@ -584,9 +625,7 @@ impl App {
             KeyCode::Char(' ') if self.in_working_tree_diff() => {
                 self.stage_active_change();
             }
-            KeyCode::Char('d')
-                if key.modifiers.is_empty() && self.in_working_tree_diff() =>
-            {
+            KeyCode::Char('d') if key.modifiers.is_empty() && self.in_working_tree_diff() => {
                 self.ask_to_restore_active_change();
             }
             KeyCode::Char('s') if self.view.diff().is_some() => {
@@ -683,7 +722,11 @@ impl App {
             Action::OpenCommitBox => self.modal = Modal::CommitBox,
             Action::OpenGraphPicker => self.open_graph_picker(),
             Action::OpenDetails(details) => {
-                if self.view.details().is_some_and(|shown| shown.sha() == details.sha) {
+                if self
+                    .view
+                    .details()
+                    .is_some_and(|shown| shown.sha() == details.sha)
+                {
                     self.focus_preview();
                 } else {
                     self.view.preview = Preview::Details(DetailsPane::new(details));
@@ -697,7 +740,9 @@ impl App {
                 self.open_stash_picker();
             }
             Action::Compare(a, b) => self.start_compare(a, b),
-            Action::CompareWith(sha) => self.open_compare_b_picker(git::display_ref(&self.repo, &sha)),
+            Action::CompareWith(sha) => {
+                self.open_compare_b_picker(git::display_ref(&self.repo, &sha))
+            }
             Action::Copy(sha) => match copy_to_clipboard(&sha) {
                 Ok(()) => {
                     if let Some(label) = git::commit_label(&self.repo, &sha) {
@@ -727,7 +772,10 @@ impl App {
             Tab::Review => vec![Pane::Review],
             Tab::Repo => vec![Pane::Branches, Pane::Changes, Pane::Graph],
         };
-        let current = order.iter().position(|pane| *pane == self.view.pane).unwrap_or(0);
+        let current = order
+            .iter()
+            .position(|pane| *pane == self.view.pane)
+            .unwrap_or(0);
         let next = if forward {
             ui::next_index(current, order.len())
         } else {
@@ -815,7 +863,11 @@ impl App {
     fn next_tab(&self, forward: bool) -> Tab {
         let tabs = self.tabs();
         let current = tabs.iter().position(|tab| *tab == self.tab).unwrap_or(0);
-        let next = if forward { ui::next_index(current, tabs.len()) } else { ui::previous_index(current, tabs.len()) };
+        let next = if forward {
+            ui::next_index(current, tabs.len())
+        } else {
+            ui::previous_index(current, tabs.len())
+        };
         tabs[next]
     }
 
@@ -828,7 +880,9 @@ impl App {
         if tab == self.tab {
             return;
         }
-        let view = self.saved_views[tab as usize].take().unwrap_or_else(|| View::fresh(tab));
+        let view = self.saved_views[tab as usize]
+            .take()
+            .unwrap_or_else(|| View::fresh(tab));
         let showing = std::mem::replace(&mut self.view, view);
         self.saved_views[self.tab as usize] = Some(showing);
         self.tab = tab;
@@ -838,12 +892,15 @@ impl App {
             self.show_selected_comment();
         }
     }
-
 }
 
 /// How often to read the repo again, after `idle` without a key.
 fn refresh_every(idle: Duration) -> Duration {
-    if idle < IDLE_AFTER { REFRESH_IN_USE } else { REFRESH_IDLE }
+    if idle < IDLE_AFTER {
+        REFRESH_IN_USE
+    } else {
+        REFRESH_IDLE
+    }
 }
 
 /// On Linux the copy may only last while gclic runs, as there the program

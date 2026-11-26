@@ -21,7 +21,14 @@ impl App {
     /// their time is waiting for git. The graph's colours wait for the branch
     /// list, which the Branches pane fetches.
     pub(super) fn reload_panels(&mut self) -> Result<()> {
-        let App { repo, branches, staging, graph, compare, .. } = self;
+        let App {
+            repo,
+            branches,
+            staging,
+            graph,
+            compare,
+            ..
+        } = self;
         let (fingerprint, results) = thread::scope(|scope| {
             let fingerprint = scope.spawn(|| git::refs_fingerprint(repo));
             let staged = scope.spawn(|| staging.refresh());
@@ -54,14 +61,21 @@ impl App {
     /// editor commands that have finished, so none linger: checks cheap
     /// enough to make often, as they start no git. Whether it switched.
     pub(super) fn follow_neovim(&mut self) -> bool {
-        self.editor_commands.retain_mut(|child| matches!(child.try_wait(), Ok(None)));
+        self.editor_commands
+            .retain_mut(|child| matches!(child.try_wait(), Ok(None)));
         // Not while a popup or the command line is open, which switching
         // repos would throw away: it waits for the next check after it.
         if matches!(self.modal, Modal::None)
-            && let Some(root) = self.follow.as_mut().and_then(|follow| follow.moved_to(self.repo.root()))
+            && let Some(root) = self
+                .follow
+                .as_mut()
+                .and_then(|follow| follow.moved_to(self.repo.root()))
         {
             self.switch_repo(&root, false);
-            let name = root.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
+            let name = root
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default();
             self.message = format!("Followed Neovim to {name}");
             return true;
         }
@@ -74,10 +88,19 @@ impl App {
         let any = !results.is_empty() || !alive;
         for done in results {
             match done {
-                Done::Poll { generation, fingerprint, status, diff } => {
+                Done::Poll {
+                    generation,
+                    fingerprint,
+                    status,
+                    diff,
+                } => {
                     self.apply_poll(generation, fingerprint, status, diff);
                 }
-                Done::Highlight { view, text, colored } => self.apply_highlight(view, text, colored),
+                Done::Highlight {
+                    view,
+                    text,
+                    colored,
+                } => self.apply_highlight(view, text, colored),
             }
         }
         if !alive {
@@ -110,7 +133,8 @@ impl App {
         // While browsing Changes the diff follows the selection, which the new
         // status may have moved. Otherwise it takes the newer text, if any.
         let current = self.view.diff().map(|diff| diff.source.clone());
-        let follows = self.view.focused(Pane::Changes) && current.as_ref().is_some_and(|s| s.is_working_tree());
+        let follows = self.view.focused(Pane::Changes)
+            && current.as_ref().is_some_and(|s| s.is_working_tree());
         let selected = self.staging.selected_source();
         if follows && selected != current {
             match selected {
@@ -139,7 +163,10 @@ impl App {
 
     /// A diff as it would show now, whole or just the changes.
     pub(super) fn view_of(&self, source: &DiffSource) -> DiffView {
-        DiffView { source: source.clone(), whole: self.whole }
+        DiffView {
+            source: source.clone(),
+            whole: self.whole,
+        }
     }
 
     /// Colours the open diff from the cache if it can, and asks the worker for
@@ -161,7 +188,10 @@ impl App {
                     None => wanted.push(view.clone()),
                 }
             }
-            let other = DiffView { whole: !view.whole, ..view };
+            let other = DiffView {
+                whole: !view.whole,
+                ..view
+            };
             if !self.colors.contains(&other) {
                 wanted.push(other);
             }
@@ -169,7 +199,11 @@ impl App {
         let mut around = match self.view.pane {
             Pane::Changes => self.staging.sources_around(),
             Pane::Graph => self.graph.file_sources_around(),
-            Pane::Compare => self.compare.as_ref().map(|c| c.sources_around()).unwrap_or_default(),
+            Pane::Compare => self
+                .compare
+                .as_ref()
+                .map(|c| c.sources_around())
+                .unwrap_or_default(),
             Pane::Branches | Pane::Review => Vec::new(),
         };
         if self.view.diff().is_none() {
@@ -190,7 +224,10 @@ impl App {
         if self.view.diff().is_none() {
             return;
         }
-        let shows_working_tree = self.view.diff().is_some_and(|diff| diff.source.is_working_tree());
+        let shows_working_tree = self
+            .view
+            .diff()
+            .is_some_and(|diff| diff.source.is_working_tree());
         if self.view.focused(Pane::Changes) && shows_working_tree {
             match self.staging.selected_source() {
                 Some(source) => self.show_diff(source),

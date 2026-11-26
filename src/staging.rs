@@ -34,7 +34,12 @@ pub struct StagingPanel {
 
 impl StagingPanel {
     pub fn new(repo: &Repo) -> StagingPanel {
-        StagingPanel { repo: repo.clone(), status: Status::default(), operation: None, cursor: ui::Cursor::default() }
+        StagingPanel {
+            repo: repo.clone(),
+            status: Status::default(),
+            operation: None,
+            cursor: ui::Cursor::default(),
+        }
     }
 
     /// Whether an untracked entry is a folder, which git lists when it holds
@@ -90,7 +95,11 @@ impl StagingPanel {
 
     /// Where a section's files start in the selection's numbering.
     fn offset_of(&self, section: Section) -> usize {
-        self.sections().iter().take_while(|(s, _)| *s != section).map(|(_, files)| files.len()).sum()
+        self.sections()
+            .iter()
+            .take_while(|(s, _)| *s != section)
+            .map(|(_, files)| files.len())
+            .sum()
     }
 
     fn selection(&self) -> Option<(Section, &FileEntry)> {
@@ -115,7 +124,10 @@ impl StagingPanel {
     /// The diffs one key away, most likely first, for prefetching.
     pub fn sources_around(&self) -> Vec<DiffSource> {
         let positions = self.cursor.one_key_away(self.total());
-        positions.into_iter().filter_map(|index| self.source_at(index)).collect()
+        positions
+            .into_iter()
+            .filter_map(|index| self.source_at(index))
+            .collect()
     }
 
     /// The diff that has this file's changes, for a review comment written
@@ -126,7 +138,11 @@ impl StagingPanel {
             .filter_map(|index| self.source_at(index))
             .filter(|source| source.path() == path && !matches!(source, DiffSource::Conflict(_)))
             .collect();
-        sources.iter().find(|source| *source == written_on).or(sources.first()).cloned()
+        sources
+            .iter()
+            .find(|source| *source == written_on)
+            .or(sources.first())
+            .cloned()
     }
 
     fn source_at(&self, index: usize) -> Option<DiffSource> {
@@ -159,7 +175,9 @@ impl StagingPanel {
         let previous = self
             .selection()
             .map(|(section, entry)| (section, entry.path.clone()));
-        let old_offset = previous.as_ref().map_or(0, |(section, _)| self.offset_of(*section));
+        let old_offset = previous
+            .as_ref()
+            .map_or(0, |(section, _)| self.offset_of(*section));
         self.status = status;
 
         if let Some((section, path)) = previous {
@@ -172,7 +190,8 @@ impl StagingPanel {
             if let Some(position) = list.iter().position(|e| e.path == path) {
                 self.cursor.index = new_offset + position;
             } else if !list.is_empty() {
-                self.cursor.index = new_offset + (self.cursor.index - old_offset).min(list.len() - 1);
+                self.cursor.index =
+                    new_offset + (self.cursor.index - old_offset).min(list.len() - 1);
             }
         }
         self.cursor.clamp(self.total());
@@ -221,7 +240,9 @@ impl StagingPanel {
         match self.selection() {
             Some((Section::Staged, entry)) => Action::Staging(Staging::Unstage(entry.path.clone())),
             // Staging a conflicted file is how git marks it resolved.
-            Some((Section::Conflicts | Section::Changes, entry)) => Action::Staging(Staging::Stage(entry.path.clone())),
+            Some((Section::Conflicts | Section::Changes, entry)) => {
+                Action::Staging(Staging::Stage(entry.path.clone()))
+            }
             None => Action::None,
         }
     }
@@ -236,9 +257,19 @@ impl StagingPanel {
     /// restore and the untracked ones to delete. Submodules are left to git,
     /// and conflicts and staged changes aren't in the list.
     fn discardable(&self) -> (Vec<String>, Vec<String>) {
-        let files = self.status.unstaged.iter().filter(|entry| !self.is_folder(&entry.path));
-        let (delete, restore): (Vec<&FileEntry>, Vec<&FileEntry>) = files.partition(|entry| entry.status == '?');
-        let paths = |entries: Vec<&FileEntry>| entries.into_iter().map(|entry| entry.path.clone()).collect();
+        let files = self
+            .status
+            .unstaged
+            .iter()
+            .filter(|entry| !self.is_folder(&entry.path));
+        let (delete, restore): (Vec<&FileEntry>, Vec<&FileEntry>) =
+            files.partition(|entry| entry.status == '?');
+        let paths = |entries: Vec<&FileEntry>| {
+            entries
+                .into_iter()
+                .map(|entry| entry.path.clone())
+                .collect()
+        };
         (paths(restore), paths(delete))
     }
 
@@ -260,10 +291,12 @@ impl StagingPanel {
             ),
             // git lists a submodule, or a repo nested inside this one, as a
             // folder. Restoring one isn't a plain restore, so it's left to git.
-            Some((Section::Changes, entry)) if self.is_folder(&entry.path) => Action::Message(format!(
-                "{} is a submodule or a nested repo: reset it with git, e.g. git submodule update",
-                entry.path.trim_end_matches('/')
-            )),
+            Some((Section::Changes, entry)) if self.is_folder(&entry.path) => {
+                Action::Message(format!(
+                    "{} is a submodule or a nested repo: reset it with git, e.g. git submodule update",
+                    entry.path.trim_end_matches('/')
+                ))
+            }
             Some((Section::Changes, entry)) if entry.status == '?' => {
                 Action::Confirm(Confirm::DeleteUntracked(entry.path.clone()))
             }
@@ -286,7 +319,9 @@ impl StagingPanel {
     /// The sections with a heading: Staged and Changes always, and Conflicts
     /// while there are any.
     fn headings(&self) -> Vec<(Section, &Vec<FileEntry>)> {
-        let shown = |(section, files): &(Section, &Vec<FileEntry>)| *section != Section::Conflicts || !files.is_empty();
+        let shown = |(section, files): &(Section, &Vec<FileEntry>)| {
+            *section != Section::Conflicts || !files.is_empty()
+        };
         self.sections().into_iter().filter(shown).collect()
     }
 
@@ -326,7 +361,11 @@ impl StagingPanel {
             lines.push(Line::styled(format!("{name} ({})", files.len()), heading));
             for entry in files {
                 let line = file_line(entry, index == self.cursor.index, focused);
-                lines.push(ui::fit(line, &[(FOLDER, 0), (NAME, NAME_KEPT)], inner.width as usize));
+                lines.push(ui::fit(
+                    line,
+                    &[(FOLDER, 0), (NAME, NAME_KEPT)],
+                    inner.width as usize,
+                ));
                 index += 1;
             }
         }
@@ -342,14 +381,22 @@ mod tests {
     fn entries(paths: &[&str]) -> Vec<FileEntry> {
         paths
             .iter()
-            .map(|path| FileEntry { status: 'M', path: path.to_string(), ..Default::default() })
+            .map(|path| FileEntry {
+                status: 'M',
+                path: path.to_string(),
+                ..Default::default()
+            })
             .collect()
     }
 
     fn panel(staged: &[&str], unstaged: &[&str], selected: usize) -> StagingPanel {
         let mut panel = StagingPanel {
             repo: Repo::nowhere(),
-            status: Status { staged: entries(staged), unstaged: entries(unstaged), ..Status::default() },
+            status: Status {
+                staged: entries(staged),
+                unstaged: entries(unstaged),
+                ..Status::default()
+            },
             operation: None,
             cursor: ui::Cursor::default(),
         };
@@ -367,8 +414,14 @@ mod tests {
         p.status.unstaged[1].status = '?';
         p.status.conflicted = conflicts(&["clash"]);
         let (restore, delete) = p.discardable();
-        assert_eq!((restore, delete), (vec!["edited".to_string()], vec!["new".to_string()]));
-        assert!(matches!(p.handle_key(KeyEvent::from(KeyCode::Char('D'))), Action::Confirm(Confirm::DiscardAll { .. })));
+        assert_eq!(
+            (restore, delete),
+            (vec!["edited".to_string()], vec!["new".to_string()])
+        );
+        assert!(matches!(
+            p.handle_key(KeyEvent::from(KeyCode::Char('D'))),
+            Action::Confirm(Confirm::DiscardAll { .. })
+        ));
         let nothing = panel(&["staged"], &[], 0);
         assert!(matches!(nothing.ask_to_discard_all(), Action::Message(_)));
     }
@@ -376,26 +429,44 @@ mod tests {
     #[test]
     fn staging_a_file_moves_on_to_the_next_change() {
         let mut p = panel(&[], &["a", "b", "c"], 0);
-        p.set_status(Status { staged: entries(&["a"]), unstaged: entries(&["b", "c"]), ..Status::default() });
+        p.set_status(Status {
+            staged: entries(&["a"]),
+            unstaged: entries(&["b", "c"]),
+            ..Status::default()
+        });
         assert_eq!(selected_path(&p), "b");
     }
 
     #[test]
     fn selection_follows_a_file_when_the_lists_shift() {
         let mut p = panel(&[], &["a", "b"], 1);
-        p.set_status(Status { staged: entries(&["x"]), unstaged: entries(&["a", "b"]), ..Status::default() });
+        p.set_status(Status {
+            staged: entries(&["x"]),
+            unstaged: entries(&["a", "b"]),
+            ..Status::default()
+        });
         assert_eq!(selected_path(&p), "b");
     }
 
     fn conflicts(paths: &[&str]) -> Vec<FileEntry> {
-        paths.iter().map(|path| FileEntry { status: 'U', path: path.to_string(), ..Default::default() }).collect()
+        paths
+            .iter()
+            .map(|path| FileEntry {
+                status: 'U',
+                path: path.to_string(),
+                ..Default::default()
+            })
+            .collect()
     }
 
     #[test]
     fn conflicts_come_first_and_open_as_conflicts() {
         let mut p = panel(&["s"], &["c"], 0);
         p.status.conflicted = conflicts(&["x"]);
-        assert_eq!(p.selected_source(), Some(DiffSource::Conflict("x".to_string())));
+        assert_eq!(
+            p.selected_source(),
+            Some(DiffSource::Conflict("x".to_string()))
+        );
         assert_eq!(p.source_at(1), Some(DiffSource::Staged("s".to_string())));
         assert_eq!(p.source_at(2), Some(DiffSource::Unstaged("c".to_string())));
         assert_eq!(p.wanted_height(), 6); // three headings, three files
@@ -406,7 +477,11 @@ mod tests {
         let mut p = panel(&[], &[], 0);
         p.status.conflicted = conflicts(&["a", "b"]);
         // Staging a marks it resolved, and it joins the staged files.
-        p.set_status(Status { conflicted: conflicts(&["b"]), staged: entries(&["a"]), ..Status::default() });
+        p.set_status(Status {
+            conflicted: conflicts(&["b"]),
+            staged: entries(&["a"]),
+            ..Status::default()
+        });
         assert_eq!(selected_path(&p), "b");
     }
 

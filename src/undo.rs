@@ -97,7 +97,13 @@ impl History {
         if let (Ok(before), Ok(after)) = (before, State::read(repo, kind, &paths))
             && before != after
         {
-            self.steps.push(Step { label, kind, paths, before, after });
+            self.steps.push(Step {
+                label,
+                kind,
+                paths,
+                before,
+                after,
+            });
             // A new step starts another line of history, as in vim.
             self.undone.clear();
             if self.steps.len() > MOST_STEPS {

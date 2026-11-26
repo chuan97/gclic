@@ -37,8 +37,16 @@ pub enum Row {
     /// git found it's inside of, like a function's first line. Git's own
     /// `@@ -6,9 +6,50 @@` counts the unchanged lines around a change too, and
     /// the line numbers are on the rows already.
-    Hunk { line: usize, added: usize, removed: usize, context: String },
-    Lines { left: Option<Cell>, right: Option<Cell> },
+    Hunk {
+        line: usize,
+        added: usize,
+        removed: usize,
+        context: String,
+    },
+    Lines {
+        left: Option<Cell>,
+        right: Option<Cell>,
+    },
 }
 
 /// Turns a unified diff of one file into side-by-side rows.
@@ -63,9 +71,22 @@ pub fn parse_diff(text: &str) -> Vec<Row> {
             flush_change(&mut rows, &mut removed, &mut added);
             (old_number, new_number) = parse_hunk_header(line);
             hunk = Some(rows.len());
-            let context = line.splitn(4, ' ').nth(3).and_then(|rest| rest.split_once("@@")).map_or("", |(_, after)| after);
-            let line = if new_number > 0 { new_number } else { old_number };
-            rows.push(Row::Hunk { line, added: 0, removed: 0, context: context.trim().to_string() });
+            let context = line
+                .splitn(4, ' ')
+                .nth(3)
+                .and_then(|rest| rest.split_once("@@"))
+                .map_or("", |(_, after)| after);
+            let line = if new_number > 0 {
+                new_number
+            } else {
+                old_number
+            };
+            rows.push(Row::Hunk {
+                line,
+                added: 0,
+                removed: 0,
+                context: context.trim().to_string(),
+            });
             in_hunk = true;
         } else if !in_hunk {
             if line.starts_with("Binary files ") {
@@ -122,7 +143,9 @@ pub fn rows_for(source: &DiffSource, text: &str) -> Vec<Row> {
 /// line lands on the conflict. A diff3 base section, if any, is left out.
 pub fn parse_conflict(text: &str) -> Vec<Row> {
     if text.is_empty() {
-        return vec![Row::Heading("Deleted on one side: stage or remove it to resolve".to_string())];
+        return vec![Row::Heading(
+            "Deleted on one side: stage or remove it to resolve".to_string(),
+        )];
     }
     enum Part {
         Outside,
@@ -144,8 +167,17 @@ pub fn parse_conflict(text: &str) -> Vec<Row> {
             }
             Part::Outside => {
                 let text = clean(line);
-                let context = |text: String| Cell { number, text, changed: false, marks: Vec::new(), colors: Vec::new() };
-                rows.push(Row::Lines { left: Some(context(text.clone())), right: Some(context(text)) });
+                let context = |text: String| Cell {
+                    number,
+                    text,
+                    changed: false,
+                    marks: Vec::new(),
+                    colors: Vec::new(),
+                };
+                rows.push(Row::Lines {
+                    left: Some(context(text.clone())),
+                    right: Some(context(text)),
+                });
             }
             Part::Ours | Part::Base if line.starts_with("=======") => part = Part::Theirs,
             Part::Ours if line.starts_with("|||||||") => part = Part::Base,
@@ -154,7 +186,9 @@ pub fn parse_conflict(text: &str) -> Vec<Row> {
             Part::Theirs if line.starts_with(">>>>>>>") => {
                 conflicts += 1;
                 let theirs_label = line.trim_start_matches('>').trim();
-                rows.push(Row::Heading(format!("Conflict {conflicts}: {ours_label} ↔ {theirs_label}")));
+                rows.push(Row::Heading(format!(
+                    "Conflict {conflicts}: {ours_label} ↔ {theirs_label}"
+                )));
                 flush_change(&mut rows, &mut ours, &mut theirs);
                 part = Part::Outside;
             }
@@ -164,7 +198,10 @@ pub fn parse_conflict(text: &str) -> Vec<Row> {
     // A conflict cut off by the end of the file still shows what it has.
     flush_change(&mut rows, &mut ours, &mut theirs);
     if conflicts == 0 {
-        rows.insert(0, Row::Heading("No conflicts left: stage the file to mark it resolved".to_string()));
+        rows.insert(
+            0,
+            Row::Heading("No conflicts left: stage the file to mark it resolved".to_string()),
+        );
     } else {
         // Now that the total is known, every heading can say "n of total".
         let mut seen = 0;
@@ -173,7 +210,11 @@ pub fn parse_conflict(text: &str) -> Vec<Row> {
                 && heading.starts_with("Conflict ")
             {
                 seen += 1;
-                *heading = heading.replacen(&format!("Conflict {seen}:"), &format!("Conflict {seen} of {conflicts}:"), 1);
+                *heading = heading.replacen(
+                    &format!("Conflict {seen}:"),
+                    &format!("Conflict {seen} of {conflicts}:"),
+                    1,
+                );
             }
         }
     }
@@ -181,7 +222,13 @@ pub fn parse_conflict(text: &str) -> Vec<Row> {
 }
 
 fn changed_cell(number: usize, content: &str) -> Cell {
-    Cell { number, text: clean(content), changed: true, marks: Vec::new(), colors: Vec::new() }
+    Cell {
+        number,
+        text: clean(content),
+        changed: true,
+        marks: Vec::new(),
+        colors: Vec::new(),
+    }
 }
 
 /// Gives each line its syntax colours. They come from the whole old and new
@@ -190,7 +237,11 @@ fn changed_cell(number: usize, content: &str) -> Cell {
 /// the minimap measures, which reading them finds out on the way.
 pub fn highlight_rows(repo: &Repo, rows: &mut [Row], source: &DiffSource) -> usize {
     let last_line = |side: fn(&Row) -> Option<&Cell>| {
-        rows.iter().filter_map(side).map(|cell| cell.number).max().unwrap_or(0)
+        rows.iter()
+            .filter_map(side)
+            .map(|cell| cell.number)
+            .max()
+            .unwrap_or(0)
     };
     let last_old = last_line(|row| match row {
         Row::Lines { left, .. } => left.as_ref(),
@@ -207,7 +258,8 @@ pub fn highlight_rows(repo: &Repo, rows: &mut [Row], source: &DiffSource) -> usi
     let measured = if measures_new_side(rows) { &new } else { &old };
     let file_lines = measured.as_ref().map_or(0, |text| text.lines().count());
     let colored = |text: Option<String>, last: usize| {
-        text.map(|text| highlight::highlight(source.path(), &text, last)).unwrap_or_default()
+        text.map(|text| highlight::highlight(source.path(), &text, last))
+            .unwrap_or_default()
     };
     let (old, new) = (colored(old, last_old), colored(new, last_new));
     for row in rows {
@@ -225,7 +277,10 @@ fn color_cell(cell: Option<&mut Cell>, lines: &[ColoredLine]) {
     let Some(cell) = cell else {
         return;
     };
-    let line = cell.number.checked_sub(1).and_then(|index| lines.get(index));
+    let line = cell
+        .number
+        .checked_sub(1)
+        .and_then(|index| lines.get(index));
     if let Some(line) = line
         && line.text == cell.text
     {
@@ -246,7 +301,11 @@ fn flush_change(rows: &mut Vec<Row>, removed: &mut Vec<Cell>, added: &mut Vec<Ce
     for (i, j) in pairs.into_iter().chain([(total_left, total_right)]) {
         for k in 0..(i - next_left).max(j - next_right) {
             let l = if next_left + k < i { left.next() } else { None };
-            let r = if next_right + k < j { right.next() } else { None };
+            let r = if next_right + k < j {
+                right.next()
+            } else {
+                None
+            };
             push_row(rows, l, r);
         }
         if i < total_left {
@@ -277,7 +336,9 @@ fn pair_lines(removed: &[Cell], added: &[Cell]) -> Vec<(usize, usize)> {
         .map(|old| {
             added
                 .iter()
-                .map(|new| Some(line_similarity(&old.text, &new.text)).filter(|s| *s >= MIN_SIMILARITY))
+                .map(|new| {
+                    Some(line_similarity(&old.text, &new.text)).filter(|s| *s >= MIN_SIMILARITY)
+                })
                 .collect()
         })
         .collect();
@@ -370,7 +431,12 @@ fn match_tokens(old: &str, new: &str) -> Option<TokenMatch> {
             j += 1;
         }
     }
-    Some(TokenMatch { old: a, new: b, old_in_common: in_common_a, new_in_common: in_common_b })
+    Some(TokenMatch {
+        old: a,
+        new: b,
+        old_in_common: in_common_a,
+        new_in_common: in_common_b,
+    })
 }
 
 /// How much of two lines they share, from 0 to 1. Whitespace doesn't count,
@@ -385,7 +451,11 @@ fn similarity(old: &str, new: &str, matched: &TokenMatch) -> f32 {
         .map(|(token, _)| visible(&old[token.clone()]))
         .sum();
     let total = visible(old) + visible(new);
-    if total == 0 { 1.0 } else { (2 * common) as f32 / total as f32 }
+    if total == 0 {
+        1.0
+    } else {
+        (2 * common) as f32 / total as f32
+    }
 }
 
 fn line_similarity(old: &str, new: &str) -> f32 {
@@ -446,7 +516,8 @@ fn clean(text: &str) -> String {
 /// Whether the minimap measures the new version of the file: the one the
 /// diff goes to, unless it has no lines, as when the file was deleted.
 pub(super) fn measures_new_side(rows: &[Row]) -> bool {
-    rows.iter().any(|row| matches!(row, Row::Lines { right: Some(_), .. }))
+    rows.iter()
+        .any(|row| matches!(row, Row::Lines { right: Some(_), .. }))
 }
 
 #[cfg(test)]
@@ -462,11 +533,17 @@ mod tests {
 
     #[test]
     fn a_line_that_differs_from_the_file_gets_no_colours() {
-        let lines = [ColoredLine { text: "other".to_string(), colors: vec![(0..5, Color::Red)] }];
+        let lines = [ColoredLine {
+            text: "other".to_string(),
+            colors: vec![(0..5, Color::Red)],
+        }];
         let mut cell = cell(1, "mine", false).unwrap();
         color_cell(Some(&mut cell), &lines);
         assert!(cell.colors.is_empty());
-        let mut cell = Cell { text: "other".to_string(), ..cell };
+        let mut cell = Cell {
+            text: "other".to_string(),
+            ..cell
+        };
         color_cell(Some(&mut cell), &lines);
         assert_eq!(cell.colors.len(), 1);
     }
@@ -475,8 +552,17 @@ mod tests {
     fn a_conflict_shows_yours_against_theirs_with_the_files_line_numbers() {
         let file = "a\n<<<<<<< HEAD\nreturn 3\n=======\nreturn 2\n>>>>>>> other\nz\n";
         let rows = parse_conflict(file);
-        assert_eq!(rows[1], Row::Heading("Conflict 1 of 1: HEAD ↔ other".to_string()));
-        let Row::Lines { left: Some(ours), right: Some(theirs) } = &rows[2] else { panic!() };
+        assert_eq!(
+            rows[1],
+            Row::Heading("Conflict 1 of 1: HEAD ↔ other".to_string())
+        );
+        let Row::Lines {
+            left: Some(ours),
+            right: Some(theirs),
+        } = &rows[2]
+        else {
+            panic!()
+        };
         assert_eq!((ours.text.as_str(), ours.number), ("return 3", 3));
         assert_eq!((theirs.text.as_str(), theirs.number), ("return 2", 5));
         assert_eq!(marked(&ours.text, &ours.marks), ["3"]);
@@ -488,17 +574,29 @@ mod tests {
         let file = "<<<<<<< ours\nx\n||||||| base\nold\n=======\ny\n>>>>>>> theirs\n\
                     <<<<<<< ours\np\n=======\nq\n>>>>>>> theirs\n";
         let rows = parse_conflict(file);
-        let headings: Vec<_> = rows.iter().filter(|row| matches!(row, Row::Heading(_))).collect();
+        let headings: Vec<_> = rows
+            .iter()
+            .filter(|row| matches!(row, Row::Heading(_)))
+            .collect();
         assert_eq!(headings.len(), 2);
-        assert_eq!(headings[1], &Row::Heading("Conflict 2 of 2: ours ↔ theirs".to_string()));
-        assert!(!texts(&rows).iter().any(|(left, right)| *left == Some("old") || *right == Some("old")));
+        assert_eq!(
+            headings[1],
+            &Row::Heading("Conflict 2 of 2: ours ↔ theirs".to_string())
+        );
+        assert!(
+            !texts(&rows)
+                .iter()
+                .any(|(left, right)| *left == Some("old") || *right == Some("old"))
+        );
     }
 
     #[test]
     fn a_resolved_or_deleted_file_says_so() {
         let resolved = parse_conflict("all fine\n");
         assert!(matches!(&resolved[0], Row::Heading(h) if h.starts_with("No conflicts left")));
-        assert!(matches!(&parse_conflict("")[0], Row::Heading(h) if h.starts_with("Deleted on one side")));
+        assert!(
+            matches!(&parse_conflict("")[0], Row::Heading(h) if h.starts_with("Deleted on one side"))
+        );
     }
 
     fn texts(rows: &[Row]) -> Vec<(Option<&str>, Option<&str>)> {
@@ -521,11 +619,20 @@ mod tests {
             texts(&rows),
             [
                 (None, Some("log(\"start\");")),
-                (Some("let total = count + 1;"), Some("let total = count + 2;")),
+                (
+                    Some("let total = count + 1;"),
+                    Some("let total = count + 2;")
+                ),
                 (Some("print(total);"), Some("print(total);")),
             ]
         );
-        let Row::Lines { left: Some(left), right: Some(right) } = &rows[2] else { panic!() };
+        let Row::Lines {
+            left: Some(left),
+            right: Some(right),
+        } = &rows[2]
+        else {
+            panic!()
+        };
         assert_eq!(marked(&left.text, &left.marks), ["1"]);
         assert_eq!(marked(&right.text, &right.marks), ["2"]);
     }
@@ -533,12 +640,16 @@ mod tests {
     #[test]
     fn unrelated_lines_still_share_a_row() {
         let rows = parse_diff("@@ -1 +1 @@\n-completely different\n+nothing shared here");
-        assert_eq!(texts(&rows), [(Some("completely different"), Some("nothing shared here"))]);
+        assert_eq!(
+            texts(&rows),
+            [(Some("completely different"), Some("nothing shared here"))]
+        );
     }
 
     #[test]
     fn a_removed_line_between_edits_stands_alone() {
-        let diff = "@@ -1,3 +1,2 @@\n-let a = 1;\n-obsolete();\n-let b = 2;\n+let a = 10;\n+let b = 20;";
+        let diff =
+            "@@ -1,3 +1,2 @@\n-let a = 1;\n-obsolete();\n-let b = 2;\n+let a = 10;\n+let b = 20;";
         assert_eq!(
             texts(&parse_diff(diff)),
             [
@@ -552,7 +663,9 @@ mod tests {
     #[test]
     fn big_changes_are_paired_by_position() {
         let cells = |text: &str| -> Vec<Cell> {
-            (0..21).map(|i| changed_cell(i, &format!("{text} {i}"))).collect()
+            (0..21)
+                .map(|i| changed_cell(i, &format!("{text} {i}")))
+                .collect()
         };
         let pairs = pair_lines(&cells("old"), &cells("new"));
         assert_eq!(pairs, (0..21).map(|i| (i, i)).collect::<Vec<_>>());
@@ -598,7 +711,11 @@ mod tests {
     #[test]
     fn paired_lines_get_marks_when_parsed() {
         let rows = parse_diff("@@ -1 +1 @@\n-let b = 2;\n+let b = 3;\n");
-        let Row::Lines { left: Some(left), right: Some(right) } = &rows[1] else {
+        let Row::Lines {
+            left: Some(left),
+            right: Some(right),
+        } = &rows[1]
+        else {
             panic!("expected a paired row")
         };
         assert_eq!(marked(&left.text, &left.marks), ["2"]);
@@ -613,11 +730,28 @@ mod tests {
         assert_eq!(
             rows,
             vec![
-                Row::Hunk { line: 10, added: 2, removed: 1, context: "fn x".to_string() },
-                Row::Lines { left: cell(10, "ctx", false), right: cell(10, "ctx", false) },
-                Row::Lines { left: cell(11, "old", true), right: cell(11, "new1", true) },
-                Row::Lines { left: None, right: cell(12, "new2", true) },
-                Row::Lines { left: cell(12, "end", false), right: cell(13, "end", false) },
+                Row::Hunk {
+                    line: 10,
+                    added: 2,
+                    removed: 1,
+                    context: "fn x".to_string()
+                },
+                Row::Lines {
+                    left: cell(10, "ctx", false),
+                    right: cell(10, "ctx", false)
+                },
+                Row::Lines {
+                    left: cell(11, "old", true),
+                    right: cell(11, "new1", true)
+                },
+                Row::Lines {
+                    left: None,
+                    right: cell(12, "new2", true)
+                },
+                Row::Lines {
+                    left: cell(12, "end", false),
+                    right: cell(13, "end", false)
+                },
             ]
         );
     }
@@ -627,14 +761,23 @@ mod tests {
         let rows = parse_diff("@@ -1 +1 @@\n--- removed\n+++ added\n");
         assert_eq!(
             rows[1],
-            Row::Lines { left: cell(1, "-- removed", true), right: cell(1, "++ added", true) }
+            Row::Lines {
+                left: cell(1, "-- removed", true),
+                right: cell(1, "++ added", true)
+            }
         );
     }
 
     #[test]
     fn ignores_the_no_newline_marker() {
         let rows = parse_diff("@@ -1 +1 @@\n-a\n\\ No newline at end of file\n+b\n");
-        assert_eq!(rows[1], Row::Lines { left: cell(1, "a", true), right: cell(1, "b", true) });
+        assert_eq!(
+            rows[1],
+            Row::Lines {
+                left: cell(1, "a", true),
+                right: cell(1, "b", true)
+            }
+        );
         assert_eq!(rows.len(), 2);
     }
 
@@ -646,9 +789,20 @@ mod tests {
 
     #[test]
     fn each_hunk_counts_its_own_changes_not_the_lines_around_them() {
-        let hunks = |diff| -> Vec<Row> { parse_diff(diff).into_iter().filter(|row| matches!(row, Row::Hunk { .. })).collect() };
-        let hunk = |line, added, removed, context: &str| Row::Hunk { line, added, removed, context: context.to_string() };
-        let two = "@@ -6,4 +6,5 @@ class A:\n a\n-b\n+B\n+C\n c\n d\n@@ -40,3 +41,2 @@\n x\n-y\n z\n";
+        let hunks = |diff| -> Vec<Row> {
+            parse_diff(diff)
+                .into_iter()
+                .filter(|row| matches!(row, Row::Hunk { .. }))
+                .collect()
+        };
+        let hunk = |line, added, removed, context: &str| Row::Hunk {
+            line,
+            added,
+            removed,
+            context: context.to_string(),
+        };
+        let two =
+            "@@ -6,4 +6,5 @@ class A:\n a\n-b\n+B\n+C\n c\n d\n@@ -40,3 +41,2 @@\n x\n-y\n z\n";
         assert_eq!(hunks(two), [hunk(6, 2, 1, "class A:"), hunk(41, 0, 1, "")]);
         // A deleted file has no line in the new one, so it's the old one's.
         assert_eq!(hunks("@@ -1,2 +0,0 @@\n-a\n-b\n"), [hunk(1, 0, 2, "")]);
@@ -657,7 +811,19 @@ mod tests {
     #[test]
     fn new_file_hunk_starts_at_line_one() {
         let rows = parse_diff("@@ -0,0 +1,2 @@\n+a\n+b\n");
-        assert_eq!(rows[1], Row::Lines { left: None, right: cell(1, "a", true) });
-        assert_eq!(rows[2], Row::Lines { left: None, right: cell(2, "b", true) });
+        assert_eq!(
+            rows[1],
+            Row::Lines {
+                left: None,
+                right: cell(1, "a", true)
+            }
+        );
+        assert_eq!(
+            rows[2],
+            Row::Lines {
+                left: None,
+                right: cell(2, "b", true)
+            }
+        );
     }
 }

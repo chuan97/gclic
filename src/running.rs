@@ -3,11 +3,11 @@
 
 use crate::ansi::{ansi_line, clean_output, strip_ansi};
 use crate::ui;
+use ratatui::Frame;
 use ratatui::crossterm::event::KeyEvent;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
-use ratatui::Frame;
 use std::io::Read;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::mpsc::{self, Receiver};
@@ -23,7 +23,10 @@ pub fn needed_terminal(lines: &[String]) -> bool {
         "could not read Username",
         "could not read Password",
     ];
-    lines.iter().map(|line| strip_ansi(line)).any(|line| SIGNS.iter().any(|sign| line.contains(sign)))
+    lines
+        .iter()
+        .map(|line| strip_ansi(line))
+        .any(|line| SIGNS.iter().any(|sign| line.contains(sign)))
 }
 
 /// A command git suggests in its output, to run as it is: one on a line of its
@@ -34,7 +37,9 @@ pub fn suggested_command(lines: &[String]) -> Option<String> {
     lines.iter().map(|line| strip_ansi(line)).find_map(|line| {
         let indented = line.starts_with(char::is_whitespace);
         let command = line.trim();
-        let runnable = command.starts_with("git ") && !command.contains(['<', '>']) && !command.contains("...");
+        let runnable = command.starts_with("git ")
+            && !command.contains(['<', '>'])
+            && !command.contains("...");
         (indented && runnable).then(|| command.to_string())
     })
 }
@@ -68,7 +73,11 @@ impl Running {
         // it can't take keys from gclic's terminal.
         #[cfg(unix)]
         std::os::unix::process::CommandExt::process_group(&mut command, 0);
-        let mut child = command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+        let mut child = command
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
         let (stdout, stderr) = (child.stdout.take(), child.stderr.take());
         let child = Arc::new(Mutex::new(child));
         let (send, finished) = mpsc::channel();
@@ -81,9 +90,17 @@ impl Running {
             // The output ends when the command does, so this doesn't wait long,
             // and stopping it meanwhile can take the lock.
             let status = waiting.lock().ok().and_then(|mut child| child.wait().ok());
-            let _ = send.send(Finished { status, lines: clean_output(&bytes) });
+            let _ = send.send(Finished {
+                status,
+                lines: clean_output(&bytes),
+            });
         });
-        Ok(Running { label, child, finished, stopped: false })
+        Ok(Running {
+            label,
+            child,
+            finished,
+            stopped: false,
+        })
     }
 
     /// The result, once it has ended.
@@ -101,10 +118,14 @@ impl Running {
         };
         let pid = child.id().to_string();
         let tree = if cfg!(windows) {
-            Command::new("taskkill").args(["/T", "/F", "/PID", &pid]).output()
+            Command::new("taskkill")
+                .args(["/T", "/F", "/PID", &pid])
+                .output()
         } else {
             // The group has the command's id, as it leads it.
-            Command::new("kill").args(["-TERM", "--", &format!("-{pid}")]).output()
+            Command::new("kill")
+                .args(["-TERM", "--", &format!("-{pid}")])
+                .output()
         };
         if !tree.is_ok_and(|output| output.status.success()) {
             let _ = child.kill();
@@ -154,7 +175,13 @@ impl OutputPopup {
         } else {
             suggested_command(&lines).map(Advice::Git)
         };
-        OutputPopup { title: format!(" {label} "), lines, failed, advice, scroll: ui::Scroll::default() }
+        OutputPopup {
+            title: format!(" {label} "),
+            lines,
+            failed,
+            advice,
+            scroll: ui::Scroll::default(),
+        }
     }
 
     /// The command its advice is to run, without the `:`, which the command
@@ -179,7 +206,11 @@ impl OutputPopup {
         };
         // Dimmed, its own colours too, to set it apart from the advice.
         let dim = Style::default().fg(ui::DIM);
-        let mut lines: Vec<Line> = self.lines.iter().map(|line| Line::styled(strip_ansi(line), dim)).collect();
+        let mut lines: Vec<Line> = self
+            .lines
+            .iter()
+            .map(|line| Line::styled(strip_ansi(line), dim))
+            .collect();
         let (lead, command) = match advice {
             Advice::Terminal(command) => ("It needs a terminal: run it as ", command),
             Advice::Git(command) => ("Git suggests ", command),
@@ -196,7 +227,8 @@ impl OutputPopup {
     pub fn render(&mut self, frame: &mut Frame, area: Rect) {
         let lines = self.shown_lines();
         let widest = lines.iter().map(Line::width).max().unwrap_or(0);
-        let width = (widest.max(self.title.chars().count() + 4) as u16 + 2).clamp(40, area.width.saturating_sub(4).max(1));
+        let width = (widest.max(self.title.chars().count() + 4) as u16 + 2)
+            .clamp(40, area.width.saturating_sub(4).max(1));
         let height = (lines.len() as u16 + 2).min(area.height.saturating_sub(2));
         let popup = ui::centered(area, width, height);
         let mut block = ui::panel(self.title.clone(), true);
@@ -214,11 +246,24 @@ mod tests {
     #[test]
     fn advice_to_use_the_terminal_follows_the_dimmed_error() {
         let lines = vec!["error: There was a problem with the editor 'exit 1 #'.".to_string()];
-        let popup = OutputPopup::new("git commit", Finished { status: None, lines });
+        let popup = OutputPopup::new(
+            "git commit",
+            Finished {
+                status: None,
+                lines,
+            },
+        );
         let shown = popup.shown_lines();
         assert_eq!(shown[0].style.fg, Some(ui::DIM));
-        let advice: String = shown[2].spans.iter().map(|span| span.content.as_ref()).collect();
-        assert_eq!(advice, "It needs a terminal: run it as :!git commit  (: then tab)");
+        let advice: String = shown[2]
+            .spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect();
+        assert_eq!(
+            advice,
+            "It needs a terminal: run it as :!git commit  (: then tab)"
+        );
         assert_eq!(popup.suggestion().as_deref(), Some("!git commit"));
     }
 
@@ -231,23 +276,39 @@ mod tests {
             "    git push --set-upstream origin stashes",
         ];
         let lines: Vec<String> = push.iter().map(|line| line.to_string()).collect();
-        assert_eq!(suggested_command(&lines).as_deref(), Some("git push --set-upstream origin stashes"));
+        assert_eq!(
+            suggested_command(&lines).as_deref(),
+            Some("git push --set-upstream origin stashes")
+        );
         let placeholder = vec!["    git branch --set-upstream-to=origin/<branch> main".to_string()];
         assert_eq!(suggested_command(&placeholder), None);
         // Mentioned in passing, not on a line of its own.
         let prose = vec!["hint: use git pull to integrate them".to_string()];
         assert_eq!(suggested_command(&prose), None);
-        let popup = OutputPopup::new("git push", Finished { status: None, lines });
-        assert_eq!(popup.suggestion().as_deref(), Some("git push --set-upstream origin stashes"));
+        let popup = OutputPopup::new(
+            "git push",
+            Finished {
+                status: None,
+                lines,
+            },
+        );
+        assert_eq!(
+            popup.suggestion().as_deref(),
+            Some("git push --set-upstream origin stashes")
+        );
     }
 
     #[test]
     fn a_missing_editor_or_password_is_recognised() {
         let editor = ["error: There was a problem with the editor 'exit 1'.".to_string()];
         assert!(needed_terminal(&editor));
-        let prompt = ["fatal: could not read Username for 'https://x': terminal prompts disabled".to_string()];
+        let prompt = [
+            "fatal: could not read Username for 'https://x': terminal prompts disabled".to_string(),
+        ];
         assert!(needed_terminal(&prompt));
-        assert!(!needed_terminal(&["fatal: not a git repository".to_string()]));
+        assert!(!needed_terminal(&[
+            "fatal: not a git repository".to_string()
+        ]));
     }
 
     fn wait(running: &Running) -> Finished {

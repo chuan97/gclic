@@ -49,7 +49,10 @@ fn main() -> Result<()> {
     let search_root = repos::search_root(&start, repo.as_ref().map(Repo::root));
     // Outside a repo, gclic offers the ones under where it started.
     if repo.is_none() && repos::find(&search_root).is_empty() {
-        eprintln!("gclic: not in a git repo, and there are none under {}", repos::tilde(&start));
+        eprintln!(
+            "gclic: not in a git repo, and there are none under {}",
+            repos::tilde(&start)
+        );
         std::process::exit(1);
     }
 
@@ -70,7 +73,11 @@ fn print_color(repo: Option<Repo>) -> ! {
         eprintln!("gclic: not in a git repo");
         std::process::exit(1);
     };
-    let color = if accent::bar_shown(&repo) { accent::Accent::of(&repo).hex() } else { String::new() };
+    let color = if accent::bar_shown(&repo) {
+        accent::Accent::of(&repo).hex()
+    } else {
+        String::new()
+    };
     println!("{color}\n{}", repo.root().display());
     std::process::exit(0);
 }
@@ -94,12 +101,18 @@ fn run(terminal: &mut DefaultTerminal, repo: Option<Repo>, search_root: PathBuf)
 /// Picks the repo to open, for when gclic starts outside one: the same list
 /// as `:cd`, on its own. Returns the repo, and the search folder, which `..`
 /// may have moved. None if the user leaves without picking.
-fn choose_repo(terminal: &mut DefaultTerminal, mut root: PathBuf) -> Result<Option<(PathBuf, PathBuf)>> {
+fn choose_repo(
+    terminal: &mut DefaultTerminal,
+    mut root: PathBuf,
+) -> Result<Option<(PathBuf, PathBuf)>> {
     let finder = |root: &Path| {
         let repos = repos::entries(root);
         let labels = repos.iter().map(|(label, _)| label.clone()).collect();
         let title = format!("Open a repo, in {}", repos::tilde(root));
-        (Picker::single(&title, labels).with_hints(&repos::PICKER_KEYS), repos)
+        (
+            Picker::single(&title, labels).with_hints(&repos::PICKER_KEYS),
+            repos,
+        )
     };
     let (mut picker, mut repos) = finder(&root);
     // gg goes to the top, as everywhere: the first g waits for the second.
@@ -115,7 +128,11 @@ fn choose_repo(terminal: &mut DefaultTerminal, mut root: PathBuf) -> Result<Opti
         if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
             return Ok(None);
         }
-        let key = if picker.is_typing() { Some(key) } else { ui::gg(&mut pending_g, key) };
+        let key = if picker.is_typing() {
+            Some(key)
+        } else {
+            ui::gg(&mut pending_g, key)
+        };
         let Some(key) = key else {
             continue;
         };
