@@ -1312,3 +1312,27 @@ fn undoing_discard_all_brings_back_every_file() {
         assert_eq!(repo.read(name), Some(format!("{name} changed\n")));
     }
 }
+
+#[test]
+fn u_undoes_only_where_files_and_changes_are_staged() {
+    let repo = TestRepo::with_history();
+    repo.write("README.md", "changed\n");
+    let mut app = app_on(&repo);
+    app.focus_left(Pane::Changes);
+    press(&mut app, KeyCode::Char(' '));
+    // Elsewhere, u does nothing, and isn't offered.
+    for pane in [Pane::Graph, Pane::Branches] {
+        app.focus_left(pane);
+        assert!(!app.hints().iter().any(|(key, _)| *key == "u"));
+        press(&mut app, KeyCode::Char('u'));
+        assert_eq!(git::status(&repo).unwrap().staged.len(), 1, "u in {:?}", pane as u8);
+    }
+    into_diff(&mut app, last_commit_diff());
+    press(&mut app, KeyCode::Char('u'));
+    assert_eq!(git::status(&repo).unwrap().staged.len(), 1, "u in a commit's diff");
+    // In a diff of the working tree, it does.
+    into_diff(&mut app, DiffSource::Staged("README.md".to_string()));
+    assert!(app.hints().contains(&("u", "undo")));
+    press(&mut app, KeyCode::Char('u'));
+    assert_eq!(app.message, "Undid staging README.md");
+}

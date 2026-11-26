@@ -127,10 +127,10 @@ impl App {
         if self.focused_file().is_some() {
             hints.push(("o", self.editor_hint.as_str()));
         }
-        if self.history.can_undo() {
+        if self.where_staging_is() && self.history.can_undo() {
             hints.push(("u", "undo"));
         }
-        if self.history.can_redo() {
+        if self.where_staging_is() && self.history.can_redo() {
             hints.push(("ctrl-r", "redo"));
         }
         if !self.view.in_preview {

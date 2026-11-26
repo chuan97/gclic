@@ -52,7 +52,7 @@ The Changes pane lists staged and unstaged files, each name followed by its fold
 
 Inside a file's diff, the same keys take one change at a time, the run of changed lines the active line is in, which `n`/`N` move between: `space` stages it from the file's unstaged diff, or unstages it from its staged diff, and `d` discards it from the unstaged diff, after asking. The rest of the file stays as it is.
 
-`u` undoes the last staging, unstaging or discard, of a file or a change, and `ctrl-r` redoes it, as many steps back as you like while gclic runs. An undo that would lose an edit made since is refused. Deleting an untracked file can't be undone, as git never had it, and committing starts afresh.
+In the Changes pane and inside a file's diff, `u` undoes the last staging, unstaging or discard, of a file or a change, and `ctrl-r` redoes it, as many steps back as you like while gclic runs. An undo that would lose an edit made since is refused. Deleting an untracked file can't be undone, as git never had it, and committing starts afresh.
 
 ![The Changes pane with a file's diff on the right](docs/images/staging.svg)
 
