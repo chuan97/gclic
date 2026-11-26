@@ -435,13 +435,28 @@ pub fn set_index_entries(repo: &Repo, paths: &[String], entries: &str) -> Result
     Ok(())
 }
 
-/// A file of the working tree kept in git's object store, so it can be put
-/// back: its blob's id, or None if there's no file there.
-pub fn save_file(repo: &Repo, path: &str) -> Result<Option<String>> {
-    if !repo.file(path).is_file() {
-        return Ok(None);
+/// Files of the working tree kept in git's object store, so they can be put
+/// back: each one's blob id, or None where there's no file. All in one git
+/// call, as one per file adds up when discarding many.
+pub fn save_files(repo: &Repo, paths: &[String]) -> Result<Vec<Option<String>>> {
+    let present: Vec<&String> = paths.iter().filter(|path| repo.file(path).is_file()).collect();
+    // Git reads the paths a line each, which a name with a newline in it
+    // would break, so those few go one at a time.
+    let (listed, odd): (Vec<&String>, Vec<&String>) = present.into_iter().partition(|path| !path.contains('\n'));
+    let mut blobs = std::collections::HashMap::new();
+    if !listed.is_empty() {
+        let input: String = listed.iter().map(|path| format!("{path}\n")).collect();
+        let printed = run_with_input(repo, &["hash-object", "-w", "--no-filters", "--stdin-paths"], input.as_bytes())?;
+        let printed = String::from_utf8_lossy(&printed);
+        if printed.lines().count() != listed.len() {
+            bail!("git hash-object didn't save every file");
+        }
+        blobs.extend(listed.into_iter().zip(printed.lines().map(str::to_string)));
     }
-    Ok(Some(run(repo, &["hash-object", "-w", "--no-filters", "--", path])?.trim().to_string()))
+    for path in odd {
+        blobs.insert(path, run(repo, &["hash-object", "-w", "--no-filters", "--", path])?.trim().to_string());
+    }
+    Ok(paths.iter().map(|path| blobs.get(path).cloned()).collect())
 }
 
 /// Puts back a file `save_file` kept, or with None, removes it.

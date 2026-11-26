@@ -30,9 +30,7 @@ impl State {
     fn read(repo: &Repo, kind: Kind, paths: &[String]) -> Result<State> {
         Ok(match kind {
             Kind::Index => State::Index(git::index_entries(repo, paths)?),
-            Kind::WorkingTree => {
-                State::Files(paths.iter().map(|path| git::save_file(repo, path)).collect::<Result<_>>()?)
-            }
+            Kind::WorkingTree => State::Files(git::save_files(repo, paths)?),
         })
     }
 
