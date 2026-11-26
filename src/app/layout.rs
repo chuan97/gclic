@@ -5,8 +5,10 @@ use super::*;
 
 impl App {
     pub fn render(&mut self, frame: &mut Frame) {
+        // In Neovim's sidebar, the editor's own bar shows the repo's colour.
+        let bar_shown = self.accent_bar && self.sidebar.is_none();
         let [bar, tabs, main, status] = Layout::vertical([
-            Constraint::Length(u16::from(self.accent_bar)),
+            Constraint::Length(u16::from(bar_shown)),
             Constraint::Length(1),
             Constraint::Min(0),
             Constraint::Length(1),
@@ -15,10 +17,27 @@ impl App {
         self.render_accent_bar(frame, bar);
         self.render_tabs(frame, tabs);
 
-        match (self.view.has_preview(), self.view.zoomed) {
-            (false, _) => self.render_left(frame, main),
-            (true, true) => self.render_preview(frame, main),
-            (true, false) => {
+        let sidebar = self.sidebar_column(main);
+        match (self.view.has_preview(), self.view.zoomed, sidebar) {
+            (false, _, _) => self.render_left(frame, sidebar.unwrap_or(main)),
+            (true, true, _) => self.render_preview(frame, main),
+            // In the sidebar's width, with a right side beside it once the
+            // plugin has made room for one.
+            (true, false, Some(left)) => {
+                if main.width >= left.width + NARROW_BELOW / 2 {
+                    let [left, right] =
+                        Layout::horizontal([Constraint::Length(left.width), Constraint::Min(0)])
+                            .areas(main);
+                    self.render_left(frame, left);
+                    self.render_preview(frame, right);
+                } else {
+                    self.render_left(frame, left);
+                }
+            }
+            // Too narrow for both side by side: the diff or details on their
+            // own, and esc goes back to the panes.
+            (true, false, None) if main.width < NARROW_BELOW => self.render_preview(frame, main),
+            (true, false, None) => {
                 // The review's comments are read in the list, so it gets more room.
                 let diff_percent = if self.tab == Tab::Review {
                     REVIEW_DIFF_PERCENT

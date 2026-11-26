@@ -18,7 +18,7 @@ gclic is heavily inspired by the features I like and have grown accustomed to in
 - **[Running commands](#running-commands):** run git, or anything else, from gclic, in the repo it shows.
 - **[Switching repos](#switching-repos):** fuzzy find any repo near the one you're in, and switch to it without leaving gclic.
 - **[Your editor](#your-editor):** open the file you're on in your editor, at the line.
-- **[In Neovim](#in-neovim):** toggle gclic in a floating window, open files from it in the editor, and switch repos together.
+- **[In Neovim](#in-neovim):** gclic in a sidebar beside the code, showing changes as files are saved, and over the whole editor for diffs; open files from it in the editor, and switch repos together.
 - **[Keyboard driven](#keyboard-driven):** with Vim-style keybindings, and the keys that apply always shown at the bottom.
 
 ## Installation
@@ -126,7 +126,7 @@ To set it, add `export GCLIC_EDITOR=nvim` to your `~/.zshrc` or `~/.bashrc`, or 
 
 ## In Neovim
 
-gclic comes with a Neovim plugin, for Neovim 0.10 or later, that shows gclic in a floating window. A key toggles it, and it keeps running while hidden, so it's as you left it each time it comes back. `o` hides it and opens the file in the editor, at the line. `:cd` in gclic changes Neovim's working folder, and `:cd` in Neovim moves gclic to that repo. A bar across the top shows the repo in gclic's colour for it, and gclic's diffs take the colour scheme's colours.
+gclic comes with a Neovim plugin, for Neovim 0.10 or later, that shows gclic in a sidebar at the left, beside the code: the Repo tab's Branches, Changes and Graph, with the Changes pane showing a file as soon as it's saved. Everything works there, staging, discarding, undo and committing included. `enter` or `z` on a file or commit shows its diff or details over the whole editor, with the sidebar's panes staying where they were, and `esc` or `ctrl-g` goes back; the Compare and Review tabs show over the whole editor too. gclic keeps running while hidden, so it's as you left it each time it comes back. `o` opens the file in the editor beside the sidebar, at the line. `:cd` in gclic changes Neovim's working folder, and `:cd` in Neovim moves gclic to that repo. A bar across the top shows the repo in gclic's colour for it, and gclic's diffs take the colour scheme's colours.
 
 The plugin runs gclic, so [install it](#installation) first, and update the two together. With [lazy.nvim](https://github.com/folke/lazy.nvim):
 
@@ -145,23 +145,28 @@ The plugin runs gclic, so [install it](#installation) first, and update the two 
 
 With another plugin manager, install the repo and call `require("gclic").setup()`.
 
-In gclic, `ctrl-g` hides it and `q` quits it. `:Gclic` toggles it too. `:checkhealth gclic` checks that gclic and git are found, and which gclic it is.
+The key shows gclic, or goes into it from the code, and `ctrl-h`/`ctrl-l` move between gclic and the code, as between Neovim's windows. In the sidebar, `ctrl-g` hides gclic; over the whole editor, it goes back to the sidebar. `q` quits it. `:Gclic` does what the key does.
+
+With `sidebar = false`, gclic shows over the whole editor only, as a floating window the key toggles, and `o` hides it and opens the file in the window beneath. `:checkhealth gclic` checks that gclic and git are found, and which gclic it is.
 
 The options, with their defaults:
 
 ```lua
 opts = {
   cmd = "gclic",           -- `gclic` on the PATH, or a path to it
-  width = 1, height = 1,   -- the window's share of the editor; lower for a pop-up
+  sidebar = { width = 40 }, -- the sidebar's width; false for the whole editor only
+  width = 1, height = 1,   -- without the sidebar, the window's share of the editor; lower for a pop-up
   border = "none",         -- a border, which suits a pop-up
-  toggle_key = "<C-g>",    -- hides gclic from inside it; false for none
+  toggle_key = "<C-g>",    -- hides gclic from inside it, or back to the sidebar; false for none
   colors = "terminal",     -- gclic's window in the "terminal"'s colours, or the "editor"'s
   diff_colors = "editor",  -- the diffs in the "editor"'s colours, or "gclic"'s own
   accent = true,           -- the bar across the top in the repo's colour
 }
 ```
 
-gclic's window has the filetype `gclic`, to keep a status line or winbar out of it.
+gclic's windows have the filetype `gclic`, to keep a status line or winbar out of them.
+
+Outside Neovim, a terminal narrower than 60 columns shows a diff or details on their own, rather than beside the panes, and `esc` goes back to them.
 
 ## A colour for each repo
 

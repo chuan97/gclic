@@ -597,6 +597,12 @@ impl App {
         let line = line.unwrap_or(1);
         // Inside Neovim, the file opens there rather than in a second editor.
         if let Some(address) = editor::parent_nvim() {
+            // From the whole editor, gclic goes back to the sidebar, beside
+            // the file, as the plugin shows it.
+            if self.sidebar.is_some() {
+                self.back_to_sidebar();
+                self.asked_full = false;
+            }
             return self.start_in_background("nvim", editor::open_in_nvim(&address, &path, line));
         }
         let setting = editor::setting();

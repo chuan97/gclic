@@ -253,6 +253,78 @@ impl Follow {
     }
 }
 
+/// The width of the sidebar gclic's Neovim plugin shows it in, beside the
+/// code, when it does: `$GCLIC_SIDEBAR_WIDTH`. The plugin moves gclic between
+/// the sidebar and the whole editor as gclic asks, and keeps the sidebar's
+/// column the same width in both. Never in tests.
+pub fn sidebar_width() -> Option<u16> {
+    if cfg!(test) {
+        return None;
+    }
+    std::env::var("GCLIC_SIDEBAR_WIDTH")
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
+        .filter(|width| *width > 0)
+}
+
+/// Asks the plugin to show gclic over the whole editor, for a diff, details
+/// or another tab, or back in the sidebar.
+pub fn layout_nvim(address: &str, full: bool) -> Command {
+    let lua = "pcall(function(full) require(\"gclic\")._layout(full) end, _A)";
+    let full = if full { "v:true" } else { "v:false" };
+    nvim_expr(address, &format!("luaeval({}, {full})", vim_string(lua)))
+}
+
+/// Asks the plugin to hide gclic, which keeps running.
+pub fn hide_nvim(address: &str) -> Command {
+    let lua = "pcall(function() require(\"gclic\").hide() end)";
+    nvim_expr(address, &format!("luaeval({})", vim_string(lua)))
+}
+
+/// Saves in the Neovim gclic runs in: its plugin writes a new count to a
+/// file, named in `$GCLIC_SAVED`, whenever a file is written there, and gclic
+/// reads the repo again at once, rather than on its next refresh, which can
+/// be 10 s away while no key is pressed. Checking costs a small read, unlike
+/// refreshing more often.
+pub struct Saved {
+    file: PathBuf,
+    /// What the file said when last read.
+    seen: Option<String>,
+}
+
+impl Saved {
+    /// Inside Neovim, with gclic's plugin there to write the file.
+    /// Never in tests, which may be run in Neovim's terminal.
+    pub fn from_env() -> Option<Saved> {
+        if cfg!(test) {
+            return None;
+        }
+        let file = std::env::var_os("GCLIC_SAVED").filter(|file| !file.is_empty())?;
+        Some(Saved::at(Path::new(&file)))
+    }
+
+    /// Watching `file`, from what it says now.
+    pub fn at(file: &Path) -> Saved {
+        let seen = std::fs::read_to_string(file).ok();
+        Saved {
+            file: file.to_path_buf(),
+            seen,
+        }
+    }
+
+    /// Whether a file was saved since last asked.
+    pub fn saved_since(&mut self) -> bool {
+        let now = std::fs::read_to_string(&self.file).ok();
+        if now.is_none() || now == self.seen {
+            return false;
+        }
+        self.seen = now;
+        true
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -381,5 +453,27 @@ mod tests {
     #[test]
     fn vim_strings_double_their_quotes() {
         assert_eq!(vim_string("it's"), "'it''s'");
+    }
+
+    #[test]
+    fn a_save_in_neovim_is_seen_once_and_none_before_it() {
+        let base = std::env::temp_dir().join(format!("gclic-saved-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let file = base.join("saved");
+        // No file yet: nothing saved.
+        let mut saved = Saved::at(&file);
+        assert!(!saved.saved_since());
+        // The plugin starts the count before gclic does: not a save.
+        std::fs::write(&file, "0").unwrap();
+        let mut saved = Saved::at(&file);
+        assert!(!saved.saved_since());
+        // Each new count is one save, seen once, however quick.
+        std::fs::write(&file, "1").unwrap();
+        assert!(saved.saved_since());
+        assert!(!saved.saved_since());
+        std::fs::write(&file, "2").unwrap();
+        assert!(saved.saved_since());
+        let _ = std::fs::remove_dir_all(&base);
     }
 }
