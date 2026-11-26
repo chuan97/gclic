@@ -447,7 +447,7 @@ mod tests {
     }
 
     fn panel_on(names: &[&str], current: &str, highlighted: &str) -> BranchesPanel {
-        let mut panel = BranchesPanel::new(&git::gclic_repo());
+        let mut panel = BranchesPanel::new(&Repo::nowhere());
         panel.set_branches(names.iter().map(|name| local(name, None)).collect());
         panel.picker.set_items(names.iter().map(|name| name.to_string()).collect());
         panel.picker.select_item(highlighted);

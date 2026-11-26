@@ -160,6 +160,7 @@ mod tests {
     use super::*;
     use crate::diff::Row;
     use crate::git::DiffSource;
+    use crate::test_repo::TestRepo;
 
     fn file(path: &str) -> DiffView {
         DiffView { source: DiffSource::Unstaged(path.to_string()), whole: false }
@@ -186,10 +187,9 @@ mod tests {
 
     #[test]
     fn colours_a_diff_in_the_background() {
-        // gclic's own first commit adds a src/main.rs, which is Rust to colour.
-        let repo = git::gclic_repo();
-        let first = git::log(&repo, &["HEAD".to_string()], 10_000).unwrap().pop().unwrap();
-        let source = DiffSource::Commit { sha: first.sha, path: "src/main.rs".to_string() };
+        // The first commit adds a src/main.rs, which is Rust to colour.
+        let repo = TestRepo::with_history();
+        let source = DiffSource::Commit { sha: repo.sha("main~2"), path: "src/main.rs".to_string() };
         let worker = Worker::start(&repo);
         worker.highlight(vec![DiffView { source: source.clone(), whole: false }]);
         let done = worker.results.recv_timeout(std::time::Duration::from_secs(10)).unwrap();

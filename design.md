@@ -56,8 +56,8 @@ Modules nest where one has grown parts of its own: `app.rs` declares `app/`'s, a
 | `app/fetcher.rs` | Fetching the tracked remotes every minute, in the background |
 | `app/status_line.rs` | The keys at the bottom that apply where the user is |
 | `app/layout.rs` | Drawing the screen: the colour bar, the tabs, the panes and the preview |
-| `app/tests.rs` | The app's tests, run on gclic's own repo |
-| `git.rs` | Every git call, returning typed data, plus the parsers |
+| `app/tests.rs` | The app's tests, each on a repo made for it |
+| `git.rs` | `Repo`, which every git call runs in, and every git call, returning typed data, plus the parsers |
 | `worker.rs` | The background thread for slow reads |
 | `running.rs` | A `:git` command in the background, and the popup of what it printed |
 | `terminal.rs` | Handing the terminal to `:!` and terminal editors, and the keyboard flags |
@@ -82,6 +82,7 @@ Modules nest where one has grown parts of its own: `app.rs` declares `app/`'s, a
 | `accent.rs` | Each repo's colour, for the bar at the top |
 | `theme.rs` | The editor's colours for diffs inside Neovim, and gclic's own, VS Code's |
 | `ui.rs` | Shared pieces: colours, key hints, the list `Cursor`, the text `Scroll`, popups of text |
+| `test_repo.rs` | For tests: repos made for each one, removed when it ends |
 
 Dependencies: `ratatui` (with crossterm), `anyhow`, and `syntect`, with its pure-Rust regex engine. Dependencies are optimised even in debug builds, since highlighting is too slow otherwise. The theme, `assets/vscode-dark-modern.tmTheme`, holds VS Code's Dark Modern colours, as Zed's "VSCode Dark Modern" theme has them.
 
@@ -162,6 +163,5 @@ The measuring scripts lived in the git-ignored `target/bench/`. `docs/screenshot
 
 ## Notes for the rewrite
 
-- **Every git call runs in the process's working directory**, which `:cd` changes. Tests therefore run on gclic's own repo and can't set up what they test, such as popping a stash: #70 proposes the repo as a value.
 - **Keep:** the `Action` pattern, `git.rs` with typed results, the worker with tagged results, and the pure, tested layout and parsing functions.
 - **Open questions:** should Compare's file list stay the direct difference (`git diff A B`), or be PR-style (`A...B`)? Should the commit box gain a cursor, or open an editor? Should the graph keep 500 commits, or stop where the shown branches meet?
