@@ -440,9 +440,14 @@ fn yanking_a_commit_again_moves_it_to_the_end() {
 
 /// The screen as the app draws it, as text.
 fn screen(app: &mut App) -> String {
+    screen_at(app, 140, 40)
+}
+
+/// The screen as the app draws it in `width` by `height`, as text.
+fn screen_at(app: &mut App, width: u16, height: u16) -> String {
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
-    let mut terminal = Terminal::new(TestBackend::new(140, 40)).unwrap();
+    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
     terminal.draw(|frame| app.render(frame)).unwrap();
     let buffer = terminal.backend().buffer();
     let width = buffer.area.width as usize;
@@ -1552,4 +1557,142 @@ fn u_undoes_only_where_files_and_changes_are_staged() {
     assert!(app.hints().contains(&("u", "undo")));
     press(&mut app, KeyCode::Char('u'));
     assert_eq!(app.message, "Undid staging README.md");
+}
+
+// gclic in a sidebar beside the code, in Neovim (#89).
+
+/// A repo with a change to its README, in an app shown in a 40-column sidebar.
+fn in_sidebar() -> (TestRepo, App) {
+    let repo = TestRepo::with_history();
+    repo.write("README.md", "# Test\n\nChanged.\n");
+    let mut app = app_on(&repo);
+    app.sidebar = Some(40);
+    (repo, app)
+}
+
+/// The columns of `row` from `from` on, as text.
+fn columns(screen: &str, row: usize, from: usize) -> String {
+    screen
+        .lines()
+        .nth(row)
+        .unwrap()
+        .chars()
+        .skip(from)
+        .collect()
+}
+
+#[test]
+fn the_sidebar_shows_the_repo_tab_s_panes_in_its_width() {
+    let (_repo, mut app) = in_sidebar();
+    let shown = screen_at(&mut app, 40, 30);
+    for title in ["Branches", "Changes", "Graph", "README.md"] {
+        assert!(shown.contains(title), "{title} should show:\n{shown}");
+    }
+    // Neovim's own bar shows the repo's colour, so gclic's starts with the tabs.
+    assert!(shown.lines().next().unwrap().contains("Repo"), "{shown}");
+}
+
+#[test]
+fn over_the_whole_editor_the_panes_keep_the_sidebar_s_width() {
+    let (_repo, mut app) = in_sidebar();
+    let narrow = screen_at(&mut app, 40, 30);
+    press(&mut app, KeyCode::Enter);
+    // Still in the sidebar, before the plugin makes room: the panes as they were.
+    assert_eq!(screen_at(&mut app, 40, 30), narrow);
+    // Over the whole editor: the same panes, row for row, and the diff beside them.
+    let full = screen_at(&mut app, 140, 30);
+    for row in 1..29 {
+        let left: String = full.lines().nth(row).unwrap().chars().take(40).collect();
+        assert_eq!(left, narrow.lines().nth(row).unwrap(), "row {row}:\n{full}");
+    }
+    assert!(columns(&full, 1, 40).contains("README.md"), "{full}");
+    // Without a diff, the rest of the editor is left empty, for the moment
+    // before the plugin goes back to the sidebar.
+    press(&mut app, KeyCode::Esc);
+    let back = screen_at(&mut app, 140, 30);
+    assert_eq!(columns(&back, 5, 40).trim(), "", "{back}");
+}
+
+#[test]
+fn a_narrow_terminal_shows_a_diff_on_its_own() {
+    let repo = TestRepo::with_history();
+    repo.write("README.md", "# Test\n\nChanged.\n");
+    let mut app = app_on(&repo);
+    press(&mut app, KeyCode::Enter);
+    let shown = screen_at(&mut app, 50, 30);
+    assert!(!shown.contains("Branches"), "{shown}");
+    assert!(shown.contains("Changed."), "{shown}");
+    // Wide enough, the panes and the diff share the width, as ever.
+    assert!(screen_at(&mut app, 100, 30).contains("Branches"));
+}
+
+#[test]
+fn the_sidebar_asks_for_the_whole_editor_while_there_s_more_to_show() {
+    let (_repo, mut app) = in_sidebar();
+    assert_eq!(app.layout_change(), None, "it starts in the sidebar");
+    // A file's diff: the whole editor, asked once.
+    press(&mut app, KeyCode::Enter);
+    assert_eq!(app.layout_change(), Some(true));
+    assert_eq!(app.layout_change(), None);
+    // enter again goes into it; esc leaves it, beside the panes, and esc
+    // again closes it.
+    press(&mut app, KeyCode::Enter);
+    assert!(app.view.in_preview);
+    press(&mut app, KeyCode::Esc);
+    assert_eq!(app.layout_change(), None);
+    press(&mut app, KeyCode::Esc);
+    assert_eq!(app.layout_change(), Some(false));
+    // z shows the selection too, as enter does.
+    press(&mut app, KeyCode::Char('z'));
+    assert!(app.view.diff().is_some());
+    assert_eq!(app.layout_change(), Some(true));
+    // ctrl-g goes back to the sidebar.
+    ctrl(&mut app, 'g');
+    assert!(!app.view.has_preview());
+    assert_eq!(app.layout_change(), Some(false));
+    // Another tab is shown over the whole editor, and ctrl-g comes back to Repo.
+    press(&mut app, KeyCode::Tab);
+    assert_eq!(app.layout_change(), Some(true));
+    ctrl(&mut app, 'g');
+    assert!(app.tab == Tab::Repo);
+    assert_eq!(app.layout_change(), Some(false));
+}
+
+#[test]
+fn outside_the_sidebar_nothing_is_asked_and_ctrl_g_and_z_do_nothing() {
+    let repo = TestRepo::with_history();
+    repo.write("README.md", "# Test\n\nChanged.\n");
+    let mut app = app_on(&repo);
+    press(&mut app, KeyCode::Char('z'));
+    assert!(!app.view.has_preview());
+    press(&mut app, KeyCode::Enter);
+    ctrl(&mut app, 'g');
+    assert!(app.view.has_preview());
+    assert_eq!(app.layout_change(), None);
+}
+
+#[test]
+fn a_save_in_neovim_shows_in_changes_at_once() {
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
+    let file = repo.file("saved-signal");
+    std::fs::write(&file, "0").unwrap();
+    app.saved = Some(editor::Saved::at(&file));
+    assert!(!app.saved_in_neovim(), "nothing saved yet");
+    // Saved in Neovim, and the plugin counts it.
+    repo.write("README.md", "# Test\n\nSaved.\n");
+    std::fs::write(&file, "1").unwrap();
+    assert!(app.saved_in_neovim());
+    assert!(!app.saved_in_neovim(), "once for each save");
+    // The background read it asks for brings the change, well within a second.
+    app.poll_repo();
+    let start = Instant::now();
+    while !screen(&mut app).contains("README.md") {
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "the change never showed"
+        );
+        app.take_worker_results();
+        std::thread::sleep(Duration::from_millis(10));
+    }
 }

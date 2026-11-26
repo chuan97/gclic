@@ -9,6 +9,7 @@ mod fetcher;
 mod layout;
 mod popups;
 mod refresh;
+mod sidebar;
 mod status_line;
 #[cfg(test)]
 mod tests;
@@ -79,6 +80,9 @@ const COMPARE_PICKER_KEYS: [(&str, &str); 4] = [
     ("enter", "choose"),
     ("esc", "close"),
 ];
+/// Below this width, a diff or details take the whole width rather than
+/// share it with the panes, which would leave each too narrow to read.
+const NARROW_BELOW: u16 = 60;
 /// The preview's share of the width, focused or not. Zooming gives it all of it.
 const DIFF_PERCENT: u16 = 80;
 const REVIEW_DIFF_PERCENT: u16 = 60;
@@ -338,6 +342,14 @@ pub struct App {
     editor_in_terminal: Option<(String, String, Command)>,
     /// Inside Neovim, how to follow its working folder to another repo.
     follow: Option<editor::Follow>,
+    /// Inside Neovim, how to hear of files saved there, to show them at once.
+    saved: Option<editor::Saved>,
+    /// Inside Neovim's sidebar, its width: the Repo tab's panes keep it over
+    /// the whole editor too, so they stay put as the right side comes and goes.
+    sidebar: Option<u16>,
+    /// What gclic last asked the sidebar's plugin for: the whole editor, or
+    /// the sidebar, where it starts.
+    asked_full: bool,
     /// What `o` does, "open in nvim", naming the editor it opens.
     editor_hint: String,
     /// Where `:cd` looks for repos. It stays put as the repo changes, so the
@@ -366,6 +378,9 @@ impl App {
             shell_line: None,
             editor_in_terminal: None,
             follow: editor::Follow::from_env(),
+            saved: editor::Saved::from_env(),
+            sidebar: editor::sidebar_width(),
+            asked_full: false,
             editor_hint: match editor::parent_nvim() {
                 Some(_) => "open in nvim".to_string(),
                 None => format!("open in {}", editor::name(&editor::setting())),
@@ -417,6 +432,7 @@ impl App {
             self.branches.search_sha();
             let note = self.fetcher.note();
             changed |= note != fetch_note;
+            self.ask_for_layout();
             if changed {
                 terminal.draw(|frame| self.render(frame))?;
                 changed = false;
@@ -434,6 +450,9 @@ impl App {
             }
             if followed.elapsed() >= FOLLOW_EVERY {
                 changed |= self.follow_neovim();
+                if self.saved_in_neovim() {
+                    self.poll_repo();
+                }
                 followed = Instant::now();
             }
             // Popups included, as they only cover part of the screen.
@@ -569,6 +588,9 @@ impl App {
             // Asks first, as q does: pressed to stop a command just as it ends,
             // it would otherwise quit gclic.
             KeyCode::Char('c') if ctrl => self.modal = Modal::ConfirmQuit,
+            // In Neovim's sidebar, ctrl-g goes back from the whole editor to
+            // the sidebar, and from the sidebar hides gclic.
+            KeyCode::Char('g') if ctrl && self.sidebar.is_some() => self.shrink(),
             // While searching branches, letters belong to the search.
             _ if self.view.focused(Pane::Branches) && self.branches.is_typing() => {
                 self.send_to_focused_panel(key);
@@ -634,6 +656,15 @@ impl App {
             // On the Compare tab, c starts a new comparison, as c compares from
             // where the user is in the other panes.
             KeyCode::Char('c') if self.view.focused(Pane::Compare) => self.open_compare_picker(),
+            // In the sidebar, z shows what's selected, over the whole editor,
+            // as enter does: a file's diff, a commit's details.
+            KeyCode::Char('z')
+                if self.sidebar.is_some()
+                    && !self.view.has_preview()
+                    && matches!(self.view.pane, Pane::Changes | Pane::Graph) =>
+            {
+                self.send_to_focused_panel(KeyEvent::from(KeyCode::Enter));
+            }
             KeyCode::Char('z') if self.view.has_preview() => {
                 self.view.zoomed = !self.view.zoomed;
                 if self.view.zoomed {

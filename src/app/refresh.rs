@@ -60,6 +60,12 @@ impl App {
     /// Switches to the repo Neovim moved to, if it did, and collects the
     /// editor commands that have finished, so none linger: checks cheap
     /// enough to make often, as they start no git. Whether it switched.
+    /// Whether a file was saved in the Neovim gclic runs in since last asked,
+    /// for the repo to be read again at once.
+    pub(super) fn saved_in_neovim(&mut self) -> bool {
+        self.saved.as_mut().is_some_and(editor::Saved::saved_since)
+    }
+
     pub(super) fn follow_neovim(&mut self) -> bool {
         self.editor_commands
             .retain_mut(|child| matches!(child.try_wait(), Ok(None)));

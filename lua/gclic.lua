@@ -1,14 +1,28 @@
--- gclic in Neovim: gclic in a floating window, toggled with a key, staying
+-- gclic in Neovim: gclic in a sidebar beside the code, which goes over the
+-- whole editor while there's a diff, details or another tab to show, staying
 -- alive while hidden, so it's in the same state each time it comes back.
+-- Or, with `sidebar = false`, gclic over the whole editor only, toggled.
+--
+-- In the sidebar, the Changes pane shows a file as it's saved: the plugin
+-- counts saves in a file, named in $GCLIC_SAVED, which gclic checks twice a
+-- second. enter or z on a file or commit shows its diff or details over the
+-- whole editor, the sidebar's panes staying where they were, and esc, or
+-- ctrl-g, goes back. gclic says which it wants, as it knows what it shows,
+-- and the plugin moves the one terminal buffer between the sidebar's split
+-- and a float, so gclic keeps its state. ctrl-g in the sidebar hides gclic,
+-- ctrl-h and ctrl-l go to the windows beside it, and the toggle shows it, or
+-- goes into it.
 --
 -- gclic finds the Neovim it runs in through $NVIM. Its `o` calls `open` below,
--- which hides gclic and opens the file at the line in the window beneath, and
--- its `:cd` changes Neovim's working folder, so the file finder, search and
--- file tree follow the repo picked in gclic.
+-- which opens the file at the line beside the sidebar, or, without it, hides
+-- gclic and opens the file in the window beneath. Its `:cd` changes Neovim's
+-- working folder, so the file finder, search and file tree follow the repo
+-- picked in gclic.
 --
--- ctrl-g hides gclic without quitting it, and the toggle brings it back as it
--- was; q quits it. Its diffs are in the colour scheme's colours, as code is in
--- the editor, while the rest of it keeps the terminal's.
+-- Without the sidebar, ctrl-g hides gclic without quitting it, and the toggle
+-- brings it back as it was. q quits it, either way. Its diffs are in the
+-- colour scheme's colours, as code is in the editor, while the rest of it
+-- keeps the terminal's.
 --
 -- A bar across the top shows the repo in the colour gclic gives it, with its
 -- name, as gclic's own does, following the working folder. The plugin has to
@@ -22,13 +36,19 @@ local M = {}
 M.config = {
   -- The command that runs gclic: `gclic` on the PATH, or a path to it.
   cmd = "gclic",
-  -- The window's share of the editor, wide and high: all of it, but for the
-  -- command line, unless set lower for a pop-up, which a border then suits.
+  -- gclic in a sidebar at the left, this many columns wide, going over the
+  -- whole editor for diffs, details and the other tabs. False for the whole
+  -- editor only, sized below.
+  sidebar = { width = 40 },
+  -- Without the sidebar, the window's share of the editor, wide and high:
+  -- all of it, but for the command line, unless set lower for a pop-up,
+  -- which a border then suits.
   width = 1,
   height = 1,
   border = "none",
   -- A key that hides gclic from inside it too, where its keys are gclic's.
-  -- One gclic doesn't use. False for none.
+  -- One gclic doesn't use. False for none. With the sidebar, it goes back to
+  -- the sidebar from the whole editor first, as gclic's own ctrl-g does.
   toggle_key = "<C-g>",
   -- Whose colours gclic's window takes: "terminal", the terminal Neovim runs
   -- in, so gclic looks as it does outside Neovim, whatever the editor's
@@ -173,10 +193,19 @@ function M._editor_colors()
   return table.concat(pairs_, ";")
 end
 
--- gclic's buffer and window, and the file it reads Neovim's working folder
--- from, to follow it to another repo.
-local state = { buf = nil, win = nil, follow = nil }
-
+-- gclic's buffer; its windows: the sidebar, a split at the left, and the
+-- float over the whole editor; which of the two it last asked for; and the
+-- files it reads Neovim's working folder and saves from.
+local state = {
+  buf = nil,
+  side = nil,
+  win = nil,
+  placeholder = nil,
+  layout = "sidebar",
+  follow = nil,
+  saved = nil,
+  saves = 0,
+}
 
 --- A colour from a terminal's answer, `rgb:` and 1 to 4 hex digits a
 --- channel, as `#rrggbb`.
@@ -230,9 +259,9 @@ local function ask_terminal()
   send(table.concat(queries))
 end
 
---- Dresses gclic's buffer and window in the terminal's colours, once they've
---- come back, or the editor's background otherwise, rather than a pop-up's.
-local function color_window()
+--- The colours for gclic's windows: the terminal's, once they've come back,
+--- or the editor's background otherwise, rather than a pop-up's.
+local function color_window(win)
   local terminal_colors = M.config.colors == "terminal"
   if terminal_colors and not terminal.bg then
     -- The answers are quick, but may not be in yet on the first use.
@@ -242,22 +271,40 @@ local function color_window()
   end
   if terminal_colors and terminal.bg then
     vim.api.nvim_set_hl(0, "GclicNormal", { fg = terminal.fg, bg = terminal.bg })
-    vim.wo[state.win].winhighlight = "Normal:GclicNormal,NormalFloat:GclicNormal"
+    vim.wo[win].winhighlight = "Normal:GclicNormal,NormalFloat:GclicNormal"
   else
-    vim.wo[state.win].winhighlight = "NormalFloat:Normal"
+    vim.wo[win].winhighlight = "NormalFloat:Normal"
   end
 end
 
+local function valid(win)
+  return win ~= nil and vim.api.nvim_win_is_valid(win)
+end
+
 local function valid_win()
-  return state.win ~= nil and vim.api.nvim_win_is_valid(state.win)
+  return valid(state.win)
 end
 
 local function valid_buf()
   return state.buf ~= nil and vim.api.nvim_buf_is_valid(state.buf)
 end
 
---- Where the window goes, for the editor's size now. A border takes a row
---- and a column on each side, outside the window.
+--- Whether gclic opens in the sidebar, rather than over the whole editor.
+local function sidebar_on()
+  return type(M.config.sidebar) == "table"
+end
+
+local function sidebar_width()
+  return M.config.sidebar.width or 40
+end
+
+--- Whether gclic shows, in either window.
+local function shown()
+  return valid_win() or (valid(state.side) and vim.api.nvim_win_get_buf(state.side) == state.buf)
+end
+
+--- Where the window goes, without the sidebar, for the editor's size now. A
+--- border takes a row and a column on each side, outside the window.
 local function placement()
   local columns, lines = vim.o.columns, vim.o.lines - vim.o.cmdheight
   local edge = M.config.border == "none" and 0 or 2
@@ -272,10 +319,24 @@ local function placement()
   }
 end
 
+--- With the sidebar, the window over the whole editor starts where the
+--- sidebar does and is as high, so gclic's panes stay where they were, and
+--- the tabline, status line and command line stay too.
+local function full_placement()
+  local row, col = unpack(vim.api.nvim_win_get_position(state.side))
+  return {
+    relative = "editor",
+    row = row,
+    col = col,
+    width = math.max(1, vim.o.columns - col),
+    height = vim.api.nvim_win_get_height(state.side),
+  }
+end
+
 --- Whether gclic's window covers the whole editor, as it does unless set
---- smaller, for a pop-up.
+--- smaller, for a pop-up. Not with the sidebar, which leaves Neovim's lines.
 local function full_screen()
-  return M.config.width >= 1 and M.config.height >= 1
+  return not sidebar_on() and M.config.width >= 1 and M.config.height >= 1
 end
 
 --- Full screen, Neovim's command line goes while gclic shows, as no window
@@ -295,11 +356,73 @@ local function restore_command_line()
   end
 end
 
-local function show()
-  hide_command_line()
-  local options = placement()
+--- An empty buffer in gclic's colours, for the sidebar's window to hold
+--- while gclic shows over the whole editor, so the code beside it doesn't
+--- move.
+local function placeholder()
+  if not (state.placeholder and vim.api.nvim_buf_is_valid(state.placeholder)) then
+    state.placeholder = vim.api.nvim_create_buf(false, true)
+    vim.bo[state.placeholder].filetype = "gclic"
+    -- Going into it goes to gclic, where it shows.
+    vim.api.nvim_create_autocmd("BufEnter", {
+      buffer = state.placeholder,
+      callback = function()
+        if valid_win() then
+          vim.schedule(function()
+            if valid_win() then
+              vim.api.nvim_set_current_win(state.win)
+            end
+          end)
+        end
+      end,
+    })
+  end
+  return state.placeholder
+end
+
+--- The sidebar's window, opened at the left if it isn't open, holding `buf`.
+--- Neovim's terminal takes the size of the smallest window it shows in, so
+--- gclic is never in both.
+local function open_side(buf)
+  if not valid(state.side) then
+    local current = vim.api.nvim_get_current_win()
+    vim.cmd("topleft " .. sidebar_width() .. "vsplit")
+    state.side = vim.api.nvim_get_current_win()
+    vim.api.nvim_win_set_buf(state.side, buf)
+    local wo = vim.wo[state.side]
+    wo.winfixwidth = true
+    wo.number = false
+    wo.relativenumber = false
+    wo.signcolumn = "no"
+    wo.foldcolumn = "0"
+    wo.statuscolumn = ""
+    wo.cursorline = false
+    wo.colorcolumn = ""
+    wo.spell = false
+    wo.list = false
+    wo.wrap = true
+    color_window(state.side)
+    local side = state.side
+    vim.api.nvim_create_autocmd("WinClosed", {
+      pattern = tostring(side),
+      once = true,
+      callback = function()
+        if state.side == side then
+          state.side = nil
+        end
+      end,
+    })
+    vim.api.nvim_set_current_win(current)
+  elseif vim.api.nvim_win_get_buf(state.side) ~= buf then
+    vim.api.nvim_win_set_buf(state.side, buf)
+  end
+  return state.side
+end
+
+--- Opens the float, without the sidebar or over the whole editor with it.
+local function open_float(options)
   options.style = "minimal"
-  options.border = M.config.border
+  options.border = sidebar_on() and "none" or M.config.border
   state.win = vim.api.nvim_open_win(state.buf, true, options)
   -- Never scrolled sideways: wrapping pins it to the first column, though
   -- gclic's lines are as wide as the window anyway.
@@ -307,34 +430,123 @@ local function show()
   vim.api.nvim_win_call(state.win, function()
     vim.fn.winrestview({ leftcol = 0 })
   end)
+  local win = state.win
   -- However the window closes, :quit included, the command line comes back.
   vim.api.nvim_create_autocmd("WinClosed", {
-    pattern = tostring(state.win),
+    pattern = tostring(win),
     once = true,
-    callback = restore_command_line,
+    callback = function()
+      restore_command_line()
+      if state.win == win then
+        state.win = nil
+      end
+    end,
   })
-  color_window()
-  vim.cmd.startinsert()
+  color_window(state.win)
 end
 
---- Hides gclic, which keeps running.
-function M.hide()
+local function close_float()
   if valid_win() then
     vim.api.nvim_win_hide(state.win)
   end
   state.win = nil
+end
+
+--- Shows gclic in the sidebar, and goes into it if `focus`.
+local function show_sidebar(focus)
+  local side = open_side(state.buf)
+  close_float()
+  state.layout = "sidebar"
+  if focus then
+    vim.api.nvim_set_current_win(side)
+    vim.cmd.startinsert()
+  end
+end
+
+--- Shows gclic over the whole editor, the sidebar holding its place.
+local function show_full()
+  open_side(placeholder())
+  if valid_win() then
+    vim.api.nvim_win_set_config(state.win, full_placement())
+    vim.api.nvim_set_current_win(state.win)
+  else
+    open_float(full_placement())
+  end
+  state.layout = "full"
+  vim.cmd.startinsert()
+end
+
+--- Shows gclic as it was last, and goes into it.
+local function show()
+  if not sidebar_on() then
+    hide_command_line()
+    open_float(placement())
+    vim.cmd.startinsert()
+  elseif state.layout == "full" then
+    show_full()
+  else
+    show_sidebar(true)
+  end
+end
+
+--- Hides gclic, which keeps running.
+function M.hide()
+  close_float()
+  if valid(state.side) then
+    -- Not the last window, which Neovim keeps: gclic leaves it.
+    if #vim.tbl_filter(function(win)
+      return vim.api.nvim_win_get_config(win).relative == ""
+    end, vim.api.nvim_tabpage_list_wins(0)) > 1 then
+      vim.api.nvim_win_close(state.side, true)
+    else
+      vim.api.nvim_win_set_buf(state.side, vim.api.nvim_create_buf(true, false))
+    end
+  end
+  state.side = nil
   restore_command_line()
+end
+
+--- Called by gclic in the sidebar: shows it over the whole editor, `full`,
+--- while it has a diff, details or another tab to show, or in the sidebar.
+function M._layout(full)
+  if not (valid_buf() and sidebar_on()) then
+    return
+  end
+  local layout = full and "full" or "sidebar"
+  -- Hidden, say after a refresh closed its diff, gclic shows there next.
+  if layout == state.layout or not shown() then
+    state.layout = layout
+    return
+  end
+  if full then
+    show_full()
+  else
+    show_sidebar(true)
+  end
+end
+
+--- Counts a save, for gclic to show the change at once.
+local function count_save()
+  if state.saved then
+    state.saves = state.saves + 1
+    vim.fn.writefile({ tostring(state.saves) }, state.saved)
+  end
 end
 
 --- Starts gclic in the working folder, or shows it again where it was.
 function M.show()
-  if valid_win() then
+  if valid_win() and not sidebar_on() then
     vim.api.nvim_set_current_win(state.win)
     vim.cmd.startinsert()
     return
   end
   if valid_buf() then
-    show()
+    if state.layout == "full" and valid_win() then
+      vim.api.nvim_set_current_win(state.win)
+      vim.cmd.startinsert()
+    else
+      show()
+    end
     return
   end
   if not installed() then
@@ -345,6 +557,7 @@ function M.show()
     return
   end
   state.buf = vim.api.nvim_create_buf(false, true)
+  state.layout = "sidebar"
   show()
   -- Before gclic starts, as a terminal takes its colours when it does.
   if M.config.colors == "terminal" then
@@ -352,49 +565,84 @@ function M.show()
       vim.b[state.buf]["terminal_color_" .. n] = color
     end
   end
-  -- Neovim's working folder, for gclic to follow, as `:cd` there changes it.
+  -- Neovim's working folder, for gclic to follow, as `:cd` there changes it,
+  -- and a count of the files saved, for gclic to show them at once.
   state.follow = vim.fn.tempname()
   vim.fn.writefile({ vim.fn.getcwd() }, state.follow)
-  local follow = state.follow
+  state.saved = vim.fn.tempname()
+  state.saves = 0
+  vim.fn.writefile({ "0" }, state.saved)
+  local follow, saved = state.follow, state.saved
   local on_exit = function()
-    -- gclic quit: its window, buffer and file go with it.
+    -- gclic quit: its windows, buffer and files go with it.
     vim.schedule(function()
       vim.fn.delete(follow)
+      vim.fn.delete(saved)
       if state.follow == follow then
         state.follow = nil
+        state.saved = nil
       end
       M.hide()
-      if valid_buf() then
-        vim.api.nvim_buf_delete(state.buf, { force = true })
+      for _, buf in ipairs({ state.buf, state.placeholder }) do
+        if buf and vim.api.nvim_buf_is_valid(buf) then
+          vim.api.nvim_buf_delete(buf, { force = true })
+        end
       end
       state.buf = nil
+      state.placeholder = nil
+      state.layout = "sidebar"
     end)
   end
   -- The colour scheme's colours as gclic starts: a later change of colour
   -- scheme shows the next time it does.
   -- And this Neovim, for gclic to call back into, as `nvim` on the PATH may
   -- be another.
-  local env = { GCLIC_FOLLOW = state.follow, GCLIC_NVIM = vim.v.progpath }
+  local env = { GCLIC_FOLLOW = follow, GCLIC_SAVED = saved, GCLIC_NVIM = vim.v.progpath }
+  if sidebar_on() then
+    env.GCLIC_SIDEBAR_WIDTH = tostring(sidebar_width())
+  end
   if M.config.diff_colors == "editor" then
     env.GCLIC_EDITOR_COLORS = M._editor_colors()
   end
-  if vim.fn.has("nvim-0.11") == 1 then
-    vim.fn.jobstart({ M.config.cmd }, { term = true, env = env, on_exit = on_exit })
-  else
-    vim.fn.termopen({ M.config.cmd }, { env = env, on_exit = on_exit })
-  end
+  -- In gclic's window, wherever it shows.
+  vim.api.nvim_win_call(vim.fn.bufwinid(state.buf), function()
+    if vim.fn.has("nvim-0.11") == 1 then
+      state.job = vim.fn.jobstart({ M.config.cmd }, { term = true, env = env, on_exit = on_exit })
+    else
+      state.job = vim.fn.termopen({ M.config.cmd }, { env = env, on_exit = on_exit })
+    end
+  end)
   -- A filetype of its own, for configs to tell gclic's window apart, say to
   -- keep a status line or winbar out of it.
   vim.bo[state.buf].filetype = "gclic"
+  local keys = { buffer = state.buf }
   if M.config.toggle_key then
-    vim.keymap.set("t", M.config.toggle_key, M.hide, { buffer = state.buf, desc = "Hide gclic" })
+    if not sidebar_on() then
+      vim.keymap.set("t", M.config.toggle_key, M.hide, { buffer = state.buf, desc = "Hide gclic" })
+    elseif M.config.toggle_key ~= "<C-g>" then
+      -- In the sidebar, gclic takes ctrl-g itself: back to the sidebar from
+      -- the whole editor, or hidden. Another key stands in for it.
+      vim.keymap.set("t", M.config.toggle_key, function()
+        vim.api.nvim_chan_send(state.job, "\007")
+      end, { buffer = state.buf, desc = "Back to the sidebar, or hide gclic" })
+    end
+  end
+  -- From the sidebar, ctrl-h and ctrl-l go to the windows beside it, as they
+  -- do between Neovim's windows. Over the whole editor there are none.
+  if sidebar_on() then
+    for key, direction in pairs({ ["<C-h>"] = "h", ["<C-l>"] = "l" }) do
+      vim.keymap.set("t", key, function()
+        if state.layout == "sidebar" then
+          vim.cmd.wincmd(direction)
+        end
+      end, { buffer = state.buf, desc = "Go to the window beside gclic" })
+    end
   end
   -- gclic doesn't use the mouse, so the mouse reaches Neovim, whose scrolling,
   -- up, down or sideways, would leave terminal mode and scroll the window,
   -- shifting gclic's screen and sending its keys to Neovim. A trackpad keeps
   -- scrolling for a moment after a flick, into gclic if it opens meanwhile.
   -- So in gclic's window, the mouse does nothing.
-  local keys = { buffer = state.buf }
   local mouse = { "LeftMouse", "LeftDrag", "LeftRelease", "2-LeftMouse", "RightMouse", "MiddleMouse" }
   for _, wheel in ipairs({ "ScrollWheelUp", "ScrollWheelDown", "ScrollWheelLeft", "ScrollWheelRight" }) do
     for _, modifier in ipairs({ "", "S-", "C-", "M-" }) do
@@ -420,25 +668,58 @@ function M.show()
   })
 end
 
+--- The toggle. With the sidebar: shows gclic, or goes into it where it
+--- shows; inside it, the key is gclic's, and ctrl-g there hides it.
 function M.toggle()
-  if valid_win() then
-    M.hide()
-  else
-    M.show()
+  if not sidebar_on() then
+    if valid_win() then
+      M.hide()
+    else
+      M.show()
+    end
+    return
   end
+  local current = vim.api.nvim_get_current_win()
+  if shown() and (current == state.win or current == state.side) then
+    return
+  end
+  M.show()
 end
 
---- Called by gclic's `o`: hides gclic and opens the file at the line, in the
---- window beneath, where the user was before opening gclic.
+--- The window to open files in beside the sidebar: the one to its right,
+--- or a new one if there's none.
+local function code_window()
+  local right = vim.api.nvim_win_call(state.side, function()
+    return vim.fn.win_getid(vim.fn.winnr("l"))
+  end)
+  if right ~= 0 and right ~= state.side then
+    return right
+  end
+  vim.api.nvim_set_current_win(state.side)
+  vim.cmd("rightbelow vnew")
+  local win = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_width(state.side, sidebar_width())
+  return win
+end
+
+--- Called by gclic's `o`: opens the file at the line. Beside the sidebar,
+--- which stays, and from the whole editor back in the sidebar. Without the
+--- sidebar, gclic hides and the file opens in the window beneath it.
 function M.open(file, line)
-  M.hide()
+  if sidebar_on() and valid_buf() and shown() then
+    show_sidebar(false)
+    vim.api.nvim_set_current_win(code_window())
+  else
+    M.hide()
+  end
   vim.cmd.edit(vim.fn.fnameescape(file))
   pcall(vim.api.nvim_win_set_cursor, 0, { line, 0 })
   vim.cmd("normal! zz")
+  vim.cmd.stopinsert()
 end
 
 function M.setup(opts)
-  M.config = vim.tbl_extend("force", M.config, opts or {})
+  M.config = vim.tbl_deep_extend("force", M.config, opts or {})
   vim.api.nvim_create_user_command("Gclic", M.toggle, { desc = "Toggle gclic" })
   if M.config.colors == "terminal" and #vim.api.nvim_list_uis() > 0 then
     ask_terminal()
@@ -453,6 +734,12 @@ function M.setup(opts)
       end
     end,
   })
+  -- A file saved, or changed by a shell command or outside while Neovim was
+  -- away, for gclic to show at once rather than on its next refresh.
+  vim.api.nvim_create_autocmd({ "BufWritePost", "FocusGained", "ShellCmdPost" }, {
+    group = vim.api.nvim_create_augroup("gclic_saved", { clear = true }),
+    callback = count_save,
+  })
   if M.config.accent then
     local group = vim.api.nvim_create_augroup("gclic_accent", { clear = true })
     vim.api.nvim_create_autocmd("DirChanged", { group = group, callback = M.refresh_accent })
@@ -460,12 +747,16 @@ function M.setup(opts)
     vim.api.nvim_create_autocmd("ColorScheme", { group = group, callback = draw_accent })
     M.refresh_accent()
   end
-  -- The window follows the terminal's size, and gclic redraws to fit it.
+  -- The windows follow the terminal's size, and gclic redraws to fit them.
   vim.api.nvim_create_autocmd("VimResized", {
     group = vim.api.nvim_create_augroup("gclic", { clear = true }),
     callback = function()
       if valid_win() then
-        vim.api.nvim_win_set_config(state.win, placement())
+        local options = sidebar_on() and valid(state.side) and full_placement() or placement()
+        vim.api.nvim_win_set_config(state.win, options)
+      end
+      if valid(state.side) then
+        vim.api.nvim_win_set_width(state.side, sidebar_width())
       end
     end,
   })
