@@ -11,6 +11,18 @@ impl App {
             KeyCode::Enter => {
                 let result = match &confirm {
                     Confirm::Restore(path) => git::restore(&self.repo, path),
+                    Confirm::RestoreChange { patch, .. } => {
+                        let result = git::unapply_from_working_tree(&self.repo, patch);
+                        let worked = result.is_ok();
+                        self.apply(Action::after_change(result));
+                        if worked {
+                            self.message = "Discarded the change".to_string();
+                            if let Some(pane) = self.view.diff_mut() {
+                                pane.go_to_nearest_change();
+                            }
+                        }
+                        return;
+                    }
                     Confirm::DiscardAll { restore, delete } => git::discard_all(&self.repo, restore, delete),
                     Confirm::DeleteUntracked(path) => git::delete_untracked(&self.repo, path),
                     Confirm::CloseCompare => {
@@ -212,6 +224,18 @@ impl App {
                             Span::styled(path.clone(), bold),
                             Span::raw("?"),
                         ])],
+                        "discard",
+                    ),
+                    Confirm::RestoreChange { path, .. } => (
+                        " Discard change ",
+                        vec![
+                            Line::from(vec![
+                                Span::raw("Discard this change to "),
+                                Span::styled(path.clone(), bold),
+                                Span::raw("?"),
+                            ]),
+                            Line::styled("The file's other changes stay. This can't be undone.", Style::default().fg(ui::DIM)),
+                        ],
                         "discard",
                     ),
                     Confirm::DiscardAll { restore, delete } => {

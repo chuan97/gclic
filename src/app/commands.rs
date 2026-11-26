@@ -468,6 +468,78 @@ impl App {
         *self = fresh;
     }
 
+    /// Space inside a working-tree diff: stages the change the active line is
+    /// in, from the unstaged diff, or unstages it, from the staged one, then
+    /// goes on to the next change. A file whose diff is a single change goes
+    /// whole, as `space` in the list would take it, which also stages a new
+    /// file or a deletion, which a patch of its lines couldn't.
+    pub(super) fn stage_active_change(&mut self) {
+        let Some(pane) = self.view.diff() else {
+            return;
+        };
+        let Some(change) = pane.active_change() else {
+            self.message = "Not on a change: n goes to the next one".to_string();
+            return;
+        };
+        let (source, text, whole) = (pane.source.clone(), pane.text().to_string(), pane.change_count() == 1);
+        let as_patch = |path: &str, direction| match diff::change_patch(&text, path, &change, direction) {
+            Some(patch) => git::apply_to_index(&self.repo, &patch, direction == diff::Direction::Reverse),
+            None => Err(anyhow::anyhow!("That change isn't in the diff any more")),
+        };
+        let (result, done) = match &source {
+            // A new file is all one change.
+            DiffSource::Untracked(path) => (git::stage(&self.repo, path), "Staged"),
+            DiffSource::Unstaged(path) if whole => (git::stage(&self.repo, path), "Staged"),
+            DiffSource::Unstaged(path) => (as_patch(path, diff::Direction::Forward), "Staged"),
+            DiffSource::Staged(path) if whole => (git::unstage(&self.repo, path), "Unstaged"),
+            DiffSource::Staged(path) => (as_patch(path, diff::Direction::Reverse), "Unstaged"),
+            DiffSource::Conflict(_) => {
+                self.message = "A conflict is staged whole once resolved, with space in the list".to_string();
+                return;
+            }
+            _ => return,
+        };
+        let worked = result.is_ok();
+        self.apply(Action::after_change(result));
+        if worked {
+            self.message = if whole { format!("{done} {}", source.path()) } else { format!("{done} the change") };
+            if let Some(pane) = self.view.diff_mut() {
+                pane.go_to_nearest_change();
+            }
+        }
+    }
+
+    /// d inside a working-tree diff: asks to discard the change the active
+    /// line is in, from the unstaged diff. A file whose diff is a single
+    /// change is discarded whole, as `d` in the list would, and an untracked
+    /// one deleted, after asking the same.
+    pub(super) fn ask_to_restore_active_change(&mut self) {
+        let Some(pane) = self.view.diff() else {
+            return;
+        };
+        let Some(change) = pane.active_change() else {
+            self.message = "Not on a change: n goes to the next one".to_string();
+            return;
+        };
+        let path = pane.source.path().to_string();
+        self.modal = match &pane.source {
+            DiffSource::Untracked(_) => Modal::Confirm(Confirm::DeleteUntracked(path)),
+            DiffSource::Unstaged(_) if pane.change_count() == 1 => Modal::Confirm(Confirm::Restore(path)),
+            DiffSource::Unstaged(_) => match diff::change_patch(pane.text(), &path, &change, diff::Direction::Reverse) {
+                Some(patch) => Modal::Confirm(Confirm::RestoreChange { path, patch }),
+                None => Modal::Error("That change isn't in the diff any more".to_string()),
+            },
+            DiffSource::Staged(_) => {
+                self.message = "Staged changes are kept: unstage it first, with space".to_string();
+                return;
+            }
+            _ => {
+                self.message = "A conflict is resolved in the file, then staged whole".to_string();
+                return;
+            }
+        };
+    }
+
     /// Opens the focused file in the user's editor, or in the Neovim gclic runs
     /// in, while gclic carries on. It opens at the diff's active line, or at
     /// the file's first change without a diff. History opens the file as it is now, so the line

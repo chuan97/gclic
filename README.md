@@ -7,7 +7,7 @@ gclic is heavily inspired by the features I like and have grown accustomed to in
 
 ## Features
 
-- **[Staging and commit](#staging-and-commit):** browse changed files, stage, unstage or restore them, and commit.
+- **[Staging and commit](#staging-and-commit):** browse changed files, stage, unstage or restore them, or one change of them at a time, and commit.
 - **[Branch graph](#branch-graph):** navigate a commit graph of any set of branches, open a commit's files and diffs, read its details and copy its sha.
 - **[Branches](#branches):** fuzzy search and check out branches, and see how far each one is ahead of or behind its remotes.
 - **[Diffs](#diffs):** read any file's changes side by side or unified, with syntax highlighting, the changed words marked, and a minimap of the whole file.
@@ -49,6 +49,8 @@ In [Ghostty](https://ghostty.org), [kitty](https://sw.kovidgoyal.net/kitty/) and
 ## Staging and commit
 
 The Changes pane lists staged and unstaged files, each name followed by its folder. `space` stages or unstages one, `a`/`A` all of them, `d` restores a file (after asking), `D` every file not staged, and `c` commits what's staged, with `ctrl-enter` to confirm. `enter` shows a file's diff on the right, and the diff follows as you move through the list.
+
+Inside a file's diff, the same keys take one change at a time, the run of changed lines the active line is in, which `n`/`N` move between: `space` stages it from the file's unstaged diff, or unstages it from its staged diff, and `d` discards it from the unstaged diff, after asking. The rest of the file stays as it is.
 
 ![The Changes pane with a file's diff on the right](docs/images/staging.svg)
 

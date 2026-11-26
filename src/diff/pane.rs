@@ -3,6 +3,7 @@
 
 use super::cache::*;
 use super::parse::*;
+use super::patch::ChangeLines;
 use crate::git::{self, DiffSource, Repo};
 use crate::review::{Anchor, Side};
 use crate::theme::BUILT_IN;
@@ -526,6 +527,49 @@ impl DiffPane {
             (Some(current), total) => Some(format!(" {noun} {current} of {total} ")),
             (None, 1) => Some(format!(" 1 {noun} ")),
             (None, total) => Some(format!(" {total} {noun}s ")),
+        }
+    }
+
+    /// The lines of the change the active line is in, if it's in one.
+    pub fn active_change(&self) -> Option<ChangeLines> {
+        if !self.is_changed(self.active) {
+            return None;
+        }
+        let start = (0..=self.active).rev().take_while(|&i| self.is_changed(i)).last()?;
+        let end = (self.active..self.items.len()).take_while(|&i| self.is_changed(i)).last()?;
+        let mut change = ChangeLines::default();
+        let changed = |cell: &Option<Cell>| cell.as_ref().filter(|cell| cell.changed).map(|cell| cell.number);
+        for item in &self.items[start..=end] {
+            let Row::Lines { left, right } = &self.rows[item.row()] else { continue };
+            match item {
+                Item::Row(_) => {
+                    change.old.extend(changed(left));
+                    change.new.extend(changed(right));
+                }
+                Item::Old(_) => change.old.extend(changed(left)),
+                Item::New(_) => change.new.extend(changed(right)),
+            }
+        }
+        Some(change)
+    }
+
+    /// How many changes the diff has.
+    pub fn change_count(&self) -> usize {
+        self.change_position().1
+    }
+
+    /// Onto the start of a change, after the diff changed under the active
+    /// line: the one it's in, or else the next, or else the last before it.
+    pub fn go_to_nearest_change(&mut self) {
+        let start_back = (0..=self.active.min(self.items.len().saturating_sub(1))).rev().find(|&i| self.starts_change(i));
+        let target = if self.is_changed(self.active) {
+            start_back
+        } else {
+            (self.active..self.items.len()).find(|&i| self.starts_change(i)).or(start_back)
+        };
+        if let Some(target) = target {
+            self.active = target;
+            self.navigated = true;
         }
     }
 

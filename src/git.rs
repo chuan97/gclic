@@ -369,6 +369,41 @@ pub fn stage(repo: &Repo, path: &str) -> Result<()> {
     run_ok(repo, &["add", "--", path])
 }
 
+/// Applies a patch to the index, leaving the working tree as it is: staging
+/// part of a file, or with `reverse`, unstaging it. Git checks the patch
+/// against the index first, so one made before the file changed fails, and
+/// changes nothing.
+pub fn apply_to_index(repo: &Repo, patch: &str, reverse: bool) -> Result<()> {
+    apply(repo, patch, if reverse { &["--cached", "-R"] } else { &["--cached"] })
+}
+
+/// Takes a patch back out of the working tree, leaving the index as it is:
+/// discarding part of a file's changes. Git checks the patch against the
+/// file first, so one made before the file changed fails, and changes
+/// nothing.
+pub fn unapply_from_working_tree(repo: &Repo, patch: &str) -> Result<()> {
+    apply(repo, patch, &["-R"])
+}
+
+/// `git apply`, with the patch given on its input.
+fn apply(repo: &Repo, patch: &str, options: &[&str]) -> Result<()> {
+    use std::io::Write;
+    let mut args = vec!["apply", "--whitespace=nowarn"];
+    args.extend(options);
+    args.push("-");
+    let mut command = repo.command(&args);
+    command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn().map_err(|e| anyhow!("could not run git: {e}"))?;
+    // Written whole before reading anything back: a patch is small, and git
+    // prints nothing until it has read it.
+    child.stdin.take().map(|mut stdin| stdin.write_all(patch.as_bytes())).transpose()?;
+    let output = child.wait_with_output()?;
+    if !output.status.success() {
+        bail!("{}", String::from_utf8_lossy(&output.stderr).trim());
+    }
+    Ok(())
+}
+
 pub fn stage_all(repo: &Repo) -> Result<()> {
     run_ok(repo, &["add", "-A"])
 }
