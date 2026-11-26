@@ -10,20 +10,9 @@ impl App {
         match key.code {
             KeyCode::Enter => {
                 let result = match &confirm {
-                    Confirm::Restore(path) => git::restore(&self.repo, path),
-                    Confirm::RestoreChange { patch, .. } => {
-                        let result = git::unapply_from_working_tree(&self.repo, patch);
-                        let worked = result.is_ok();
-                        self.apply(Action::after_change(result));
-                        if worked {
-                            self.message = "Discarded the change".to_string();
-                            if let Some(pane) = self.view.diff_mut() {
-                                pane.go_to_nearest_change();
-                            }
-                        }
-                        return;
-                    }
-                    Confirm::DiscardAll { restore, delete } => git::discard_all(&self.repo, restore, delete),
+                    Confirm::Restore(path) => return self.restore_file(path),
+                    Confirm::RestoreChange { path, patch } => return self.restore_change(path, patch),
+                    Confirm::DiscardAll { restore, delete } => return self.discard_all(restore, delete),
                     Confirm::DeleteUntracked(path) => git::delete_untracked(&self.repo, path),
                     Confirm::CloseCompare => {
                         self.close_compare();
@@ -67,6 +56,9 @@ impl App {
                 } else {
                     match git::commit(&self.repo, &self.commit_draft) {
                         Ok(()) => {
+                            // What was staged is committed, which unstaging
+                            // it now would only confuse.
+                            self.history.clear();
                             self.commit_draft.clear();
                             self.refresh();
                             self.message = "Committed".to_string();

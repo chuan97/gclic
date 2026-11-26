@@ -22,6 +22,7 @@ mod terminal;
 mod test_repo;
 mod theme;
 mod ui;
+mod undo;
 mod worker;
 
 use anyhow::Result;

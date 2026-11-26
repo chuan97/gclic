@@ -1048,3 +1048,244 @@ fn a_file_changed_since_its_diff_loaded_discards_nothing() {
     assert!(matches!(app.modal, Modal::Error(_)), "{}", app.message);
     assert_eq!(repo.read("f").as_deref(), Some("1\nTwo\n3\n4\n5\n6\n7\nEIGHT\n"));
 }
+
+// u, undoing stagings and discards.
+
+#[test]
+fn u_undoes_stagings_one_step_at_a_time() {
+    let repo = repo_with("f", EIGHT);
+    repo.write("f", "1\nTWO\n3\n4\n5\n5.5\n6\n7\n8\n");
+    let mut app = app_on(&repo);
+    assert!(!app.hints().iter().any(|(key, _)| *key == "u"));
+    into_diff(&mut app, DiffSource::Unstaged("f".to_string()));
+    press(&mut app, KeyCode::Char(' '));
+    press(&mut app, KeyCode::Char(' '));
+    assert_eq!(staged(&repo, "f"), repo.read("f").unwrap());
+    assert!(app.hints().contains(&("u", "undo")));
+    press(&mut app, KeyCode::Char('u'));
+    assert_eq!(app.message, "Undid staging f");
+    assert_eq!(staged(&repo, "f"), "1\nTWO\n3\n4\n5\n6\n7\n8\n");
+    press(&mut app, KeyCode::Char('u'));
+    assert_eq!(app.message, "Undid staging a change to f");
+    assert_eq!(staged(&repo, "f"), EIGHT);
+    press(&mut app, KeyCode::Char('u'));
+    assert_eq!(app.message, "Nothing to undo");
+    // The diff shows both changes again.
+    assert_eq!(app.view.diff().unwrap().change_count(), 2);
+}
+
+#[test]
+fn u_undoes_the_lists_stagings_new_files_included() {
+    let repo = repo_with("f", EIGHT);
+    repo.write("f", "changed\n");
+    repo.write("new", "new\n");
+    let mut app = app_on(&repo);
+    app.focus_left(Pane::Changes);
+    press(&mut app, KeyCode::Char('a'));
+    assert_eq!(git::status(&repo).unwrap().staged.len(), 2);
+    press(&mut app, KeyCode::Char('u'));
+    assert_eq!(app.message, "Undid staging everything");
+    let status = git::status(&repo).unwrap();
+    assert!(status.staged.is_empty());
+    assert_eq!(status.unstaged.iter().map(|file| file.status).collect::<String>(), "M?");
+    // And unstaging, back.
+    press(&mut app, KeyCode::Char('a'));
+    press(&mut app, KeyCode::Char('A'));
+    press(&mut app, KeyCode::Char('u'));
+    assert_eq!(app.message, "Undid unstaging everything");
+    assert_eq!(git::status(&repo).unwrap().staged.len(), 2);
+}
+
+#[test]
+fn u_brings_back_a_discarded_change_or_file() {
+    let repo = repo_with("f", EIGHT);
+    let edited = "1\nTWO\n3\n4\n5\n5.5\n6\n7\n8\n";
+    repo.write("f", edited);
+    let mut app = app_on(&repo);
+    into_diff(&mut app, DiffSource::Unstaged("f".to_string()));
+    press(&mut app, KeyCode::Char('d'));
+    press(&mut app, KeyCode::Enter);
+    assert_eq!(repo.read("f").as_deref(), Some("1\n2\n3\n4\n5\n5.5\n6\n7\n8\n"));
+    press(&mut app, KeyCode::Char('u'));
+    assert_eq!(app.message, "Undid discarding a change to f");
+    assert_eq!(repo.read("f").as_deref(), Some(edited));
+    // The whole file, from the list.
+    app.focus_left(Pane::Changes);
+    press(&mut app, KeyCode::Char('d'));
+    press(&mut app, KeyCode::Enter);
+    assert_eq!(repo.read("f").as_deref(), Some(EIGHT));
+    press(&mut app, KeyCode::Char('u'));
+    assert_eq!(repo.read("f").as_deref(), Some(edited));
+    // The index was never touched.
+    assert_eq!(staged(&repo, "f"), EIGHT);
+}
+
+#[test]
+fn undoing_discard_all_brings_back_the_changes_but_not_the_untracked_files() {
+    let repo = repo_with("f", EIGHT);
+    repo.write("f", "changed\n");
+    repo.write("new", "new\n");
+    let mut app = app_on(&repo);
+    app.focus_left(Pane::Changes);
+    press(&mut app, KeyCode::Char('D'));
+    press(&mut app, KeyCode::Enter);
+    assert_eq!(git::status(&repo).unwrap(), git::Status::default());
+    press(&mut app, KeyCode::Char('u'));
+    assert_eq!(app.message, "Undid discarding your changes to 1 file, though not deleting 1 untracked file");
+    assert_eq!(repo.read("f").as_deref(), Some("changed\n"));
+    assert_eq!(repo.read("new"), None);
+}
+
+#[test]
+fn undoing_a_discarded_deletion_deletes_the_file_again() {
+    let repo = repo_with("f", EIGHT);
+    std::fs::remove_file(repo.file("f")).unwrap();
+    let mut app = app_on(&repo);
+    app.focus_left(Pane::Changes);
+    press(&mut app, KeyCode::Char('d'));
+    press(&mut app, KeyCode::Enter);
+    assert_eq!(repo.read("f").as_deref(), Some(EIGHT));
+    press(&mut app, KeyCode::Char('u'));
+    assert_eq!(repo.read("f"), None);
+}
+
+#[test]
+fn a_binary_file_comes_back_exactly() {
+    let bytes = [0u8, 159, 146, 150, 13, 10, 0, 255];
+    let repo = TestRepo::new();
+    std::fs::write(repo.file("logo.png"), [1u8, 2, 3]).unwrap();
+    repo.commit("Add a logo");
+    std::fs::write(repo.file("logo.png"), bytes).unwrap();
+    let mut app = app_on(&repo);
+    app.focus_left(Pane::Changes);
+    press(&mut app, KeyCode::Char('d'));
+    press(&mut app, KeyCode::Enter);
+    press(&mut app, KeyCode::Char('u'));
+    assert_eq!(std::fs::read(repo.file("logo.png")).unwrap(), bytes);
+}
+
+#[test]
+fn undoing_the_staging_of_a_resolved_conflict_brings_the_conflict_back() {
+    let repo = TestRepo::with_history();
+    repo.conflicting_merge("clash.txt");
+    repo.write("clash.txt", "both\n");
+    let mut app = app_on(&repo);
+    app.focus_left(Pane::Changes);
+    press(&mut app, KeyCode::Char(' '));
+    assert!(git::status(&repo).unwrap().conflicted.is_empty());
+    press(&mut app, KeyCode::Char('u'));
+    assert_eq!(git::status(&repo).unwrap().conflicted.len(), 1);
+    // Both sides are there to resolve against again.
+    assert_eq!(repo.git(&["show", ":3:clash.txt"]), "theirs\n");
+}
+
+#[test]
+fn an_undo_that_would_lose_later_changes_is_refused_and_dropped() {
+    let repo = repo_with("f", EIGHT);
+    repo.write("f", "1\nTWO\n3\n4\n5\n6\n7\n8\n");
+    let mut app = app_on(&repo);
+    app.focus_left(Pane::Changes);
+    // f staged, then edited again and that edit discarded, from the list.
+    press(&mut app, KeyCode::Char(' '));
+    repo.write("f", "edited again\n");
+    app.refresh();
+    press(&mut app, KeyCode::Char('j'));
+    press(&mut app, KeyCode::Char('d'));
+    press(&mut app, KeyCode::Enter);
+    assert_eq!(repo.read("f").as_deref(), Some("1\nTWO\n3\n4\n5\n6\n7\n8\n"));
+    // Then edited once more, in the editor.
+    repo.write("f", "and again, by hand\n");
+    press(&mut app, KeyCode::Char('u'));
+    assert_eq!(app.message, "Can't undo discarding your changes to f: f changed since");
+    assert_eq!(repo.read("f").as_deref(), Some("and again, by hand\n"));
+    // It's gone, and the step before it is next: the staging, which
+    // nothing has touched since.
+    press(&mut app, KeyCode::Char('u'));
+    assert_eq!(app.message, "Undid staging f");
+    assert_eq!(staged(&repo, "f"), EIGHT);
+}
+
+#[test]
+fn committing_clears_what_u_would_undo() {
+    let repo = repo_with("f", EIGHT);
+    repo.write("f", "changed\n");
+    let mut app = app_on(&repo);
+    app.focus_left(Pane::Changes);
+    press(&mut app, KeyCode::Char(' '));
+    press(&mut app, KeyCode::Char('c'));
+    type_text(&mut app, "Change f");
+    ctrl(&mut app, 's');
+    assert_eq!(app.message, "Committed");
+    press(&mut app, KeyCode::Char('u'));
+    assert_eq!(app.message, "Nothing to undo");
+    assert_eq!(git::status(&repo).unwrap(), git::Status::default());
+}
+
+#[test]
+fn u_types_into_a_search_rather_than_undoing() {
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
+    app.focus_left(Pane::Branches);
+    press(&mut app, KeyCode::Char('i'));
+    press(&mut app, KeyCode::Char('u'));
+    assert_ne!(app.message, "Nothing to undo");
+}
+
+#[test]
+fn ctrl_r_redoes_what_u_undid() {
+    let repo = repo_with("f", EIGHT);
+    repo.write("f", "1\nTWO\n3\n4\n5\n5.5\n6\n7\n8\n");
+    let mut app = app_on(&repo);
+    into_diff(&mut app, DiffSource::Unstaged("f".to_string()));
+    press(&mut app, KeyCode::Char(' '));
+    press(&mut app, KeyCode::Char('d'));
+    press(&mut app, KeyCode::Enter);
+    let (index, file) = (staged(&repo, "f"), repo.read("f"));
+    press(&mut app, KeyCode::Char('u'));
+    press(&mut app, KeyCode::Char('u'));
+    assert_eq!((staged(&repo, "f"), repo.read("f").unwrap()), (EIGHT.to_string(), "1\nTWO\n3\n4\n5\n5.5\n6\n7\n8\n".to_string()));
+    assert!(app.hints().contains(&("ctrl-r", "redo")));
+    ctrl(&mut app, 'r');
+    assert_eq!(app.message, "Redid staging a change to f");
+    ctrl(&mut app, 'r');
+    // With one change staged, the one left was the file's only one, so d
+    // took the file.
+    assert_eq!(app.message, "Redid discarding your changes to f");
+    assert_eq!((staged(&repo, "f"), repo.read("f")), (index, file));
+    ctrl(&mut app, 'r');
+    assert_eq!(app.message, "Nothing to redo");
+    // And undone again.
+    press(&mut app, KeyCode::Char('u'));
+    assert_eq!(app.message, "Undid discarding your changes to f");
+}
+
+#[test]
+fn a_new_staging_after_an_undo_leaves_nothing_to_redo() {
+    let repo = repo_with("f", EIGHT);
+    repo.write("f", "changed\n");
+    repo.write("g", "new\n");
+    let mut app = app_on(&repo);
+    app.focus_left(Pane::Changes);
+    press(&mut app, KeyCode::Char(' '));
+    press(&mut app, KeyCode::Char('u'));
+    press(&mut app, KeyCode::Char('j'));
+    press(&mut app, KeyCode::Char(' '));
+    assert!(!app.hints().iter().any(|(key, _)| *key == "ctrl-r"));
+    ctrl(&mut app, 'r');
+    assert_eq!(app.message, "Nothing to redo");
+}
+
+#[test]
+fn a_redo_that_would_lose_later_changes_is_refused() {
+    let repo = repo_with("f", EIGHT);
+    repo.write("f", "changed\n");
+    let mut app = app_on(&repo);
+    app.focus_left(Pane::Changes);
+    press(&mut app, KeyCode::Char('d'));
+    press(&mut app, KeyCode::Enter);
+    press(&mut app, KeyCode::Char('u'));
+    repo.write("f", "changed, then edited\n");
+    ctrl(&mut app, 'r');
+    assert_eq!(app.message, "Can't redo discarding your changes to f: f changed since");
+    assert_eq!(repo.read("f").as_deref(), Some("changed, then edited\n"));
+}
