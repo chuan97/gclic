@@ -23,7 +23,8 @@ impl App {
 
     /// The Changes pane's space, a and A.
     pub(super) fn stage(&mut self, staging: Staging) {
-        let status = git::status(&self.repo).unwrap_or_default();
+        // Only staging or unstaging everything needs to know what that is.
+        let status = || git::status(&self.repo).unwrap_or_default();
         let paths_of = |lists: &[&Vec<FileEntry>]| {
             let mut paths: Vec<String> = Vec::new();
             for entry in lists.iter().flat_map(|list| list.iter()) {
@@ -36,8 +37,11 @@ impl App {
         let (label, paths) = match &staging {
             Staging::Stage(path) => (format!("staging {path}"), vec![path.clone()]),
             Staging::Unstage(path) => (format!("unstaging {path}"), vec![path.clone()]),
-            Staging::StageAll => ("staging everything".to_string(), paths_of(&[&status.conflicted, &status.unstaged])),
-            Staging::UnstageAll => ("unstaging everything".to_string(), paths_of(&[&status.staged])),
+            Staging::StageAll => {
+                let status = status();
+                ("staging everything".to_string(), paths_of(&[&status.conflicted, &status.unstaged]))
+            }
+            Staging::UnstageAll => ("unstaging everything".to_string(), paths_of(&[&status().staged])),
         };
         self.record(label, undo::Kind::Index, paths, |repo| match &staging {
             Staging::Stage(path) => git::stage(repo, path),

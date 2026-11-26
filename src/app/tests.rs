@@ -1289,3 +1289,26 @@ fn a_redo_that_would_lose_later_changes_is_refused() {
     assert_eq!(app.message, "Can't redo discarding your changes to f: f changed since");
     assert_eq!(repo.read("f").as_deref(), Some("changed, then edited\n"));
 }
+
+#[test]
+fn undoing_discard_all_brings_back_every_file() {
+    let repo = TestRepo::new();
+    let names = ["a.txt", "b c.txt", "deep/d.txt"];
+    for name in names {
+        repo.write(name, "before\n");
+    }
+    repo.commit("Add them");
+    for name in names {
+        repo.write(name, &format!("{name} changed\n"));
+    }
+    let mut app = app_on(&repo);
+    app.focus_left(Pane::Changes);
+    press(&mut app, KeyCode::Char('D'));
+    press(&mut app, KeyCode::Enter);
+    assert_eq!(git::status(&repo).unwrap(), git::Status::default());
+    press(&mut app, KeyCode::Char('u'));
+    assert_eq!(app.message, "Undid discarding your changes to 3 files");
+    for name in names {
+        assert_eq!(repo.read(name), Some(format!("{name} changed\n")));
+    }
+}
