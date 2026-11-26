@@ -657,3 +657,126 @@ fn changes_made_outside_gclic_show_after_a_refresh() {
     let shown = screen(&mut app);
     assert!(shown.contains("Changes (1)") && shown.contains("Made elsewhere"), "{shown}");
 }
+
+// :cd, between repos in a folder made for the test.
+
+use crate::test_repo::TestFolder;
+
+/// An app on `alpha`, in a folder that also holds `beta`, which has a file
+/// of its own waiting to be committed.
+fn two_repos() -> (TestFolder, TestRepo, TestRepo) {
+    let folder = TestFolder::new();
+    let (alpha, beta) = (folder.repo("alpha"), folder.repo("beta"));
+    beta.write("only-in-beta.txt", "beta\n");
+    (folder, alpha, beta)
+}
+
+fn app_in(folder: &TestFolder, repo: &TestRepo) -> App {
+    App::new(repo.repo.clone(), folder.path.clone())
+}
+
+/// The picker open, and the repos it offers.
+fn repo_picker(app: &App) -> (&Picker, &Vec<(String, PathBuf)>) {
+    match &app.modal {
+        Modal::Picker(picker, PickerUse::Repo(repos)) => (picker, repos),
+        _ => panic!("the repo finder should be open"),
+    }
+}
+
+#[test]
+fn cd_with_a_name_moves_to_that_repo_and_starts_afresh() {
+    let (folder, alpha, beta) = two_repos();
+    let mut app = app_in(&folder, &alpha);
+    app.split = Some(false);
+    app.fetcher.auto = false;
+    app.start_compare("main".to_string(), "feature".to_string());
+    app.change_repo("beta");
+    assert_eq!(app.repo, beta.repo);
+    let shown = screen(&mut app);
+    assert!(shown.contains("only-in-beta.txt") && shown.contains("beta"), "{shown}");
+    // What was read from alpha goes, and how things are shown stays.
+    assert!(app.compare.is_none() && app.tab == Tab::Repo);
+    assert_eq!((app.split, app.fetcher.auto), (Some(false), false));
+    assert_eq!(app.search_root, folder.path);
+    // And from now on, what's done is done in beta.
+    app.focus_left(Pane::Changes);
+    press(&mut app, KeyCode::Char(' '));
+    assert_eq!(git::status(&beta).unwrap().staged.len(), 1);
+    assert_eq!(git::status(&alpha).unwrap(), git::Status::default());
+}
+
+#[test]
+fn cd_alone_opens_the_finder_on_the_repo_gclic_is_in() {
+    let (folder, alpha, _beta) = two_repos();
+    let mut app = app_in(&folder, &alpha);
+    app.change_repo("");
+    let (picker, repos) = repo_picker(&app);
+    let labels: Vec<&str> = repos.iter().map(|(label, _)| label.as_str()).collect();
+    assert_eq!(labels, [crate::repos::UP, "alpha", "beta"]);
+    assert_eq!(picker.highlighted().map(String::as_str), Some("alpha"));
+}
+
+#[test]
+fn picking_a_repo_in_the_finder_moves_there() {
+    let (folder, alpha, beta) = two_repos();
+    let mut app = app_in(&folder, &alpha);
+    app.change_repo("");
+    let Modal::Picker(_, PickerUse::Repo(repos)) = std::mem::replace(&mut app.modal, Modal::None) else {
+        panic!("the repo finder should be open");
+    };
+    app.use_picked(PickerUse::Repo(repos), vec!["beta".to_string()]);
+    assert_eq!(app.repo, beta.repo);
+}
+
+#[test]
+fn cd_up_searches_a_folder_up_from_then_on() {
+    let (folder, alpha, _beta) = two_repos();
+    let mut app = app_in(&folder, &alpha);
+    app.change_repo("..");
+    assert_eq!(Some(app.search_root.as_path()), folder.path.parent());
+    assert!(repo_picker(&app).0.highlighted().is_some());
+}
+
+#[test]
+fn cd_with_a_name_several_repos_match_opens_the_finder_with_it_typed() {
+    let folder = TestFolder::new();
+    let (one, _two) = (folder.repo("app-one"), folder.repo("app-two"));
+    let mut app = app_in(&folder, &one);
+    app.change_repo("app");
+    assert_eq!(repo_picker(&app).0.query(), "app");
+    assert_eq!(app.repo, one.repo);
+}
+
+#[test]
+fn cd_with_a_name_no_repo_has_says_so_and_stays() {
+    let (folder, alpha, _beta) = two_repos();
+    let mut app = app_in(&folder, &alpha);
+    app.change_repo("gamma");
+    assert!(app.message.starts_with("No repo matches gamma"), "{}", app.message);
+    assert_eq!(app.repo, alpha.repo);
+}
+
+#[test]
+fn a_folder_that_isnt_a_repo_is_not_opened() {
+    let (folder, alpha, _beta) = two_repos();
+    let mut app = app_in(&folder, &alpha);
+    app.switch_repo(&folder.path, true);
+    assert!(matches!(&app.modal, Modal::Error(error) if error.contains("isn't a git repo")));
+    assert_eq!(app.repo, alpha.repo);
+}
+
+#[test]
+fn following_neovim_moves_to_the_repo_it_went_to_once() {
+    let (folder, alpha, beta) = two_repos();
+    let mut app = app_in(&folder, &alpha);
+    let file = folder.path.join("follow");
+    app.follow = Some(editor::Follow::at(&file));
+    assert!(!app.follow_neovim(), "nothing written yet");
+    // A folder inside beta leads to beta.
+    std::fs::write(&file, beta.file("src").display().to_string()).unwrap();
+    assert!(app.follow_neovim());
+    assert_eq!(app.repo, beta.repo);
+    assert_eq!(app.message, "Followed Neovim to beta");
+    // It keeps following, without moving again for the same folder.
+    assert!(app.follow.is_some() && !app.follow_neovim());
+}

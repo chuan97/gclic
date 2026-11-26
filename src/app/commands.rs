@@ -436,7 +436,7 @@ impl App {
         }
         let current = self.repo.root();
         if query.is_empty()
-            && let Some((label, _)) = repos.iter().find(|(_, repo)| repo == current)
+            && let Some((label, _)) = repos.iter().find(|(_, repo)| repos::same_folder(repo, current))
         {
             picker.select_item(&label.clone());
         }
@@ -453,13 +453,6 @@ impl App {
             self.modal = Modal::Error(format!("Can't open {}: it isn't a git repo", folder.display()));
             return;
         };
-        // gclic's own git calls run in the repo whatever the working
-        // directory, but the commands the user runs, in a shell or an editor
-        // in this terminal, start in it.
-        if let Err(error) = std::env::set_current_dir(repo.root()) {
-            self.modal = Modal::Error(format!("Can't open {}: {error}", folder.display()));
-            return;
-        }
         let mut fresh = App::new(repo, self.search_root.clone());
         // Inside Neovim, its project follows, for its file finder, search and
         // file tree.
@@ -499,8 +492,14 @@ impl App {
         }
         let setting = editor::setting();
         match editor::launch(&setting, &path, line) {
-            Ok(Launch::Background(command)) => self.start_in_background(&editor::name(&setting), command),
-            Ok(Launch::Terminal(shown, command)) => {
+            // Starting in the repo, for an editor's own file finder and the
+            // like, wherever gclic itself was started.
+            Ok(Launch::Background(mut command)) => {
+                command.current_dir(self.repo.root());
+                self.start_in_background(&editor::name(&setting), command);
+            }
+            Ok(Launch::Terminal(shown, mut command)) => {
+                command.current_dir(self.repo.root());
                 self.editor_in_terminal = Some((shown, editor::name(&setting), command));
             }
             Err(error) => self.message = format!("The editor setting doesn't work: {error}"),

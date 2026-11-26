@@ -114,6 +114,15 @@ pub fn tilde(path: &Path) -> String {
     }
 }
 
+/// Whether two paths are the same folder, however each is written: through
+/// a link, or on Windows as `C:/…` by git and `\\?\C:\…` by `canonicalize`.
+pub fn same_folder(a: &Path, b: &Path) -> bool {
+    match (a.canonicalize(), b.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => a == b,
+    }
+}
+
 /// Where `:cd` looks for repos: the folder holding the repo gclic is in, so
 /// its siblings are listed, or the folder itself if it isn't in a repo.
 pub fn search_root(start: &Path, repo_root: Option<&Path>) -> PathBuf {

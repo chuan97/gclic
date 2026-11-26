@@ -113,7 +113,12 @@ pub fn launch(setting: &str, file: &Path, line: usize) -> Result<Launch, String>
 }
 
 /// The Neovim gclic runs inside, if it does: `$NVIM`, where it listens.
+/// Never in tests, which may be run in Neovim's terminal, and would move it
+/// to their repos.
 pub fn parent_nvim() -> Option<String> {
+    if cfg!(test) {
+        return None;
+    }
     std::env::var("NVIM").ok().filter(|address| !address.is_empty())
 }
 
@@ -173,9 +178,19 @@ pub struct Follow {
 
 impl Follow {
     /// Inside Neovim, with gclic's plugin there to write the file.
+    /// Never in tests, which may be run in Neovim's terminal.
     pub fn from_env() -> Option<Follow> {
+        if cfg!(test) {
+            return None;
+        }
         let file = std::env::var_os("GCLIC_FOLLOW").filter(|file| !file.is_empty())?;
         Some(Follow { file: PathBuf::from(file), seen: None })
+    }
+
+    /// Following the folders written to `file`.
+    #[cfg(test)]
+    pub fn at(file: &Path) -> Follow {
+        Follow { file: file.to_path_buf(), seen: None }
     }
 
     /// The root of the repo Neovim has moved to, if it wrote a folder since
@@ -189,11 +204,7 @@ impl Follow {
         self.seen = Some(changed);
         let folder = std::fs::read_to_string(&self.file).ok()?;
         let root = crate::git::Repo::discover(Path::new(folder.trim()))?.root().to_path_buf();
-        let same = |a: &Path, b: &Path| match (a.canonicalize(), b.canonicalize()) {
-            (Ok(a), Ok(b)) => a == b,
-            _ => a == b,
-        };
-        (!same(&root, current)).then_some(root)
+        (!crate::repos::same_folder(&root, current)).then_some(root)
     }
 }
 

@@ -413,7 +413,7 @@ impl App {
             {
                 self.handle_key(key);
                 if let Some(line) = self.shell_line.take() {
-                    let note = crate::terminal::run_in_terminal(terminal, &line)?;
+                    let note = crate::terminal::run_in_terminal(terminal, self.repo.root(), &line)?;
                     self.refresh();
                     if let Some(note) = note {
                         self.message = note;

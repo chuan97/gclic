@@ -72,7 +72,10 @@ const CONFIG: &[(&str, &str)] = &[
 impl TestRepo {
     /// An empty repo on `main`, without a commit.
     pub fn new() -> TestRepo {
-        let folder = fresh_folder();
+        TestRepo::init(fresh_folder())
+    }
+
+    fn init(folder: PathBuf) -> TestRepo {
         git_in(&folder, &["init", "-q", "-b", "main"]);
         for (key, value) in CONFIG {
             git_in(&folder, &["config", key, value]);
@@ -85,7 +88,11 @@ impl TestRepo {
     /// then each edited, plus a branch, `feature`, with a commit of its own.
     /// `main` is checked out.
     pub fn with_history() -> TestRepo {
-        let repo = TestRepo::new();
+        TestRepo::new().add_history()
+    }
+
+    fn add_history(self) -> TestRepo {
+        let repo = self;
         repo.write("src/main.rs", "fn main() {\n    println!(\"one\");\n}\n");
         repo.write("README.md", "# Test\n");
         repo.commit("First");
@@ -158,5 +165,30 @@ impl TestRepo {
         self.write(path, "ours\n");
         self.commit("Ours");
         assert!(!self.git_may_fail(&["merge", "other"]), "the merge should stop on the conflict");
+    }
+}
+
+/// A folder of repos, as `:cd` finds them, removed when it's dropped.
+pub struct TestFolder {
+    pub path: PathBuf,
+}
+
+impl Drop for TestFolder {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.path);
+    }
+}
+
+impl TestFolder {
+    pub fn new() -> TestFolder {
+        TestFolder { path: fresh_folder() }
+    }
+
+    /// A repo with a history, as `TestRepo::with_history` makes, in a folder
+    /// of this one named `name`.
+    pub fn repo(&self, name: &str) -> TestRepo {
+        let folder = self.path.join(name);
+        std::fs::create_dir_all(&folder).unwrap();
+        TestRepo::init(folder).add_history()
     }
 }
