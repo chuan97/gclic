@@ -123,7 +123,8 @@ end
 
 -- The colour scheme's colours for gclic's diffs: the editor's background and
 -- text, its diff colours, and a colour for each kind of token, as the groups
--- gclic's theme.rs reads (its SCOPES), which this list mirrors.
+-- gclic's theme.rs reads (its SCOPES), which this list mirrors: a test there
+-- checks the two agree.
 local DIFF_GROUPS = { { "Normal", "fg" }, { "Normal", "bg" }, { "DiffAdd", "bg" }, { "DiffDelete", "bg" } }
 local SYNTAX_GROUPS = {
   "@comment", "@string", "@string.regexp", "@string.escape", "@constant", "@number",

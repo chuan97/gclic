@@ -123,7 +123,7 @@ pub fn diff_colors() -> DiffColors {
 
 /// The kinds of token syntect's grammars name, as TextMate scope selectors,
 /// and the Neovim group that colours each. The plugin, `lua/gclic.lua`,
-/// sends these groups, and its list mirrors this one. Where several selectors match a
+/// sends these groups, and its list mirrors this one, which a test checks. Where several selectors match a
 /// token, the most specific wins, so the broad ones are fallbacks.
 pub const SCOPES: &[(&str, &str)] = &[
     ("comment", "@comment"),
@@ -227,5 +227,38 @@ mod tests {
         assert_eq!(color_of("fn"), (0x56, 0x9c, 0xd6)); // @keyword, for want of @keyword.function
         assert_eq!(color_of("main"), (0xdc, 0xdc, 0xaa)); // @function
         assert_eq!(color_of("hi"), (0xce, 0x91, 0x78)); // @string
+    }
+
+    /// The plugin's lists of groups to send, `DIFF_GROUPS` and `SYNTAX_GROUPS`
+    /// in `lua/gclic.lua`, are the groups gclic reads: a group missing from
+    /// them would keep the text colour without anything failing.
+    #[test]
+    fn the_plugin_sends_the_groups_gclic_reads() {
+        let lua = include_str!("../lua/gclic.lua");
+        let list = |name: &str| -> Vec<&str> {
+            let start = lua.find(&format!("local {name} = {{")).unwrap_or_else(|| panic!("{name} not in lua/gclic.lua"));
+            let rest = &lua[start..];
+            let body = &rest[rest.find('{').unwrap() + 1..];
+            // The list ends at the first `}` after the last `{`, so nested pairs count.
+            let mut depth = 1;
+            let end = body
+                .char_indices()
+                .find(|&(_, c)| {
+                    depth += match c { '{' => 1, '}' => -1, _ => 0 };
+                    depth == 0
+                })
+                .unwrap()
+                .0;
+            body[..end].split('"').skip(1).step_by(2).collect()
+        };
+        let diff: Vec<_> = list("DIFF_GROUPS").chunks(2).map(|pair| (pair[0], pair[1])).collect();
+        assert_eq!(diff, [("Normal", "fg"), ("Normal", "bg"), ("DiffAdd", "bg"), ("DiffDelete", "bg")]);
+        let mut syntax: Vec<&str> = Vec::new();
+        for (_, group) in SCOPES {
+            if !syntax.contains(group) {
+                syntax.push(group);
+            }
+        }
+        assert_eq!(list("SYNTAX_GROUPS"), syntax);
     }
 }
