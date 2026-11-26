@@ -557,8 +557,8 @@ impl App {
                 }
             }
             KeyCode::Char('g') => self.pending_g = true,
-            KeyCode::Char('u') if key.modifiers.is_empty() => self.undo(false),
-            KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => self.undo(true),
+            KeyCode::Char('u') if key.modifiers.is_empty() && self.where_staging_is() => self.undo(false),
+            KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL && self.where_staging_is() => self.undo(true),
             KeyCode::Char('q') => self.modal = Modal::ConfirmQuit,
             // h and l move between the Repo tab's panes. Elsewhere they're the
             // pane's own: a diff scrolls sideways, Compare's tree folds.
@@ -581,13 +581,11 @@ impl App {
             }
             // Inside a working-tree diff, space takes the change the active
             // line is in, as it takes the file in the list.
-            KeyCode::Char(' ') if self.view.in_preview && self.view.diff().is_some_and(|diff| diff.source.is_working_tree()) => {
+            KeyCode::Char(' ') if self.in_working_tree_diff() => {
                 self.stage_active_change();
             }
             KeyCode::Char('d')
-                if key.modifiers.is_empty()
-                    && self.view.in_preview
-                    && self.view.diff().is_some_and(|diff| diff.source.is_working_tree()) =>
+                if key.modifiers.is_empty() && self.in_working_tree_diff() =>
             {
                 self.ask_to_restore_active_change();
             }

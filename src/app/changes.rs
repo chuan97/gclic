@@ -5,6 +5,18 @@ use super::*;
 use crate::git::FileEntry;
 
 impl App {
+    /// Inside a diff of the working tree, where space and d take a change.
+    pub(super) fn in_working_tree_diff(&self) -> bool {
+        self.view.in_preview && self.view.diff().is_some_and(|diff| diff.source.is_working_tree())
+    }
+
+    /// Where files and changes are staged and discarded, and so where u and
+    /// ctrl-r undo and redo that: the Changes pane, and inside a diff of the
+    /// working tree.
+    pub(super) fn where_staging_is(&self) -> bool {
+        self.view.focused(Pane::Changes) || self.in_working_tree_diff()
+    }
+
     /// Does a staging or a discard, keeping it to undo, then refreshes, or
     /// shows why it failed. Whether it worked.
     fn record(
