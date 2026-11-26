@@ -208,12 +208,8 @@ pub(super) fn accent_bar(width: usize, folder: &str, name: &str) -> (String, Opt
 }
 
 /// The folder holding the repo, ending in a separator and with `~` for the
-/// home folder, and the repo's own folder name. gclic runs from the repo's
-/// root, which main moves to.
-pub(super) fn project_location() -> (String, String) {
-    let Ok(root) = std::env::current_dir() else {
-        return (String::new(), String::new());
-    };
+/// home folder, and the repo's own folder name.
+pub(super) fn project_location(root: &Path) -> (String, String) {
     let name = root.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
     let folder = root.parent().map(repos::tilde).unwrap_or_default();
     let separator = if folder.ends_with(std::path::MAIN_SEPARATOR) { "" } else { std::path::MAIN_SEPARATOR_STR };

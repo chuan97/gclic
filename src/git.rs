@@ -5,8 +5,47 @@ use anyhow::{Result, anyhow, bail};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::Mutex;
 use std::thread;
+
+/// A repo gclic works in: every git call runs in its root, whatever the
+/// process's working directory, so two repos, or a repo and a test, never get
+/// in each other's way.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Repo {
+    root: PathBuf,
+    /// Some questions are answered by reading its files, which is much quicker
+    /// than starting git.
+    git_dir: PathBuf,
+}
+
+impl Repo {
+    /// The repo `folder` is in, if it's in one with a working tree.
+    pub fn discover(folder: &Path) -> Option<Repo> {
+        let text = output(command(&["rev-parse", "--show-toplevel", "--absolute-git-dir"]).current_dir(folder)).ok()?;
+        let mut lines = text.lines();
+        let root = PathBuf::from(lines.next()?.trim());
+        let git_dir = PathBuf::from(lines.next()?.trim());
+        Some(Repo { root, git_dir })
+    }
+
+    /// The folder at the top of its working tree, which paths in it are
+    /// relative to.
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
+    /// A file of the working tree, by its path from the root.
+    pub fn file(&self, path: &str) -> PathBuf {
+        self.root.join(path)
+    }
+
+    /// A git command run in the repo's root.
+    fn command(&self, args: &[&str]) -> Command {
+        let mut command = command(args);
+        command.current_dir(&self.root);
+        command
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FileEntry {
@@ -103,8 +142,14 @@ impl DiffSource {
     }
 }
 
-/// A git command as gclic runs its own, in the working directory unless
-/// told otherwise.
+/// gclic's own repo, for tests that read its history.
+#[cfg(test)]
+pub fn gclic_repo() -> Repo {
+    Repo::discover(Path::new(env!("CARGO_MANIFEST_DIR"))).expect("the tests run in gclic's repo")
+}
+
+/// A git command as gclic runs its own, in no repo in particular: `Repo`
+/// gives it one.
 fn command(args: &[&str]) -> Command {
     let mut command = Command::new("git");
     command
@@ -131,31 +176,31 @@ fn output(command: &mut Command) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-fn run(args: &[&str]) -> Result<String> {
-    output(&mut command(args))
+fn run(repo: &Repo, args: &[&str]) -> Result<String> {
+    output(&mut repo.command(args))
 }
 
 /// Runs a command for what it does, not what it prints.
-fn run_ok(args: &[&str]) -> Result<()> {
-    run(args).map(|_| ())
+fn run_ok(repo: &Repo, args: &[&str]) -> Result<()> {
+    run(repo, args).map(|_| ())
 }
 
 /// Like `run`, but returns None instead of an error when the command fails.
 /// For questions where failing is a normal answer, like "is there an upstream?".
-fn try_run(args: &[&str]) -> Option<String> {
-    run(args).ok().map(|text| text.trim().to_string())
+fn try_run(repo: &Repo, args: &[&str]) -> Option<String> {
+    run(repo, args).ok().map(|text| text.trim().to_string())
 }
 
 /// A setting from the repo's own git config, `.git/config`, ignoring the
 /// user's and the system's.
-pub fn local_config(key: &str) -> Option<String> {
-    try_run(&["config", "--local", "--get", key]).filter(|value| !value.is_empty())
+pub fn local_config(repo: &Repo, key: &str) -> Option<String> {
+    try_run(repo, &["config", "--local", "--get", key]).filter(|value| !value.is_empty())
 }
 
 /// A true or false setting, from wherever git finds it, the repo's own
 /// config first. None if it isn't set, or isn't a boolean.
-pub fn config_bool(key: &str) -> Option<bool> {
-    match try_run(&["config", "--get", "--type=bool", key])?.as_str() {
+pub fn config_bool(repo: &Repo, key: &str) -> Option<bool> {
+    match try_run(repo, &["config", "--get", "--type=bool", key])?.as_str() {
         "true" => Some(true),
         "false" => Some(false),
         _ => None,
@@ -163,19 +208,19 @@ pub fn config_bool(key: &str) -> Option<bool> {
 }
 
 /// Sets a setting in `.git/config`, or with None, removes it.
-pub fn set_local_config(key: &str, value: Option<&str>) -> Result<()> {
-    set_config("--local", key, value)
+pub fn set_local_config(repo: &Repo, key: &str, value: Option<&str>) -> Result<()> {
+    set_config(|args| repo.command(args), "--local", key, value)
 }
 
 /// Sets a setting in the user's own git config, for every repo, or with
 /// None, removes it.
 pub fn set_global_config(key: &str, value: Option<&str>) -> Result<()> {
-    set_config("--global", key, value)
+    set_config(command, "--global", key, value)
 }
 
-fn set_config(scope: &str, key: &str, value: Option<&str>) -> Result<()> {
+fn set_config(command: impl Fn(&[&str]) -> Command, scope: &str, key: &str, value: Option<&str>) -> Result<()> {
     match value {
-        Some(value) => run_ok(&["config", scope, key, value]),
+        Some(value) => output(&mut command(&["config", scope, key, value])).map(|_| ()),
         // Removing one that isn't there fails, which is fine.
         None => {
             let _ = command(&["config", scope, "--unset", key]).output();
@@ -189,9 +234,10 @@ fn set_config(scope: &str, key: &str, value: Option<&str>) -> Result<()> {
 /// something fails at once instead of waiting forever: the editor, passwords,
 /// and SSH passphrases. Keys in an SSH agent still work. Unlike gclic's own
 /// reads, it takes locks as git normally does.
-pub fn user_command(args: &[String]) -> Command {
+pub fn user_command(repo: &Repo, args: &[String]) -> Command {
     let mut command = Command::new("git");
     command
+        .current_dir(&repo.root)
         // Git leaves colour out when its output isn't a terminal, and gclic
         // shows it, as the user would see it in one.
         .args(["-c", "color.ui=always"])
@@ -201,25 +247,25 @@ pub fn user_command(args: &[String]) -> Command {
         .env("GIT_EDITOR", "exit 1 #")
         .env("GIT_SEQUENCE_EDITOR", "exit 1 #")
         .env("GIT_PAGER", "cat");
-    no_prompts(&mut command);
+    no_prompts(repo, &mut command);
     command
 }
 
 /// Makes a command that reaches a remote fail rather than ask for a password
 /// or a passphrase, which there's no terminal to ask on.
-fn no_prompts(command: &mut Command) {
+fn no_prompts(repo: &Repo, command: &mut Command) {
     command
         .stdin(Stdio::null())
         .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GIT_SSH_COMMAND", format!("{} -o BatchMode=yes", ssh_command()));
+        .env("GIT_SSH_COMMAND", format!("{} -o BatchMode=yes", ssh_command(repo)));
 }
 
 // ---------------------------------------------------------------- fetching
 
 /// The remotes that local branches track, each once: what the background
 /// fetch keeps up to date. Others are fetched by hand.
-pub fn tracked_remotes() -> Vec<String> {
-    let text = try_run(&["for-each-ref", "--format=%(upstream:remotename)", "refs/heads"]);
+pub fn tracked_remotes(repo: &Repo) -> Vec<String> {
+    let text = try_run(repo, &["for-each-ref", "--format=%(upstream:remotename)", "refs/heads"]);
     parse_tracked_remotes(&text.unwrap_or_default())
 }
 
@@ -241,16 +287,16 @@ fn parse_tracked_remotes(text: &str) -> Vec<String> {
 /// SSH agent or stored credentials. It leaves out the housekeeping a fetch
 /// may start, which can be slow, and FETCH_HEAD, which belongs to the user's
 /// own fetches.
-pub fn background_fetch(remotes: &[String]) -> Result<()> {
+pub fn background_fetch(repo: &Repo, remotes: &[String]) -> Result<()> {
     if remotes.is_empty() {
         return Ok(());
     }
-    let mut fetch = command(&["-c", "gc.auto=0", "-c", "maintenance.auto=false"]);
+    let mut fetch = repo.command(&["-c", "gc.auto=0", "-c", "maintenance.auto=false"]);
     fetch
         .args(["fetch", "--quiet", "--no-write-fetch-head", "--multiple"])
         .args(remotes)
         .env("GCM_INTERACTIVE", "never");
-    no_prompts(&mut fetch);
+    no_prompts(repo, &mut fetch);
     // Its first line is enough for the Branches title.
     output(&mut fetch).map(|_| ()).map_err(|error| {
         let error = error.to_string();
@@ -259,28 +305,18 @@ pub fn background_fetch(remotes: &[String]) -> Result<()> {
 }
 
 /// How git runs SSH: the user's own setting if they have one.
-fn ssh_command() -> String {
+fn ssh_command(repo: &Repo) -> String {
     std::env::var("GIT_SSH_COMMAND")
         .ok()
-        .or_else(|| try_run(&["config", "core.sshCommand"]))
+        .or_else(|| try_run(repo, &["config", "core.sshCommand"]))
         .filter(|command| !command.is_empty())
         .unwrap_or_else(|| "ssh".to_string())
 }
 
-/// The root of the repo `folder` is in, if it's in one.
-pub fn repo_root_of(folder: &Path) -> Option<PathBuf> {
-    let root = output(command(&["rev-parse", "--show-toplevel"]).current_dir(folder)).ok()?;
-    Some(PathBuf::from(root.trim()))
-}
-
-pub fn repo_root() -> Result<String> {
-    Ok(run(&["rev-parse", "--show-toplevel"])?.trim().to_string())
-}
-
 // ---------------------------------------------------------------- staging
 
-pub fn status() -> Result<Status> {
-    let text = run(&[
+pub fn status(repo: &Repo) -> Result<Status> {
+    let text = run(repo, &[
         "status",
         "--porcelain=v1",
         "-z",
@@ -315,40 +351,40 @@ fn parse_status(text: &str) -> Status {
     status
 }
 
-pub fn stage(path: &str) -> Result<()> {
-    run_ok(&["add", "--", path])
+pub fn stage(repo: &Repo, path: &str) -> Result<()> {
+    run_ok(repo, &["add", "--", path])
 }
 
-pub fn stage_all() -> Result<()> {
-    run_ok(&["add", "-A"])
+pub fn stage_all(repo: &Repo) -> Result<()> {
+    run_ok(repo, &["add", "-A"])
 }
 
 /// `reset` rather than `restore --staged` because it also works before the
 /// first commit, when there is no HEAD to restore from.
-pub fn unstage(path: &str) -> Result<()> {
-    run_ok(&["reset", "-q", "--", path])
+pub fn unstage(repo: &Repo, path: &str) -> Result<()> {
+    run_ok(repo, &["reset", "-q", "--", path])
 }
 
-pub fn unstage_all() -> Result<()> {
-    run_ok(&["reset", "-q"])
+pub fn unstage_all(repo: &Repo) -> Result<()> {
+    run_ok(repo, &["reset", "-q"])
 }
 
-pub fn restore(path: &str) -> Result<()> {
-    run_ok(&["restore", "--", path])
+pub fn restore(repo: &Repo, path: &str) -> Result<()> {
+    run_ok(repo, &["restore", "--", path])
 }
 
-pub fn delete_untracked(path: &str) -> Result<()> {
-    run_ok(&["clean", "-f", "--", path])
+pub fn delete_untracked(repo: &Repo, path: &str) -> Result<()> {
+    run_ok(repo, &["clean", "-f", "--", path])
 }
 
 /// Restores these changed files and deletes these untracked ones, each kind
 /// in one git call.
-pub fn discard_all(restore: &[String], delete: &[String]) -> Result<()> {
+pub fn discard_all(repo: &Repo, restore: &[String], delete: &[String]) -> Result<()> {
     let with_paths = |command: &[&str], paths: &[String]| {
         let mut args: Vec<&str> = command.to_vec();
         args.push("--");
         args.extend(paths.iter().map(String::as_str));
-        run_ok(&args)
+        run_ok(repo, &args)
     };
     if !restore.is_empty() {
         with_paths(&["restore"], restore)?;
@@ -359,35 +395,35 @@ pub fn discard_all(restore: &[String], delete: &[String]) -> Result<()> {
     Ok(())
 }
 
-pub fn commit(message: &str) -> Result<()> {
-    run_ok(&["commit", "-m", message])
+pub fn commit(repo: &Repo, message: &str) -> Result<()> {
+    run_ok(repo, &["commit", "-m", message])
 }
 
 // ------------------------------------------------------------------ diffs
 
 /// The diff of the whole file, or just the changes.
-pub fn diff(source: &DiffSource, whole: bool) -> Result<String> {
+pub fn diff(repo: &Repo, source: &DiffSource, whole: bool) -> Result<String> {
     const EXT: &str = "--no-ext-diff";
     const COLOR: &str = "--no-color";
     // So much context that a hunk takes in the whole file.
     let context = if whole { "--unified=1000000" } else { "--unified=3" };
     match source {
-        DiffSource::Unstaged(path) => run(&["diff", EXT, COLOR, context, "--", path]),
-        DiffSource::Staged(path) => run(&["diff", EXT, COLOR, context, "--cached", "--", path]),
+        DiffSource::Unstaged(path) => run(repo, &["diff", EXT, COLOR, context, "--", path]),
+        DiffSource::Staged(path) => run(repo, &["diff", EXT, COLOR, context, "--cached", "--", path]),
         DiffSource::Untracked(path) => {
             // --no-index exits with 1 when the files differ, which here is
             // always, so the exit code can't be treated as failure.
-            let output = command(&["diff", EXT, COLOR, "--no-index", "--", "/dev/null", path])
+            let output = repo.command(&["diff", EXT, COLOR, "--no-index", "--", "/dev/null", path])
                 .output()
                 .map_err(|e| anyhow!("could not run git: {e}"))?;
             Ok(String::from_utf8_lossy(&output.stdout).into_owned())
         }
         // Not a diff: the file itself, whose conflict markers hold both sides.
         // Empty if one side deleted it.
-        DiffSource::Conflict(path) => Ok(std::fs::read(path)
+        DiffSource::Conflict(path) => Ok(std::fs::read(repo.file(path))
             .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
             .unwrap_or_default()),
-        DiffSource::Commit { sha, path } => run(&[
+        DiffSource::Commit { sha, path } => run(repo, &[
             "show",
             EXT,
             COLOR,
@@ -398,10 +434,10 @@ pub fn diff(source: &DiffSource, whole: bool) -> Result<String> {
             "--",
             path,
         ]),
-        DiffSource::Refs { a, b, path } => run(&["diff", EXT, COLOR, context, a, b, "--", path]),
+        DiffSource::Refs { a, b, path } => run(repo, &["diff", EXT, COLOR, context, a, b, "--", path]),
         DiffSource::Stash { sha, path, untracked } => {
             let (old, new) = stash_sides(sha, *untracked);
-            run(&["diff", EXT, COLOR, context, &old, &new, "--", path])
+            run(repo, &["diff", EXT, COLOR, context, &old, &new, "--", path])
         }
     }
 }
@@ -423,7 +459,7 @@ fn stash_sides(sha: &str, untracked: bool) -> (String, String) {
 /// The whole file on each side of a diff, old then new. None for a side where
 /// the file doesn't exist, or can't be read.
 /// Both versions are read at once, as each is a git call of its own.
-pub fn file_versions(source: &DiffSource) -> (Option<String>, Option<String>) {
+pub fn file_versions(repo: &Repo, source: &DiffSource) -> (Option<String>, Option<String>) {
     let path = source.path();
     let (old, new) = match source {
         // An empty revision makes `:path`, the file as staged in the index.
@@ -443,8 +479,8 @@ pub fn file_versions(source: &DiffSource) -> (Option<String>, Option<String>) {
         }
     };
     thread::scope(|scope| {
-        let old = scope.spawn(|| old.read(path));
-        let new = new.read(path);
+        let old = scope.spawn(|| old.read(repo, path));
+        let new = new.read(repo, path);
         (old.join().unwrap_or(None), new)
     })
 }
@@ -457,11 +493,11 @@ enum Version {
 }
 
 impl Version {
-    fn read(&self, path: &str) -> Option<String> {
+    fn read(&self, repo: &Repo, path: &str) -> Option<String> {
         match self {
-            Version::At(revision) => run(&["show", &format!("{revision}:{path}")]).ok(),
+            Version::At(revision) => run(repo, &["show", &format!("{revision}:{path}")]).ok(),
             Version::OnDisk => {
-                let bytes = std::fs::read(path).ok()?;
+                let bytes = std::fs::read(repo.file(path)).ok()?;
                 Some(String::from_utf8_lossy(&bytes).into_owned())
             }
             Version::Missing => None,
@@ -487,12 +523,12 @@ fn parse_name_status(text: &str) -> Vec<FileEntry> {
 
 /// Commits reachable from `refs`, newest first. `--topo-order` guarantees that
 /// children come before their parents, which the graph layout relies on.
-pub fn log(refs: &[String], limit: usize) -> Result<Vec<Commit>> {
+pub fn log(repo: &Repo, refs: &[String], limit: usize) -> Result<Vec<Commit>> {
     let limit = format!("-n{limit}");
     let mut args = vec!["log", "--topo-order", limit.as_str(), "--format=%H%x00%P%x00%an%x00%s"];
     args.extend(refs.iter().map(String::as_str));
     args.push("--");
-    Ok(parse_log(&run(&args)?))
+    Ok(parse_log(&run(repo, &args)?))
 }
 
 fn parse_log(text: &str) -> Vec<Commit> {
@@ -510,56 +546,31 @@ fn parse_log(text: &str) -> Vec<Commit> {
 }
 
 /// The commits reachable from `refs` that aren't on any remote-tracking branch.
-pub fn unpushed(refs: &[String]) -> Result<HashSet<String>> {
+pub fn unpushed(repo: &Repo, refs: &[String]) -> Result<HashSet<String>> {
     let mut args = vec!["rev-list"];
     args.extend(refs.iter().map(String::as_str));
     args.extend(["--not", "--remotes", "--"]);
-    Ok(run(&args)?.lines().map(str::to_string).collect())
+    Ok(run(repo, &args)?.lines().map(str::to_string).collect())
 }
 
 /// Changes whenever a ref or HEAD moves, for spotting commits, checkouts and
 /// fetches made outside the app without reloading the whole graph. HEAD names
 /// the checked-out branch, whose commit is among the refs, or a commit itself.
-pub fn refs_fingerprint() -> String {
-    let refs = try_run(&["for-each-ref", "--format=%(objectname) %(refname)"]);
-    format!("{}\n{}", refs.unwrap_or_default(), read_head().unwrap_or_default())
-}
-
-/// The repo's git directory. Some questions are answered by reading its
-/// files, which is much quicker than starting git.
-fn git_dir() -> Option<PathBuf> {
-    git_dir_of(&std::env::current_dir().ok()?)
-}
-
-/// The git directory of the repo `folder` is in, asked for once per folder:
-/// the answer is kept with the folder it's for, as `:cd` moves gclic to
-/// another repo, whose git directory is another.
-fn git_dir_of(folder: &Path) -> Option<PathBuf> {
-    type Known = Option<(PathBuf, Option<PathBuf>)>;
-    static KNOWN: Mutex<Known> = Mutex::new(None);
-    let mut known = KNOWN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    if let Some((asked_in, dir)) = known.as_ref()
-        && asked_in == folder
-    {
-        return dir.clone();
-    }
-    let dir = output(command(&["rev-parse", "--absolute-git-dir"]).current_dir(folder))
-        .ok()
-        .map(|dir| PathBuf::from(dir.trim()));
-    *known = Some((folder.to_path_buf(), dir.clone()));
-    dir
+pub fn refs_fingerprint(repo: &Repo) -> String {
+    let refs = try_run(repo, &["for-each-ref", "--format=%(objectname) %(refname)"]);
+    format!("{}\n{}", refs.unwrap_or_default(), read_head(repo).unwrap_or_default())
 }
 
 /// What HEAD holds: `ref: refs/heads/main`, or a commit's sha when detached.
-fn read_head() -> Option<String> {
-    let head = std::fs::read_to_string(git_dir()?.join("HEAD")).ok()?;
+fn read_head(repo: &Repo) -> Option<String> {
+    let head = std::fs::read_to_string(repo.git_dir.join("HEAD")).ok()?;
     Some(head.trim().to_string())
 }
 
 /// A merge, rebase, cherry-pick or revert that stopped halfway, usually on
 /// conflicts, as the files git leaves in its directory while one is going.
-pub fn operation_in_progress() -> Option<&'static str> {
-    let dir = git_dir()?;
+pub fn operation_in_progress(repo: &Repo) -> Option<&'static str> {
+    let dir = &repo.git_dir;
     let operations = [
         ("MERGE_HEAD", "merging"),
         ("rebase-merge", "rebasing"),
@@ -573,8 +584,8 @@ pub fn operation_in_progress() -> Option<&'static str> {
 /// Where a branch is checked out, if that's another worktree than this one:
 /// `../name` when it's next to this one, as worktrees usually are, or else the
 /// whole path. None for this worktree.
-pub fn other_worktree(path: &str) -> Option<String> {
-    let here = std::env::current_dir().ok()?.canonicalize().ok()?;
+pub fn other_worktree(repo: &Repo, path: &str) -> Option<String> {
+    let here = repo.root.canonicalize().ok()?;
     let there = Path::new(path).canonicalize().unwrap_or_else(|_| PathBuf::from(path));
     if there == here {
         return None;
@@ -586,19 +597,19 @@ pub fn other_worktree(path: &str) -> Option<String> {
 }
 
 /// The checked-out branch. None on a detached HEAD.
-pub fn current_branch() -> Option<String> {
-    read_head()?.strip_prefix("ref: refs/heads/").map(str::to_string)
+pub fn current_branch(repo: &Repo) -> Option<String> {
+    read_head(repo)?.strip_prefix("ref: refs/heads/").map(str::to_string)
 }
 
 /// The default graph view: the current branch and its remote counterpart,
 /// which is its upstream or else origin's branch of the same name. Refs that
 /// don't exist, like that one or a branch with no commits yet, are dropped
 /// later, when `resolve_all` finds nothing for them.
-pub fn default_refs() -> Vec<String> {
-    let Some(branch) = current_branch() else {
+pub fn default_refs(repo: &Repo) -> Vec<String> {
+    let Some(branch) = current_branch(repo) else {
         return vec!["HEAD".to_string()]; // detached HEAD
     };
-    let upstream = try_run(&["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
+    let upstream = try_run(repo, &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
     let remote = upstream.unwrap_or_else(|| format!("origin/{branch}"));
     vec![branch, remote]
 }
@@ -606,20 +617,20 @@ pub fn default_refs() -> Vec<String> {
 /// The commit each ref points at, in the same order, with None for those that
 /// don't exist. One git call does them all, unless one of them doesn't exist,
 /// which fails it: then they're asked for one by one.
-pub fn resolve_all(refs: &[String]) -> Vec<Option<String>> {
+pub fn resolve_all(repo: &Repo, refs: &[String]) -> Vec<Option<String>> {
     // A ref starting with a dash would be read as a flag.
     if !refs.is_empty() && refs.iter().all(|reference| !reference.starts_with('-')) {
         let commits: Vec<String> = refs.iter().map(|r| format!("{r}^{{commit}}")).collect();
         let mut args = vec!["rev-parse"];
         args.extend(commits.iter().map(String::as_str));
-        if let Ok(text) = run(&args) {
+        if let Ok(text) = run(repo, &args) {
             let shas: Vec<Option<String>> = text.lines().map(|sha| Some(sha.to_string())).collect();
             if shas.len() == refs.len() {
                 return shas;
             }
         }
     }
-    refs.iter().map(|reference| resolve(reference)).collect()
+    refs.iter().map(|reference| resolve(repo, reference)).collect()
 }
 
 /// A sha as people write it: its first seven characters.
@@ -628,12 +639,12 @@ pub fn short(sha: &str) -> &str {
 }
 
 /// The commit sha a ref points at, if it exists.
-pub fn resolve(reference: &str) -> Option<String> {
+pub fn resolve(repo: &Repo, reference: &str) -> Option<String> {
     if reference.starts_with('-') {
         return None; // would be read as a flag
     }
     let commit = format!("{reference}^{{commit}}");
-    try_run(&["rev-parse", "--verify", "-q", commit.as_str()])
+    try_run(repo, &["rev-parse", "--verify", "-q", commit.as_str()])
 }
 
 /// Whether this could be a commit sha, full or abbreviated as git usually does.
@@ -642,10 +653,10 @@ pub fn looks_like_sha(text: &str) -> bool {
 }
 
 /// A ref as worth showing on screen: shas get shortened, names stay as they are.
-pub fn display_ref(reference: &str) -> String {
+pub fn display_ref(repo: &Repo, reference: &str) -> String {
     if looks_like_sha(reference) {
         let commit = format!("{reference}^{{commit}}");
-        if let Some(short) = try_run(&["rev-parse", "--short", commit.as_str()]) {
+        if let Some(short) = try_run(repo, &["rev-parse", "--short", commit.as_str()]) {
             return short;
         }
     }
@@ -653,12 +664,12 @@ pub fn display_ref(reference: &str) -> String {
 }
 
 /// A one-line description of a commit: its short sha, two spaces, its subject.
-pub fn commit_label(sha: &str) -> Option<String> {
-    try_run(&["show", "-s", "--format=%h  %s", sha])
+pub fn commit_label(repo: &Repo, sha: &str) -> Option<String> {
+    try_run(repo, &["show", "-s", "--format=%h  %s", sha])
 }
 
-pub fn commit_details(sha: &str) -> Result<CommitDetails> {
-    let text = run(&["show", "-s", "--date=iso", "--format=%H%n%an <%ae>%n%ad%n%B", sha])?;
+pub fn commit_details(repo: &Repo, sha: &str) -> Result<CommitDetails> {
+    let text = run(repo, &["show", "-s", "--date=iso", "--format=%H%n%an <%ae>%n%ad%n%B", sha])?;
     let mut lines = text.splitn(4, '\n');
     Ok(CommitDetails {
         sha: lines.next().unwrap_or("").to_string(),
@@ -668,19 +679,19 @@ pub fn commit_details(sha: &str) -> Result<CommitDetails> {
     })
 }
 
-pub fn commit_files(sha: &str) -> Result<Vec<FileEntry>> {
+pub fn commit_files(repo: &Repo, sha: &str) -> Result<Vec<FileEntry>> {
     let show = ["show", "--format=", "--no-renames", "--diff-merges=first-parent", "-z", sha];
-    files_with_lines(&show)
+    files_with_lines(repo, &show)
 }
 
 /// The files a diff command lists, with how many lines each adds and
 /// removes. Git won't give both in one go, so it's asked twice, at once.
-fn files_with_lines(diff: &[&str]) -> Result<Vec<FileEntry>> {
+fn files_with_lines(repo: &Repo, diff: &[&str]) -> Result<Vec<FileEntry>> {
     // Right after the subcommand, as a diff's arguments can end with `--`.
     let with = |option: &'static str| [&diff[..1], &[option], &diff[1..]].concat();
     let (files, numstat) = thread::scope(|scope| {
-        let numstat = scope.spawn(|| run(&with("--numstat")));
-        (run(&with("--name-status")), numstat.join())
+        let numstat = scope.spawn(|| run(repo, &with("--numstat")));
+        (run(repo, &with("--name-status")), numstat.join())
     });
     let mut files = parse_name_status(&files?);
     if let Ok(Ok(numstat)) = numstat {
@@ -732,8 +743,8 @@ pub struct Stash {
 }
 
 /// The stashes, newest first.
-pub fn stashes() -> Result<Vec<Stash>> {
-    Ok(parse_stashes(&run(&["stash", "list", "--format=%H%x00%P%x00%gd%x00%gs%x00%cr"])?))
+pub fn stashes(repo: &Repo) -> Result<Vec<Stash>> {
+    Ok(parse_stashes(&run(repo, &["stash", "list", "--format=%H%x00%P%x00%gd%x00%gs%x00%cr"])?))
 }
 
 fn parse_stashes(text: &str) -> Vec<Stash> {
@@ -756,13 +767,13 @@ fn parse_stashes(text: &str) -> Vec<Stash> {
 
 /// A stash's files: the tracked ones it changes, and its untracked ones,
 /// marked `?` as the Changes pane marks them.
-pub fn stash_files(stash: &Stash) -> Result<Vec<FileEntry>> {
+pub fn stash_files(repo: &Repo, stash: &Stash) -> Result<Vec<FileEntry>> {
     // A stash is a merge, which commit_files shows against its first parent.
-    let mut files = commit_files(&stash.sha)?;
+    let mut files = commit_files(repo, &stash.sha)?;
     if stash.has_untracked {
         // Its untracked files, as added to nothing.
         let untracked = format!("{}^3", stash.sha);
-        let mut added = files_with_lines(&["diff", "--no-renames", "-z", EMPTY_TREE, &untracked, "--"])?;
+        let mut added = files_with_lines(repo, &["diff", "--no-renames", "-z", EMPTY_TREE, &untracked, "--"])?;
         for file in &mut added {
             file.status = '?';
         }
@@ -772,31 +783,31 @@ pub fn stash_files(stash: &Stash) -> Result<Vec<FileEntry>> {
 }
 
 /// Puts a stash's changes back, all unstaged, keeping the stash.
-pub fn stash_apply(stash: &Stash) -> Result<()> {
-    run_ok(&["stash", "apply", &stash_name(stash)?])
+pub fn stash_apply(repo: &Repo, stash: &Stash) -> Result<()> {
+    run_ok(repo, &["stash", "apply", &stash_name(repo, stash)?])
 }
 
 /// Applies a stash and, if that worked, drops it. On a conflict, git keeps it.
-pub fn stash_pop(stash: &Stash) -> Result<()> {
-    run_ok(&["stash", "pop", &stash_name(stash)?])
+pub fn stash_pop(repo: &Repo, stash: &Stash) -> Result<()> {
+    run_ok(repo, &["stash", "pop", &stash_name(repo, stash)?])
 }
 
-pub fn stash_drop(stash: &Stash) -> Result<()> {
-    run_ok(&["stash", "drop", &stash_name(stash)?])
+pub fn stash_drop(repo: &Repo, stash: &Stash) -> Result<()> {
+    run_ok(repo, &["stash", "drop", &stash_name(repo, stash)?])
 }
 
 /// The stash's name now, which pop and drop need, as a sha won't do for them.
 /// Found by its sha, as names shift when another stash comes or goes.
-fn stash_name(stash: &Stash) -> Result<String> {
-    let now = stashes()?.into_iter().find(|now| now.sha == stash.sha);
+fn stash_name(repo: &Repo, stash: &Stash) -> Result<String> {
+    let now = stashes(repo)?.into_iter().find(|now| now.sha == stash.sha);
     now.map(|now| now.name).ok_or_else(|| anyhow!("{} is gone: it was dropped or popped", stash.name))
 }
 
 // --------------------------------------------------------------- branches
 
 /// Local branches first, then remote ones.
-pub fn branches() -> Result<Vec<Branch>> {
-    let text = run(&[
+pub fn branches(repo: &Repo) -> Result<Vec<Branch>> {
+    let text = run(repo, &[
         "for-each-ref",
         "--format=%(refname)%00%(refname:short)%00%(refname:lstrip=3)%00%(upstream:short)%00%(upstream:track,nobracket)%00%(worktreepath)",
         "refs/heads",
@@ -853,9 +864,9 @@ fn parse_track(track: &str) -> Option<(usize, usize)> {
 
 /// The branches, local and remote, whose history holds this commit, by
 /// their short names. None if `sha` isn't a commit.
-pub fn branches_containing(sha: &str) -> Option<Vec<String>> {
-    let commit = resolve(sha)?;
-    let text = try_run(&[
+pub fn branches_containing(repo: &Repo, sha: &str) -> Option<Vec<String>> {
+    let commit = resolve(repo, sha)?;
+    let text = try_run(repo, &[
         "for-each-ref",
         "--format=%(refname:short)",
         "--contains",
@@ -866,36 +877,36 @@ pub fn branches_containing(sha: &str) -> Option<Vec<String>> {
     Some(text.lines().map(str::to_string).collect())
 }
 
-pub fn tags() -> Result<Vec<String>> {
-    let text = run(&["for-each-ref", "--format=%(refname:short)", "refs/tags"])?;
+pub fn tags(repo: &Repo) -> Result<Vec<String>> {
+    let text = run(repo, &["for-each-ref", "--format=%(refname:short)", "refs/tags"])?;
     Ok(text.lines().map(str::to_string).collect())
 }
 
-pub fn switch(local_name: &str) -> Result<()> {
-    run_ok(&["switch", local_name])
+pub fn switch(repo: &Repo, local_name: &str) -> Result<()> {
+    run_ok(repo, &["switch", local_name])
 }
 
 /// Creates a local branch tracking this remote one, and switches to it.
-pub fn switch_track(remote_name: &str) -> Result<()> {
-    run_ok(&["switch", "--track", remote_name])
+pub fn switch_track(repo: &Repo, remote_name: &str) -> Result<()> {
+    run_ok(repo, &["switch", "--track", remote_name])
 }
 
 // ---------------------------------------------------------------- compare
 
 /// How many commits `a` has that `b` doesn't, and the other way around.
-pub fn ahead_behind(a: &str, b: &str) -> Result<(usize, usize)> {
+pub fn ahead_behind(repo: &Repo, a: &str, b: &str) -> Result<(usize, usize)> {
     let range = format!("{a}...{b}");
-    let text = run(&["rev-list", "--left-right", "--count", range.as_str(), "--"])?;
+    let text = run(repo, &["rev-list", "--left-right", "--count", range.as_str(), "--"])?;
     let mut counts = text.split_whitespace().map(|n| n.parse::<usize>().unwrap_or(0));
     Ok((counts.next().unwrap_or(0), counts.next().unwrap_or(0)))
 }
 
-pub fn merge_base(a: &str, b: &str) -> Option<String> {
-    try_run(&["merge-base", a, b])
+pub fn merge_base(repo: &Repo, a: &str, b: &str) -> Option<String> {
+    try_run(repo, &["merge-base", a, b])
 }
 
-pub fn changed_files(a: &str, b: &str) -> Result<Vec<FileEntry>> {
-    files_with_lines(&["diff", "--no-renames", "-z", a, b, "--"])
+pub fn changed_files(repo: &Repo, a: &str, b: &str) -> Result<Vec<FileEntry>> {
+    files_with_lines(repo, &["diff", "--no-renames", "-z", a, b, "--"])
 }
 
 #[cfg(test)]
@@ -999,57 +1010,55 @@ mod tests {
     // what git itself says.
 
     #[test]
-    fn the_git_directory_follows_the_folder_gclic_is_in() {
-        let make = |name: &str| {
-            let folder = std::env::temp_dir().join(format!("gclic-git-dir-{name}-{}", std::process::id()));
-            let _ = std::fs::remove_dir_all(&folder);
-            std::fs::create_dir_all(&folder).unwrap();
-            Command::new("git").args(["init", "-q"]).current_dir(&folder).status().unwrap();
-            folder.canonicalize().unwrap()
-        };
-        let (a, b) = (make("a"), make("b"));
+    fn a_repo_is_found_from_any_folder_inside_it() {
+        let folder = std::env::temp_dir().join(format!("gclic-discover-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(folder.join("deep/er")).unwrap();
+        Command::new("git").args(["init", "-q"]).current_dir(&folder).status().unwrap();
         // Compared canonically, as Windows writes the same folder two ways:
         // `C:/…` from git, `\\?\C:\…` from canonicalize.
-        let found = |folder: &Path| git_dir_of(folder).and_then(|dir| dir.canonicalize().ok());
-        let expected = |folder: &Path| folder.join(".git").canonicalize().ok();
-        assert_eq!(found(&a), expected(&a));
-        assert_eq!(found(&b), expected(&b));
-        assert_eq!(found(&a), expected(&a));
-        let _ = std::fs::remove_dir_all(&a);
-        let _ = std::fs::remove_dir_all(&b);
+        let repo = Repo::discover(&folder.join("deep/er")).unwrap();
+        assert_eq!(repo.root().canonicalize().ok(), folder.canonicalize().ok());
+        assert_eq!(repo.git_dir.canonicalize().ok(), folder.join(".git").canonicalize().ok());
+        let _ = std::fs::remove_dir_all(&folder);
+        assert_eq!(Repo::discover(&std::env::temp_dir().join("gclic-no-such-folder")), None);
     }
 
     #[test]
     fn current_branch_agrees_with_git() {
-        let from_git = try_run(&["symbolic-ref", "--short", "-q", "HEAD"]);
-        assert_eq!(current_branch(), from_git);
+        let repo = &gclic_repo();
+        let from_git = try_run(repo, &["symbolic-ref", "--short", "-q", "HEAD"]);
+        assert_eq!(current_branch(repo), from_git);
     }
 
     #[test]
     fn resolving_several_refs_at_once_matches_one_at_a_time() {
+        let repo = &gclic_repo();
         let refs = ["HEAD".to_string(), "HEAD~1".to_string()];
-        let expected: Vec<_> = refs.iter().map(|r| resolve(r)).collect();
+        let expected: Vec<_> = refs.iter().map(|r| resolve(repo, r)).collect();
         assert!(expected.iter().all(Option::is_some));
-        assert_eq!(resolve_all(&refs), expected);
+        assert_eq!(resolve_all(repo, &refs), expected);
     }
 
     #[test]
     fn a_missing_ref_resolves_to_nothing_without_losing_the_others() {
+        let repo = &gclic_repo();
         let refs = ["HEAD".to_string(), "no-such-branch-here".to_string(), "-x".to_string()];
-        let shas = resolve_all(&refs);
-        assert_eq!(shas[0], resolve("HEAD"));
+        let shas = resolve_all(repo, &refs);
+        assert_eq!(shas[0], resolve(repo, "HEAD"));
         assert_eq!(shas[1..], [None, None]);
     }
 
     #[test]
     fn a_whole_file_diff_holds_every_line_of_the_file() {
+        let repo = &gclic_repo();
         // The first commit's Cargo.toml was edited later, so a diff against it
         // has changes, and unchanged lines that only a whole-file diff shows.
-        let first = log(&["HEAD".to_string()], 10_000).unwrap().pop().unwrap();
+        let first = log(repo, &["HEAD".to_string()], 10_000).unwrap().pop().unwrap();
         let source = DiffSource::Refs { a: first.sha, b: "HEAD".to_string(), path: "Cargo.toml".to_string() };
-        let changes = diff(&source, false).unwrap();
-        let whole = diff(&source, true).unwrap();
-        let lines_now = run(&["show", "HEAD:Cargo.toml"]).unwrap().lines().count();
+        let changes = diff(repo, &source, false).unwrap();
+        let whole = diff(repo, &source, true).unwrap();
+        let lines_now = run(repo, &["show", "HEAD:Cargo.toml"]).unwrap().lines().count();
         let shown = |diff: &str| {
             let new_side = |l: &&str| l.starts_with(' ') || (l.starts_with('+') && !l.starts_with("+++"));
             diff.lines().filter(new_side).count()
@@ -1060,16 +1069,18 @@ mod tests {
 
     #[test]
     fn both_versions_of_a_file_come_back() {
+        let repo = &gclic_repo();
         let source = DiffSource::Commit { sha: "HEAD".to_string(), path: "Cargo.toml".to_string() };
-        let (old, new) = file_versions(&source);
+        let (old, new) = file_versions(repo, &source);
         assert!(old.is_some_and(|text| text.contains("[package]")));
         assert!(new.is_some_and(|text| text.contains("[package]")));
     }
 
     #[test]
     fn a_commit_s_files_come_with_their_lines() {
+        let repo = &gclic_repo();
         // The latest commit of gclic's own history.
-        let files = commit_files("HEAD").unwrap();
+        let files = commit_files(repo, "HEAD").unwrap();
         assert!(!files.is_empty());
         assert!(files.iter().all(|file| file.lines != Lines::Unknown), "{files:?}");
     }

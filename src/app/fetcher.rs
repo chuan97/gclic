@@ -1,8 +1,9 @@
 //! Fetching the remotes the branches track, every minute, in the background,
 //! so the Branches pane's ahead and behind counts stay current.
 
-use crate::git;
+use crate::git::{self, Repo};
 use anyhow::Result;
+use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -19,19 +20,18 @@ pub(super) struct Fetcher {
     started: Option<Instant>,
     /// How the last fetch went: when it finished, or why it failed.
     last: Option<Result<Instant, String>>,
-    /// What a fetch runs: git, except in tests.
-    fetch: fn() -> Result<()>,
+    /// What a fetch runs: git in the repo, except in tests.
+    fetch: Arc<dyn Fn() -> Result<()> + Send + Sync>,
 }
 
 impl Fetcher {
-    pub(super) fn new() -> Fetcher {
-        Fetcher {
-            auto: true,
-            running: None,
-            started: None,
-            last: None,
-            fetch: || git::background_fetch(&git::tracked_remotes()),
-        }
+    pub(super) fn new(repo: &Repo) -> Fetcher {
+        let repo = repo.clone();
+        Fetcher::with(move || git::background_fetch(&repo, &git::tracked_remotes(&repo)))
+    }
+
+    fn with(fetch: impl Fn() -> Result<()> + Send + Sync + 'static) -> Fetcher {
+        Fetcher { auto: true, running: None, started: None, last: None, fetch: Arc::new(fetch) }
     }
 
     pub(super) fn is_fetching(&self) -> bool {
@@ -42,7 +42,7 @@ impl Fetcher {
     /// hold up the worker's refreshes.
     pub(super) fn start(&mut self) {
         let (send, receive) = mpsc::channel();
-        let fetch = self.fetch;
+        let fetch = Arc::clone(&self.fetch);
         thread::spawn(move || {
             let _ = send.send(fetch());
         });
@@ -107,7 +107,7 @@ mod tests {
 
     /// A fetcher whose fetches do `fetch` rather than run git.
     fn fake(fetch: fn() -> Result<()>) -> Fetcher {
-        Fetcher { fetch, ..Fetcher::new() }
+        Fetcher::with(fetch)
     }
 
     /// Lets the fetch thread finish, then picks up its result.

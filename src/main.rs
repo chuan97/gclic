@@ -24,6 +24,7 @@ mod worker;
 
 use anyhow::Result;
 use app::App;
+use git::Repo;
 use picker::{Outcome, Picker};
 use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
@@ -31,9 +32,9 @@ use std::path::{Path, PathBuf};
 
 fn main() -> Result<()> {
     let start = std::env::current_dir()?;
-    let repo_root = git::repo_root().ok().map(PathBuf::from);
+    let repo = Repo::discover(&start);
     match std::env::args().nth(1).as_deref() {
-        Some("--color") => print_color(repo_root),
+        Some("--color") => print_color(repo),
         // For the Neovim plugin's health check, to tell whether gclic and the
         // plugin come from the same version.
         Some("--version" | "-V") => {
@@ -42,16 +43,16 @@ fn main() -> Result<()> {
         }
         _ => {}
     }
-    let search_root = repos::search_root(&start, repo_root.as_deref());
+    let search_root = repos::search_root(&start, repo.as_ref().map(Repo::root));
     // Outside a repo, gclic offers the ones under where it started.
-    if repo_root.is_none() && repos::find(&search_root).is_empty() {
+    if repo.is_none() && repos::find(&search_root).is_empty() {
         eprintln!("gclic: not in a git repo, and there are none under {}", repos::tilde(&start));
         std::process::exit(1);
     }
 
     let mut terminal = ratatui::init();
     terminal::enhance_keys()?;
-    let result = run(&mut terminal, repo_root, search_root);
+    let result = run(&mut terminal, repo, search_root);
     terminal::plain_keys();
     ratatui::restore();
     result
@@ -61,33 +62,33 @@ fn main() -> Result<()> {
 /// show a repo in the colour gclic gives it: the colour, as `#rrggbb`, or an
 /// empty line if the colour bar is turned off, then the repo's folder. Fails
 /// outside a repo.
-fn print_color(repo_root: Option<PathBuf>) -> ! {
-    let Some(root) = repo_root else {
+fn print_color(repo: Option<Repo>) -> ! {
+    let Some(repo) = repo else {
         eprintln!("gclic: not in a git repo");
         std::process::exit(1);
     };
-    // The colour comes from the repo's config and name, read from its root.
-    if std::env::set_current_dir(&root).is_err() {
-        std::process::exit(1);
-    }
-    let color = if accent::bar_shown() { accent::Accent::current().hex() } else { String::new() };
-    println!("{color}\n{}", root.display());
+    let color = if accent::bar_shown(&repo) { accent::Accent::of(&repo).hex() } else { String::new() };
+    println!("{color}\n{}", repo.root().display());
     std::process::exit(0);
 }
 
 /// Opens the repo gclic is in, or the one picked if it isn't in one, and runs
 /// the app until it quits.
-fn run(terminal: &mut DefaultTerminal, repo_root: Option<PathBuf>, search_root: PathBuf) -> Result<()> {
-    let (repo, search_root) = match repo_root {
-        Some(root) => (root, search_root),
+fn run(terminal: &mut DefaultTerminal, repo: Option<Repo>, search_root: PathBuf) -> Result<()> {
+    let (repo, search_root) = match repo {
+        Some(repo) => (repo, search_root),
         None => match choose_repo(terminal, search_root)? {
-            Some(found) => found,
+            Some((folder, search_root)) => match Repo::discover(&folder) {
+                Some(repo) => (repo, search_root),
+                None => anyhow::bail!("{} isn't a git repo", folder.display()),
+            },
             None => return Ok(()),
         },
     };
-    // Paths from `git status` are relative to the repo root, so run from there.
-    std::env::set_current_dir(repo)?;
-    App::new(search_root).run(terminal)
+    // gclic's git calls run in the repo wherever it is, but the commands the
+    // user runs, in a shell or an editor in this terminal, start here.
+    std::env::set_current_dir(repo.root())?;
+    App::new(repo, search_root).run(terminal)
 }
 
 /// Picks the repo to open, for when gclic starts outside one: the same list

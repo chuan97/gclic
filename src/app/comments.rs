@@ -59,7 +59,7 @@ impl App {
             KeyCode::Enter | KeyCode::Char('s') if ctrl => {
                 let had = self.review.len();
                 let CommentBox { source, anchor, draft } = comment;
-                if let Some(comment) = Comment::new(source, anchor, draft) {
+                if let Some(comment) = Comment::new(&self.repo, source, anchor, draft) {
                     self.review.set(comment);
                 }
                 self.message = match (had, self.review.len()) {

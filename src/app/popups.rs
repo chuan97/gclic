@@ -10,15 +10,15 @@ impl App {
         match key.code {
             KeyCode::Enter => {
                 let result = match &confirm {
-                    Confirm::Restore(path) => git::restore(path),
-                    Confirm::DiscardAll { restore, delete } => git::discard_all(restore, delete),
-                    Confirm::DeleteUntracked(path) => git::delete_untracked(path),
+                    Confirm::Restore(path) => git::restore(&self.repo, path),
+                    Confirm::DiscardAll { restore, delete } => git::discard_all(&self.repo, restore, delete),
+                    Confirm::DeleteUntracked(path) => git::delete_untracked(&self.repo, path),
                     Confirm::CloseCompare => {
                         self.close_compare();
                         return;
                     }
                     Confirm::DropStash(stash) => {
-                        let result = git::stash_drop(stash);
+                        let result = git::stash_drop(&self.repo, stash);
                         self.after_stash(StashAction::Drop, stash, result);
                         return;
                     }
@@ -53,7 +53,7 @@ impl App {
                 if self.commit_draft.trim().is_empty() {
                     self.message = "The commit message is empty".to_string();
                 } else {
-                    match git::commit(&self.commit_draft) {
+                    match git::commit(&self.repo, &self.commit_draft) {
                         Ok(()) => {
                             self.commit_draft.clear();
                             self.refresh();
@@ -141,25 +141,25 @@ impl App {
                 self.report(result);
             }
             PickerUse::CompareA => {
-                if git::resolve(&first).is_none() {
+                if git::resolve(&self.repo, &first).is_none() {
                     self.modal = Modal::Error(format!("Unknown ref: {first}"));
                     return;
                 }
-                self.open_compare_b_picker(git::display_ref(&first));
+                self.open_compare_b_picker(git::display_ref(&self.repo, &first));
             }
             PickerUse::CompareB { a } => {
-                if git::resolve(&first).is_none() {
+                if git::resolve(&self.repo, &first).is_none() {
                     self.modal = Modal::Error(format!("Unknown ref: {first}"));
                     return;
                 }
-                self.start_compare(a, git::display_ref(&first));
+                self.start_compare(a, git::display_ref(&self.repo, &first));
             }
         }
     }
 
     /// Asks for the ref to compare `a` with.
     pub(super) fn open_compare_b_picker(&mut self, a: String) {
-        match compare_items(&self.recent_yanks) {
+        match compare_items(&self.repo, &self.recent_yanks) {
             Ok(mut items) => {
                 // Comparing a ref with itself shows nothing.
                 items.retain(|item| item.split_whitespace().next() != Some(a.as_str()));
@@ -172,7 +172,7 @@ impl App {
     }
 
     pub(super) fn open_graph_picker(&mut self) {
-        match git::branches() {
+        match git::branches(&self.repo) {
             Ok(branches) => {
                 let names = branches.into_iter().map(|b| b.name).collect();
                 // The branches on screen start ticked, the default view's too.
@@ -186,7 +186,7 @@ impl App {
     }
 
     pub(super) fn open_compare_picker(&mut self) {
-        match compare_items(&self.recent_yanks) {
+        match compare_items(&self.repo, &self.recent_yanks) {
             Ok(items) => {
                 let picker = Picker::with_free_text("Compare: from", items).with_hints(&COMPARE_PICKER_KEYS);
                 self.modal = Modal::Picker(picker, PickerUse::CompareA);
@@ -433,10 +433,10 @@ pub(super) fn remember_yank(yanks: &mut Vec<String>, label: String) {
     }
 }
 
-pub(super) fn compare_items(recent_yanks: &[String]) -> Result<Vec<String>> {
+pub(super) fn compare_items(repo: &Repo, recent_yanks: &[String]) -> Result<Vec<String>> {
     let mut items = recent_yanks.to_vec();
     items.push("HEAD".to_string());
-    items.extend(git::branches()?.into_iter().map(|b| b.name));
-    items.extend(git::tags()?);
+    items.extend(git::branches(repo)?.into_iter().map(|b| b.name));
+    items.extend(git::tags(repo)?);
     Ok(items)
 }

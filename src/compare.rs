@@ -7,7 +7,7 @@
 
 use crate::app::{Action, StashAction};
 use crate::file_list::FileList;
-use crate::git::{self, DiffSource, Stash};
+use crate::git::{self, DiffSource, Repo, Stash};
 use crate::ui;
 use anyhow::Result;
 use ratatui::Frame;
@@ -31,22 +31,23 @@ enum Subject {
 }
 
 pub struct ComparePanel {
+    repo: Repo,
     subject: Subject,
     files: FileList,
 }
 
 impl ComparePanel {
-    pub fn new(from: String, to: String) -> Result<ComparePanel> {
+    pub fn new(repo: &Repo, from: String, to: String) -> Result<ComparePanel> {
         let files = FileList::new(from.clone(), to.clone(), Vec::new());
         let subject = Subject::Refs { from, to, only_from: 0, only_to: 0, merge_base: None };
-        let mut compare = ComparePanel { subject, files };
+        let mut compare = ComparePanel { repo: repo.clone(), subject, files };
         compare.refresh()?;
         Ok(compare)
     }
 
-    pub fn stash(stash: Stash) -> Result<ComparePanel> {
-        let files = FileList::stash(stash.sha.clone(), git::stash_files(&stash)?);
-        Ok(ComparePanel { subject: Subject::Stash(stash), files })
+    pub fn stash(repo: &Repo, stash: Stash) -> Result<ComparePanel> {
+        let files = FileList::stash(stash.sha.clone(), git::stash_files(repo, &stash)?);
+        Ok(ComparePanel { repo: repo.clone(), subject: Subject::Stash(stash), files })
     }
 
     /// For a comparison, three separate git calls, so they run at once.
@@ -56,11 +57,11 @@ impl ComparePanel {
             // on it find out.
             return Ok(());
         };
-        let (a, b) = (&*from, &*to);
+        let (repo, a, b) = (&self.repo, &*from, &*to);
         let (counts, base, files) = thread::scope(|scope| {
-            let base = scope.spawn(|| git::merge_base(a, b));
-            let files = scope.spawn(|| git::changed_files(a, b));
-            let counts = git::ahead_behind(a, b);
+            let base = scope.spawn(|| git::merge_base(repo, a, b));
+            let files = scope.spawn(|| git::changed_files(repo, a, b));
+            let counts = git::ahead_behind(repo, a, b);
             let crashed = || Err(anyhow::anyhow!("git crashed"));
             (counts, base.join().unwrap_or(None), files.join().unwrap_or_else(|_| crashed()))
         });
@@ -220,6 +221,7 @@ mod tests {
             FileEntry { status: 'A', path: "new".to_string(), ..Default::default() },
         ];
         ComparePanel {
+            repo: git::gclic_repo(),
             subject: Subject::Refs {
                 from: "main".to_string(),
                 to: "feature".to_string(),
@@ -283,7 +285,7 @@ mod tests {
             FileEntry { status: 'M', path: "edited".to_string(), lines: Lines::Counted { added: 4, removed: 1 } },
             FileEntry { status: '?', path: "new".to_string(), ..Default::default() },
         ];
-        ComparePanel { files: FileList::stash(stash.sha.clone(), files), subject: Subject::Stash(stash) }
+        ComparePanel { repo: git::gclic_repo(), files: FileList::stash(stash.sha.clone(), files), subject: Subject::Stash(stash) }
     }
 
     #[test]

@@ -3,7 +3,7 @@
 
 use super::cache::*;
 use super::parse::*;
-use crate::git::{self, DiffSource};
+use crate::git::{self, DiffSource, Repo};
 use crate::review::{Anchor, Side};
 use crate::theme::BUILT_IN;
 use crate::ui;
@@ -245,6 +245,11 @@ pub struct DiffPane {
     comments: Vec<(Option<Anchor>, String)>,
 }
 
+/// Whether this is a conflict met while rebasing.
+fn rebasing(repo: &Repo, source: &DiffSource) -> bool {
+    matches!(source, DiffSource::Conflict(_)) && git::operation_in_progress(repo) == Some("rebasing")
+}
+
 /// The length, in characters, of the longest line on either side.
 fn longest_line(rows: &[Row]) -> usize {
     let cells = rows.iter().flat_map(|row| match row {
@@ -257,21 +262,23 @@ fn longest_line(rows: &[Row]) -> usize {
 impl DiffPane {
     /// Loads without syntax colours, which can take a moment for a big file.
     /// They come from the cache or the worker thread, via `apply_colors`.
-    pub fn load(view: DiffView) -> Result<DiffPane> {
-        let text = git::diff(&view.source, view.whole)?;
+    pub fn load(repo: &Repo, view: DiffView) -> Result<DiffPane> {
+        let text = git::diff(repo, &view.source, view.whole)?;
         let rows = rows_for(&view.source, &text);
-        Ok(DiffPane::new(view, text, Colored { rows, file_lines: 0 }, false))
+        let rebasing = rebasing(repo, &view.source);
+        Ok(DiffPane::new(view, text, Colored { rows, file_lines: 0 }, false, rebasing))
     }
 
-    /// A diff already coloured, as the cache keeps them, without asking git.
-    pub fn colored(view: DiffView, text: String, colored: Colored) -> DiffPane {
-        DiffPane::new(view, text, colored, true)
+    /// A diff already coloured, as the cache keeps them, without asking git
+    /// for it.
+    pub fn colored(repo: &Repo, view: DiffView, text: String, colored: Colored) -> DiffPane {
+        let rebasing = rebasing(repo, &view.source);
+        DiffPane::new(view, text, colored, true, rebasing)
     }
 
-    fn new(view: DiffView, text: String, colored: Colored, is_colored: bool) -> DiffPane {
+    fn new(view: DiffView, text: String, colored: Colored, is_colored: bool, rebasing: bool) -> DiffPane {
         let DiffView { source, whole } = view;
         let Colored { rows, file_lines } = colored;
-        let rebasing = matches!(source, DiffSource::Conflict(_)) && git::operation_in_progress() == Some("rebasing");
         DiffPane {
             rebasing,
             source,
@@ -315,14 +322,14 @@ impl DiffPane {
     }
 
     /// Fetches the diff again, for files that changed while it was on screen.
-    pub fn reload(&mut self) -> Result<()> {
-        self.set_text(git::diff(&self.source, self.whole)?);
+    pub fn reload(&mut self, repo: &Repo) -> Result<()> {
+        self.set_text(git::diff(repo, &self.source, self.whole)?);
         Ok(())
     }
 
     /// Fetches it again as the whole file, or just the changes.
-    pub fn reload_as(&mut self, whole: bool) -> Result<()> {
-        let text = git::diff(&self.source, whole)?;
+    pub fn reload_as(&mut self, repo: &Repo, whole: bool) -> Result<()> {
+        let text = git::diff(repo, &self.source, whole)?;
         self.whole = whole;
         self.set_text(text);
         Ok(())
@@ -846,7 +853,7 @@ mod tests {
 
     fn pane_of(rows: Vec<Row>) -> DiffPane {
         let source = DiffSource::Unstaged("f".to_string());
-        DiffPane::colored(DiffView { source, whole: false }, String::new(), Colored { rows, file_lines: 0 })
+        DiffPane::new(DiffView { source, whole: false }, String::new(), Colored { rows, file_lines: 0 }, true, false)
     }
 
     fn text_of(line: &Line) -> String {

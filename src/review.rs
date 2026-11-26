@@ -2,7 +2,7 @@
 //! active line writes one, `gC` one on its file, the Review tab lists them, and `y` there copies them all as one review, to paste
 //! to whoever made the changes. They last until cleared, or until gclic quits.
 
-use crate::git::{self, DiffSource};
+use crate::git::{self, DiffSource, Repo};
 use crate::ui;
 use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
@@ -56,10 +56,10 @@ impl Place {
 
     /// How the copied review and the list name it: the commit with its
     /// subject, so the reader can tell which commit is meant.
-    fn heading(&self) -> String {
+    fn heading(&self, repo: &Repo) -> String {
         match self {
             Place::WorkingTree => "Uncommitted changes".to_string(),
-            Place::Commit(sha) => match git::commit_label(sha) {
+            Place::Commit(sha) => match git::commit_label(repo, sha) {
                 Some(label) => match label.split_once("  ") {
                     Some((short, subject)) => format!("Commit {short} \"{subject}\""),
                     None => format!("Commit {label}"),
@@ -92,9 +92,9 @@ fn key_of(anchor: &Option<Anchor>) -> LineKey {
 }
 
 impl Comment {
-    pub fn new(source: DiffSource, anchor: Option<Anchor>, body: String) -> Option<Comment> {
+    pub fn new(repo: &Repo, source: DiffSource, anchor: Option<Anchor>, body: String) -> Option<Comment> {
         let place = Place::of(&source)?;
-        let heading = place.heading();
+        let heading = place.heading(repo);
         Some(Comment { source, place, heading, anchor, body })
     }
 
@@ -380,7 +380,7 @@ mod tests {
     #[test]
     fn conflicts_take_no_comments() {
         let anchor = Some(Anchor { side: Side::New, number: 1, text: String::new() });
-        assert!(Comment::new(DiffSource::Conflict("a.rs".to_string()), anchor, "x".to_string()).is_none());
+        assert!(Comment::new(&git::gclic_repo(), DiffSource::Conflict("a.rs".to_string()), anchor, "x".to_string()).is_none());
     }
 
     #[test]

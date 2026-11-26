@@ -4,7 +4,7 @@
 use crate::app::Action;
 use crate::file_list::{FOLDER, NAME, NAME_KEPT, file_line};
 use crate::app::StashAction;
-use crate::git::{self, Branch, Commit, DiffSource, FileEntry, Stash};
+use crate::git::{self, Branch, Commit, DiffSource, FileEntry, Repo, Stash};
 use crate::ui;
 use anyhow::Result;
 use ratatui::Frame;
@@ -370,6 +370,7 @@ enum Display {
 }
 
 pub struct GraphPanel {
+    repo: Repo,
     /// Refs the user picked. Empty means the default view.
     custom_refs: Vec<String>,
     tips: Vec<Tip>,
@@ -392,8 +393,9 @@ pub struct GraphPanel {
 }
 
 impl GraphPanel {
-    pub fn new() -> GraphPanel {
+    pub fn new(repo: &Repo) -> GraphPanel {
         GraphPanel {
+            repo: repo.clone(),
             custom_refs: Vec::new(),
             tips: Vec::new(),
             colors: Vec::new(),
@@ -515,11 +517,11 @@ impl GraphPanel {
         // A selected file stays selected, along with the commit it belongs to.
         let follow_tip = self.selected == 0 && !self.is_on_file();
         let refs = if self.custom_refs.is_empty() {
-            git::default_refs()
+            git::default_refs(&self.repo)
         } else {
             self.custom_refs.clone()
         };
-        let shas = git::resolve_all(&refs);
+        let shas = git::resolve_all(&self.repo, &refs);
         self.tips = refs
             .into_iter()
             .zip(shas)
@@ -527,15 +529,16 @@ impl GraphPanel {
             .collect();
 
         let names: Vec<String> = self.tips.iter().map(|tip| tip.name.clone()).collect();
+        let repo = &self.repo;
         let (commits, unpushed, stashes) = if names.is_empty() {
             (Vec::new(), HashSet::new(), Vec::new())
         } else {
             // Three separate git calls, so they run at once.
             thread::scope(|scope| {
-                let unpushed = scope.spawn(|| git::unpushed(&names));
+                let unpushed = scope.spawn(|| git::unpushed(repo, &names));
                 // Without them the graph still shows the history.
-                let stashes = scope.spawn(|| git::stashes().unwrap_or_default());
-                let commits = git::log(&names, COMMIT_LIMIT);
+                let stashes = scope.spawn(|| git::stashes(repo).unwrap_or_default());
+                let commits = git::log(repo, &names, COMMIT_LIMIT);
                 let unpushed = unpushed.join().unwrap_or_else(|_| Err(anyhow::anyhow!("git crashed")));
                 let stashes = stashes.join().unwrap_or_default();
                 Ok::<_, anyhow::Error>((commits?, unpushed?, stashes))
@@ -612,7 +615,7 @@ impl GraphPanel {
             KeyCode::Char('y') => return Action::Copy(sha),
             KeyCode::Char('c') => return Action::CompareWith(self.name_for(sha)),
             KeyCode::Char('i') => {
-                return match git::commit_details(&sha) {
+                return match git::commit_details(&self.repo, &sha) {
                     Ok(details) => Action::OpenDetails(details),
                     Err(error) => Action::Error(error.to_string()),
                 };
@@ -763,8 +766,8 @@ impl GraphPanel {
             return Action::None;
         }
         let files = match self.stash_at(self.selected) {
-            Some(stash) => git::stash_files(stash),
-            None => git::commit_files(&sha),
+            Some(stash) => git::stash_files(&self.repo, stash),
+            None => git::commit_files(&self.repo, &sha),
         };
         match files {
             Ok(files) if files.is_empty() => {
@@ -989,7 +992,7 @@ mod tests {
         let commits: Vec<Commit> = (0..COMMIT_LIMIT)
             .map(|i| commit(&i.to_string(), &[&(i + 1).to_string()]))
             .collect();
-        let mut graph = GraphPanel::new();
+        let mut graph = GraphPanel::new(&git::gclic_repo());
         (graph.commits, graph.stashes) = with_stashes(commits, vec![stash("s0", "3")]);
         assert!(graph.has_more_history());
         graph.commits.pop();
@@ -1276,7 +1279,7 @@ mod tests {
 
     /// A panel showing `shas` as a linear history, with the given commits expanded.
     fn panel_with_expanded(shas: &[&str], open: &[&str], files: &[&str]) -> GraphPanel {
-        let mut panel = GraphPanel::new();
+        let mut panel = GraphPanel::new(&git::gclic_repo());
         panel.commits = shas.iter().map(|sha| commit(sha, &[])).collect();
         for sha in open {
             panel.expanded.push(Expanded {

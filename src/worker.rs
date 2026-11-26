@@ -7,7 +7,7 @@
 //! that are out of date by the time they arrive.
 
 use crate::diff::{self, Colored, DiffView};
-use crate::git::{self, Status};
+use crate::git::{self, Repo, Status};
 use anyhow::Result;
 use std::collections::VecDeque;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
@@ -57,11 +57,14 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn start() -> Worker {
+    /// Starts the thread, which runs git in `repo` until the app moves to
+    /// another and drops this.
+    pub fn start(repo: &Repo) -> Worker {
         let shared: Shared = Arc::new((Mutex::new(Queue::default()), Condvar::new()));
         let (sender, results) = mpsc::channel();
         let queue = Arc::clone(&shared);
-        thread::spawn(move || work(&queue, &sender));
+        let repo = repo.clone();
+        thread::spawn(move || work(&repo, &queue, &sender));
         Worker { shared, results }
     }
 
@@ -101,7 +104,7 @@ impl Worker {
 }
 
 /// The thread's loop: wait for a job, do it, send the result.
-fn work(shared: &Shared, sender: &Sender<Done>) {
+fn work(repo: &Repo, shared: &Shared, sender: &Sender<Done>) {
     loop {
         let job = {
             let (queue, wake) = &**shared;
@@ -113,7 +116,7 @@ fn work(shared: &Shared, sender: &Sender<Done>) {
                 queue = wake.wait(queue).unwrap_or_else(|poisoned| poisoned.into_inner());
             }
         };
-        let Some(done) = run(job) else {
+        let Some(done) = run(repo, job) else {
             continue;
         };
         if sender.send(done).is_err() {
@@ -122,18 +125,18 @@ fn work(shared: &Shared, sender: &Sender<Done>) {
     }
 }
 
-fn run(job: Job) -> Option<Done> {
+fn run(repo: &Repo, job: Job) -> Option<Done> {
     match job {
         // Three separate git calls, so they run at once.
         Job::Poll { generation, diff } => Some(thread::scope(|scope| {
-            let fingerprint = scope.spawn(git::refs_fingerprint);
+            let fingerprint = scope.spawn(|| git::refs_fingerprint(repo));
             let diff = scope.spawn(|| {
                 diff.map(|view| {
-                    let text = git::diff(&view.source, view.whole);
+                    let text = git::diff(repo, &view.source, view.whole);
                     (view, text)
                 })
             });
-            let status = git::status();
+            let status = git::status(repo);
             Done::Poll {
                 generation,
                 fingerprint: fingerprint.join().unwrap_or_default(),
@@ -144,9 +147,9 @@ fn run(job: Job) -> Option<Done> {
         Job::Highlight(view) => {
             // Without its diff there's nothing to colour, and the UI shows the
             // error when it loads the diff itself.
-            let text = git::diff(&view.source, view.whole).ok()?;
+            let text = git::diff(repo, &view.source, view.whole).ok()?;
             let mut rows = diff::rows_for(&view.source, &text);
-            let file_lines = diff::highlight_rows(&mut rows, &view.source);
+            let file_lines = diff::highlight_rows(repo, &mut rows, &view.source);
             Some(Done::Highlight { view, text, colored: Colored { rows, file_lines } })
         }
     }
@@ -184,9 +187,10 @@ mod tests {
     #[test]
     fn colours_a_diff_in_the_background() {
         // gclic's own first commit adds a src/main.rs, which is Rust to colour.
-        let first = git::log(&["HEAD".to_string()], 10_000).unwrap().pop().unwrap();
+        let repo = git::gclic_repo();
+        let first = git::log(&repo, &["HEAD".to_string()], 10_000).unwrap().pop().unwrap();
         let source = DiffSource::Commit { sha: first.sha, path: "src/main.rs".to_string() };
-        let worker = Worker::start();
+        let worker = Worker::start(&repo);
         worker.highlight(vec![DiffView { source: source.clone(), whole: false }]);
         let done = worker.results.recv_timeout(std::time::Duration::from_secs(10)).unwrap();
         let Done::Highlight { view, colored: Colored { rows, .. }, .. } = done else { panic!("expected colours") };

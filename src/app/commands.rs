@@ -221,7 +221,7 @@ impl App {
                 let off = arg == "off";
                 match git::set_global_config(accent::BAR_KEY, off.then_some("false")) {
                     Ok(()) => {
-                        self.accent_bar = accent::bar_shown();
+                        self.accent_bar = accent::bar_shown(&self.repo);
                         self.tell_editor_about_color();
                         self.message = match (off, self.accent_bar) {
                             (true, false) => "The colour bar is off in every repo. :color on shows it again",
@@ -246,9 +246,9 @@ impl App {
             },
         };
         let value = value.map(|hex| format!("#{hex}"));
-        match git::set_local_config(accent::CONFIG_KEY, value.as_deref()) {
+        match git::set_local_config(&self.repo, accent::CONFIG_KEY, value.as_deref()) {
             Ok(()) => {
-                self.accent = Accent::current();
+                self.accent = Accent::of(&self.repo);
                 self.tell_editor_about_color();
                 let colour = match value {
                     Some(_) => format!("This repo's colour is now {}", self.accent.hex()),
@@ -280,7 +280,7 @@ impl App {
             }
         };
         let label = format!("git {}", args.join(" "));
-        match Running::start(label, git::user_command(&args)) {
+        match Running::start(label, git::user_command(&self.repo, &args)) {
             Ok(running) => self.running = Some(running),
             Err(error) => self.modal = Modal::Error(format!("Couldn't run git: {error}")),
         }
@@ -295,7 +295,7 @@ impl App {
 
     /// `:stash`: the stashes, to open one's files, or apply, pop or drop it.
     pub(super) fn open_stash_picker(&mut self) {
-        let stashes = match git::stashes() {
+        let stashes = match git::stashes(&self.repo) {
             Ok(stashes) => stashes,
             Err(error) => {
                 self.modal = Modal::Error(error.to_string());
@@ -317,7 +317,7 @@ impl App {
 
     /// Shows a stash's files, and their diffs, where comparisons show theirs.
     pub(super) fn open_stash(&mut self, stash: Stash) {
-        match ComparePanel::stash(stash) {
+        match ComparePanel::stash(&self.repo, stash) {
             Ok(view) => self.show_compare(view),
             Err(error) => self.modal = Modal::Error(error.to_string()),
         }
@@ -331,8 +331,8 @@ impl App {
                 self.modal = Modal::Confirm(Confirm::DropStash(stash));
                 return;
             }
-            StashAction::Apply => git::stash_apply(&stash),
-            StashAction::Pop => git::stash_pop(&stash),
+            StashAction::Apply => git::stash_apply(&self.repo, &stash),
+            StashAction::Pop => git::stash_pop(&self.repo, &stash),
         };
         self.after_stash(action, &stash, result);
     }
@@ -434,9 +434,9 @@ impl App {
         if !query.is_empty() {
             picker.set_query(query.to_string());
         }
-        let current = std::env::current_dir().ok();
+        let current = self.repo.root();
         if query.is_empty()
-            && let Some((label, _)) = repos.iter().find(|(_, repo)| Some(repo) == current.as_ref())
+            && let Some((label, _)) = repos.iter().find(|(_, repo)| repo == current)
         {
             picker.select_item(&label.clone());
         }
@@ -448,16 +448,23 @@ impl App {
     /// user's choices of how to show things.
     /// `tell_nvim` is false when following Neovim, which is already there,
     /// perhaps in a folder inside the repo, which telling it would undo.
-    pub(super) fn switch_repo(&mut self, repo: &Path, tell_nvim: bool) {
-        if let Err(error) = std::env::set_current_dir(repo) {
-            self.modal = Modal::Error(format!("Can't open {}: {error}", repo.display()));
+    pub(super) fn switch_repo(&mut self, folder: &Path, tell_nvim: bool) {
+        let Some(repo) = Repo::discover(folder) else {
+            self.modal = Modal::Error(format!("Can't open {}: it isn't a git repo", folder.display()));
+            return;
+        };
+        // gclic's own git calls run in the repo whatever the working
+        // directory, but the commands the user runs, in a shell or an editor
+        // in this terminal, start in it.
+        if let Err(error) = std::env::set_current_dir(repo.root()) {
+            self.modal = Modal::Error(format!("Can't open {}: {error}", folder.display()));
             return;
         }
-        let mut fresh = App::new(self.search_root.clone());
+        let mut fresh = App::new(repo, self.search_root.clone());
         // Inside Neovim, its project follows, for its file finder, search and
         // file tree.
         if let Some(address) = editor::parent_nvim().filter(|_| tell_nvim) {
-            fresh.start_in_background("nvim", editor::cd_nvim(&address, repo));
+            fresh.start_in_background("nvim", editor::cd_nvim(&address, folder));
         }
         fresh.split = self.split;
         fresh.fetcher.auto = self.fetcher.auto;
@@ -478,16 +485,9 @@ impl App {
         };
         let line = match self.view.diff() {
             Some(diff) if diff.source == source => diff.active_line(),
-            _ => DiffPane::load(self.view_of(&source)).ok().and_then(|diff| diff.active_line()),
+            _ => DiffPane::load(&self.repo, self.view_of(&source)).ok().and_then(|diff| diff.active_line()),
         };
-        // gclic runs from the repo root, which paths are relative to.
-        let path = match std::env::current_dir() {
-            Ok(root) => root.join(source.path()),
-            Err(error) => {
-                self.modal = Modal::Error(error.to_string());
-                return;
-            }
-        };
+        let path = self.repo.file(source.path());
         if !path.exists() {
             self.message = format!("{} isn't in the working tree", source.path());
             return;

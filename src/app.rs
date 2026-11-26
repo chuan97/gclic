@@ -28,7 +28,7 @@ use crate::editor::{self, Launch};
 use crate::repos;
 use crate::review::{self, Anchor, Comment, ListAction, Review, ReviewList};
 use crate::diff::{ColorCache, Colored, DiffPane, DiffView};
-use crate::git::{self, Stash, CommitDetails, DiffSource};
+use crate::git::{self, Stash, CommitDetails, DiffSource, Repo};
 use crate::graph::GraphPanel;
 use crate::help::HelpPopup;
 use crate::picker::{Outcome, Picker};
@@ -245,6 +245,8 @@ impl View {
 }
 
 pub struct App {
+    /// The repo shown, which every git call runs in.
+    repo: Repo,
     tab: Tab,
     /// The showing tab's focus and preview.
     view: View,
@@ -316,12 +318,12 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(search_root: PathBuf) -> App {
+    pub fn new(repo: Repo, search_root: PathBuf) -> App {
         let mut app = App {
             search_root,
             running: None,
             suggestion: None,
-            fetcher: Fetcher::new(),
+            fetcher: Fetcher::new(&repo),
             shell_line: None,
             editor_in_terminal: None,
             follow: editor::Follow::from_env(),
@@ -334,9 +336,9 @@ impl App {
             saved_views: [None, None, None],
             review: Review::default(),
             review_list: ReviewList::new(),
-            branches: BranchesPanel::new(),
-            staging: StagingPanel::new(),
-            graph: GraphPanel::new(),
+            branches: BranchesPanel::new(&repo),
+            staging: StagingPanel::new(&repo),
+            graph: GraphPanel::new(&repo),
             compare: None,
             split: None,
             whole: false,
@@ -349,12 +351,13 @@ impl App {
             last_refresh: Instant::now(),
             refs_fingerprint: String::new(),
             editor_commands: Vec::new(),
-            worker: Worker::start(),
+            worker: Worker::start(&repo),
             colors: ColorCache::default(),
-            project: project_location(),
-            accent: Accent::current(),
-            accent_bar: accent::bar_shown(),
+            project: project_location(repo.root()),
+            accent: Accent::of(&repo),
+            accent_bar: accent::bar_shown(&repo),
             generation: 0,
+            repo,
         };
         app.refresh();
         app
@@ -442,16 +445,16 @@ impl App {
     fn show_diff(&mut self, source: DiffSource) {
         if let Some(diff) = self.view.diff_mut()
             && diff.source == source {
-                let result = diff.reload();
+                let result = diff.reload(&self.repo);
                 self.report(result);
                 return;
             }
         let view = self.view_of(&source);
         if let Some((text, colored)) = self.colors.latest(&view) {
-            self.view.preview = Preview::Diff(DiffPane::colored(view, text, colored));
+            self.view.preview = Preview::Diff(DiffPane::colored(&self.repo, view, text, colored));
             return;
         }
-        match DiffPane::load(view) {
+        match DiffPane::load(&self.repo, view) {
             Ok(diff) => self.view.preview = Preview::Diff(diff),
             // A refresh can get here while a popup is open, such as the
             // command line while typing, which an error popup would replace.
@@ -662,10 +665,10 @@ impl App {
                 self.open_stash_picker();
             }
             Action::Compare(a, b) => self.start_compare(a, b),
-            Action::CompareWith(sha) => self.open_compare_b_picker(git::display_ref(&sha)),
+            Action::CompareWith(sha) => self.open_compare_b_picker(git::display_ref(&self.repo, &sha)),
             Action::Copy(sha) => match copy_to_clipboard(&sha) {
                 Ok(()) => {
-                    if let Some(label) = git::commit_label(&sha) {
+                    if let Some(label) = git::commit_label(&self.repo, &sha) {
                         remember_yank(&mut self.recent_yanks, label);
                     }
                     self.message = format!("Copied {sha}");
@@ -717,7 +720,7 @@ impl App {
     /// Shows how `a` and `b` differ on the Compare tab, replacing any
     /// comparison already there.
     fn start_compare(&mut self, a: String, b: String) {
-        match ComparePanel::new(a, b) {
+        match ComparePanel::new(&self.repo, a, b) {
             Ok(compare) => self.show_compare(compare),
             Err(error) => self.modal = Modal::Error(error.to_string()),
         }
@@ -762,7 +765,7 @@ impl App {
         if let Some(diff) = self.view.diff_mut()
             && diff.whole != whole
         {
-            let result = diff.reload_as(whole);
+            let result = diff.reload_as(&self.repo, whole);
             self.report(result);
         }
     }

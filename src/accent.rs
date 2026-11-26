@@ -4,7 +4,7 @@
 //! the repo's local git config, which isn't committed, and `:color off`
 //! hides the bar in every repo.
 
-use crate::git;
+use crate::git::{self, Repo};
 use ratatui::style::Color;
 
 /// Where a custom colour is kept, in `.git/config`.
@@ -14,8 +14,8 @@ pub const CONFIG_KEY: &str = "gclic.color";
 pub const BAR_KEY: &str = "gclic.colorBar";
 
 /// Whether to show the bar: unless it's turned off.
-pub fn bar_shown() -> bool {
-    git::config_bool(BAR_KEY) != Some(false)
+pub fn bar_shown(repo: &Repo) -> bool {
+    git::config_bool(repo, BAR_KEY) != Some(false)
 }
 
 /// Lightness and chroma in OKLCH, the same for every repo, so each hue looks
@@ -32,12 +32,12 @@ pub struct Accent {
 }
 
 impl Accent {
-    /// The current repo's colour: its custom one, or else its name's.
-    pub fn current() -> Accent {
-        let custom = git::local_config(CONFIG_KEY).and_then(|value| parse_hex(&value));
+    /// The repo's colour: its custom one, or else its name's.
+    pub fn of(repo: &Repo) -> Accent {
+        let custom = git::local_config(repo, CONFIG_KEY).and_then(|value| parse_hex(&value));
         match custom {
             Some(rgb) => Accent { rgb, custom: true },
-            None => Accent { rgb: from_name(&repo_name()), custom: false },
+            None => Accent { rgb: from_name(&repo_name(repo)), custom: false },
         }
     }
 
@@ -55,13 +55,10 @@ impl Accent {
 /// The repo's name as everyone with a clone would know it: the last part of
 /// origin's URL, or failing that the folder's name. A worktree, or a clone
 /// in a folder named otherwise, still gets the same colour.
-fn repo_name() -> String {
-    git::local_config("remote.origin.url")
+fn repo_name(repo: &Repo) -> String {
+    git::local_config(repo, "remote.origin.url")
         .and_then(|url| name_from_url(&url))
-        .or_else(|| {
-            let root = std::env::current_dir().ok()?;
-            Some(root.file_name()?.to_string_lossy().into_owned())
-        })
+        .or_else(|| Some(repo.root().file_name()?.to_string_lossy().into_owned()))
         .unwrap_or_default()
 }
 

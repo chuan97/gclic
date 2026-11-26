@@ -1,7 +1,7 @@
 //! Feature 3: the pane listing branches, for checking one out.
 
 use crate::app::Action;
-use crate::git::{self, Branch};
+use crate::git::{self, Branch, Repo};
 use crate::picker::{Outcome, Picker};
 use crate::ui;
 use anyhow::Result;
@@ -41,6 +41,7 @@ struct DropDown {
 }
 
 pub struct BranchesPanel {
+    repo: Repo,
     picker: Picker,
     branches: Vec<Branch>,
     /// Each branch's row, by name.
@@ -81,8 +82,9 @@ fn listed_names(branches: &[Branch]) -> Vec<String> {
 }
 
 impl BranchesPanel {
-    pub fn new() -> BranchesPanel {
+    pub fn new(repo: &Repo) -> BranchesPanel {
         BranchesPanel {
+            repo: repo.clone(),
             picker: Picker::single("", Vec::new()),
             branches: Vec::new(),
             rows: HashMap::new(),
@@ -118,14 +120,14 @@ impl BranchesPanel {
     }
 
     pub fn refresh(&mut self) -> Result<()> {
-        self.set_branches(git::branches()?);
+        self.set_branches(git::branches(&self.repo)?);
         self.picker.set_items(listed_names(&self.branches));
         // The branches may have moved, so a searched sha is looked up again.
         self.sha_search = None;
         self.search_sha();
 
         // The cursor goes to the new branch, however the switch happened.
-        let current = git::current_branch();
+        let current = git::current_branch(&self.repo);
         if current != self.current {
             if let Some(name) = &current {
                 self.picker.select_item(name);
@@ -154,8 +156,13 @@ impl BranchesPanel {
             is_remote: branch.is_remote,
             ahead_behind: branch.ahead_behind,
             remotes: if branch.is_remote { 0 } else { remotes_of(&self.branches, branch).len() },
-            elsewhere: other_worktree(branch),
+            elsewhere: self.other_worktree(branch),
         }
+    }
+
+    /// The other worktree a branch is checked out in, if any.
+    fn other_worktree(&self, branch: &Branch) -> Option<String> {
+        git::other_worktree(&self.repo, branch.worktree.as_deref()?)
     }
 
     fn find(&self, name: &str) -> Option<&Branch> {
@@ -168,7 +175,7 @@ impl BranchesPanel {
         let remotes: Vec<RemoteRow> = remotes_of(&self.branches, local)
             .into_iter()
             .map(|remote| {
-                let (ahead, behind) = git::ahead_behind(name, &remote.name).unwrap_or((0, 0));
+                let (ahead, behind) = git::ahead_behind(&self.repo, name, &remote.name).unwrap_or((0, 0));
                 let is_upstream = local.upstream.as_deref() == Some(remote.name.as_str());
                 RemoteRow { name: remote.name.clone(), ahead, behind, is_upstream }
             })
@@ -184,7 +191,7 @@ impl BranchesPanel {
         if self.sha_search.as_ref().is_some_and(|(searched, _)| *searched == query) {
             return;
         }
-        let containing = git::looks_like_sha(&query).then(|| git::branches_containing(&query)).flatten();
+        let containing = git::looks_like_sha(&query).then(|| git::branches_containing(&self.repo, &query)).flatten();
         self.sha_search = Some((query, containing.is_some()));
         self.picker.set_only(containing);
     }
@@ -256,11 +263,11 @@ impl BranchesPanel {
     fn check_out(&mut self, name: &str) -> Action {
         self.picker.stop_typing();
         // git won't check out a branch in two worktrees at once, so say why first.
-        if let Some(elsewhere) = self.find(name).and_then(other_worktree) {
+        if let Some(elsewhere) = self.find(name).and_then(|branch| self.other_worktree(branch)) {
             return Action::Message(format!("{name} is checked out in {elsewhere}, so not here too"));
         }
         let is_remote = self.find(name).is_some_and(|branch| branch.is_remote);
-        let result = if is_remote { git::switch_track(name) } else { git::switch(name) };
+        let result = if is_remote { git::switch_track(&self.repo, name) } else { git::switch(&self.repo, name) };
         if result.is_ok() {
             self.picker.clear_query();
             self.picker.select_item(name);
@@ -393,10 +400,6 @@ impl BranchesPanel {
     }
 }
 
-/// The other worktree a branch is checked out in, if any.
-fn other_worktree(branch: &Branch) -> Option<String> {
-    git::other_worktree(branch.worktree.as_deref()?)
-}
 
 fn remote_line(remote: &RemoteRow) -> Line<'static> {
     let dim = Style::default().fg(ui::DIM);
@@ -444,7 +447,7 @@ mod tests {
     }
 
     fn panel_on(names: &[&str], current: &str, highlighted: &str) -> BranchesPanel {
-        let mut panel = BranchesPanel::new();
+        let mut panel = BranchesPanel::new(&git::gclic_repo());
         panel.set_branches(names.iter().map(|name| local(name, None)).collect());
         panel.picker.set_items(names.iter().map(|name| name.to_string()).collect());
         panel.picker.select_item(highlighted);

@@ -1,7 +1,7 @@
 //! Diffs and conflicts parsed into rows, a removed line beside the added one
 //! it became, with the words that changed marked, and syntax colours on them.
 
-use crate::git::{self, DiffSource};
+use crate::git::{self, DiffSource, Repo};
 use crate::highlight::{self, ColoredLine};
 use ratatui::style::Color;
 use std::ops::Range;
@@ -188,7 +188,7 @@ fn changed_cell(number: usize, content: &str) -> Cell {
 /// files, as a hunk on its own can start inside a comment or a string. Slow
 /// for big files, so the worker thread does it. Returns the length of the file
 /// the minimap measures, which reading them finds out on the way.
-pub fn highlight_rows(rows: &mut [Row], source: &DiffSource) -> usize {
+pub fn highlight_rows(repo: &Repo, rows: &mut [Row], source: &DiffSource) -> usize {
     let last_line = |side: fn(&Row) -> Option<&Cell>| {
         rows.iter().filter_map(side).map(|cell| cell.number).max().unwrap_or(0)
     };
@@ -203,7 +203,7 @@ pub fn highlight_rows(rows: &mut [Row], source: &DiffSource) -> usize {
     if last_old == 0 && last_new == 0 {
         return 0; // Nothing to colour, as in a binary file's diff.
     }
-    let (old, new) = git::file_versions(source);
+    let (old, new) = git::file_versions(repo, source);
     let measured = if measures_new_side(rows) { &new } else { &old };
     let file_lines = measured.as_ref().map_or(0, |text| text.lines().count());
     let colored = |text: Option<String>, last: usize| {
