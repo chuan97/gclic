@@ -387,19 +387,76 @@ pub fn unapply_from_working_tree(repo: &Repo, patch: &str) -> Result<()> {
 
 /// `git apply`, with the patch given on its input.
 fn apply(repo: &Repo, patch: &str, options: &[&str]) -> Result<()> {
-    use std::io::Write;
     let mut args = vec!["apply", "--whitespace=nowarn"];
     args.extend(options);
     args.push("-");
-    let mut command = repo.command(&args);
+    run_with_input(repo, &args, patch.as_bytes()).map(|_| ())
+}
+
+/// Runs git with `input` on its standard input, returning what it printed,
+/// as bytes, which may not be text.
+fn run_with_input(repo: &Repo, args: &[&str], input: &[u8]) -> Result<Vec<u8>> {
+    use std::io::Write;
+    let mut command = repo.command(args);
     command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = command.spawn().map_err(|e| anyhow!("could not run git: {e}"))?;
-    // Written whole before reading anything back: a patch is small, and git
-    // prints nothing until it has read it.
-    child.stdin.take().map(|mut stdin| stdin.write_all(patch.as_bytes())).transpose()?;
-    let output = child.wait_with_output()?;
+    let mut stdin = child.stdin.take();
+    // Written on a thread of its own, so a git that prints while it reads
+    // can't block on a full pipe while gclic blocks on writing.
+    let output = thread::scope(|scope| {
+        scope.spawn(move || stdin.as_mut().map(|stdin| stdin.write_all(input)));
+        child.wait_with_output()
+    })?;
     if !output.status.success() {
         bail!("{}", String::from_utf8_lossy(&output.stderr).trim());
+    }
+    Ok(output.stdout)
+}
+
+// ------------------------------------------------------------------- undo
+
+/// What the index holds for these paths, as `git ls-files --stage` prints
+/// it, conflicts' stages included: enough to put them back exactly.
+pub fn index_entries(repo: &Repo, paths: &[String]) -> Result<String> {
+    // Paths as they are, not as patterns: a `*` in a name is just a `*`.
+    let mut args = vec!["--literal-pathspecs", "ls-files", "--stage", "-z", "--"];
+    args.extend(paths.iter().map(String::as_str));
+    run(repo, &args)
+}
+
+/// Puts these paths' index entries back as `index_entries` read them: each
+/// path's entries go, then the saved ones come back.
+pub fn set_index_entries(repo: &Repo, paths: &[String], entries: &str) -> Result<()> {
+    let listed: String = paths.iter().map(|path| format!("{path}\0")).collect();
+    run_with_input(repo, &["update-index", "-z", "--force-remove", "--stdin"], listed.as_bytes())?;
+    if !entries.is_empty() {
+        run_with_input(repo, &["update-index", "-z", "--index-info"], entries.as_bytes())?;
+    }
+    Ok(())
+}
+
+/// A file of the working tree kept in git's object store, so it can be put
+/// back: its blob's id, or None if there's no file there.
+pub fn save_file(repo: &Repo, path: &str) -> Result<Option<String>> {
+    if !repo.file(path).is_file() {
+        return Ok(None);
+    }
+    Ok(Some(run(repo, &["hash-object", "-w", "--no-filters", "--", path])?.trim().to_string()))
+}
+
+/// Puts back a file `save_file` kept, or with None, removes it.
+pub fn restore_file(repo: &Repo, path: &str, saved: Option<&str>) -> Result<()> {
+    let file = repo.file(path);
+    match saved {
+        Some(blob) => {
+            let bytes = run_with_input(repo, &["cat-file", "blob", blob], &[])?;
+            if let Some(folder) = file.parent() {
+                std::fs::create_dir_all(folder)?;
+            }
+            std::fs::write(&file, bytes)?;
+        }
+        None if file.exists() => std::fs::remove_file(&file)?,
+        None => {}
     }
     Ok(())
 }

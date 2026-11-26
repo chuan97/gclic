@@ -2,6 +2,7 @@
 //! return an `Action` and `apply` carries it out here. The modules below
 //! draw the screen, refresh, run commands and handle popups and comments.
 
+mod changes;
 mod commands;
 mod comments;
 mod fetcher;
@@ -34,6 +35,7 @@ use crate::help::HelpPopup;
 use crate::picker::{Outcome, Picker};
 use crate::staging::StagingPanel;
 use crate::ui;
+use crate::undo;
 use crate::worker::{Done, Worker};
 use anyhow::Result;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -103,6 +105,17 @@ pub enum Action {
     Stash(StashAction, Stash),
     /// Leave the stash view, back to the list of stashes.
     CloseStash,
+    /// Stage or unstage files, from the Changes pane, which the app does so
+    /// it can be undone.
+    Staging(Staging),
+}
+
+/// What the Changes pane stages or unstages.
+pub enum Staging {
+    Stage(String),
+    Unstage(String),
+    StageAll,
+    UnstageAll,
 }
 
 /// What can be done with a stash. Making one is left to `:git stash`, which
@@ -250,6 +263,8 @@ impl View {
 pub struct App {
     /// The repo shown, which every git call runs in.
     repo: Repo,
+    /// What `u` undoes: the stagings and discards made in this repo.
+    history: undo::History,
     tab: Tab,
     /// The showing tab's focus and preview.
     view: View,
@@ -360,6 +375,7 @@ impl App {
             accent: Accent::of(&repo),
             accent_bar: accent::bar_shown(&repo),
             generation: 0,
+            history: undo::History::default(),
             repo,
         };
         app.refresh();
@@ -541,6 +557,8 @@ impl App {
                 }
             }
             KeyCode::Char('g') => self.pending_g = true,
+            KeyCode::Char('u') if key.modifiers.is_empty() => self.undo(false),
+            KeyCode::Char('r') if key.modifiers == KeyModifiers::CONTROL => self.undo(true),
             KeyCode::Char('q') => self.modal = Modal::ConfirmQuit,
             // h and l move between the Repo tab's panes. Elsewhere they're the
             // pane's own: a diff scrolls sideways, Compare's tree folds.
@@ -660,6 +678,7 @@ impl App {
                 }
             }
             Action::Refresh => self.refresh(),
+            Action::Staging(staging) => self.stage(staging),
             Action::Message(message) => self.message = message,
             Action::Error(error) => self.modal = Modal::Error(error),
             Action::Confirm(confirm) => self.modal = Modal::Confirm(confirm),

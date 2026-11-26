@@ -26,6 +26,7 @@ const LEFT: &[Section] = &[
             ("enter", "open; on a file, again to move into it"),
             ("esc", "go back, then close the diff or details"),
             ("o", "open the file in your editor, at the line"),
+            ("u ctrl-r", "undo the last staging, unstaging or discard, redo it"),
             ("z", "zoom the diff or details"),
             ("tab", "next tab: Repo, Compare, Review"),
             (":", "a command; tab completes its name"),

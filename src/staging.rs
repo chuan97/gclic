@@ -1,6 +1,6 @@
 //! Feature 1: the staging area, modelled on VS Code's git panel.
 
-use crate::app::{Action, Confirm};
+use crate::app::{Action, Confirm, Staging};
 use crate::file_list::{FOLDER, NAME, NAME_KEPT, file_line};
 use crate::git::{self, DiffSource, FileEntry, Repo, Status};
 use crate::ui;
@@ -193,8 +193,8 @@ impl StagingPanel {
                 };
             }
             KeyCode::Char(' ') => return self.toggle_stage(),
-            KeyCode::Char('a') => return Action::after_change(git::stage_all(&self.repo)),
-            KeyCode::Char('A') => return Action::after_change(git::unstage_all(&self.repo)),
+            KeyCode::Char('a') => return Action::Staging(Staging::StageAll),
+            KeyCode::Char('A') => return Action::Staging(Staging::UnstageAll),
             KeyCode::Char('d') => return self.ask_to_restore(),
             KeyCode::Char('D') => return self.ask_to_discard_all(),
             KeyCode::Char('c') => {
@@ -219,9 +219,9 @@ impl StagingPanel {
 
     fn toggle_stage(&self) -> Action {
         match self.selection() {
-            Some((Section::Staged, entry)) => Action::after_change(git::unstage(&self.repo, &entry.path)),
+            Some((Section::Staged, entry)) => Action::Staging(Staging::Unstage(entry.path.clone())),
             // Staging a conflicted file is how git marks it resolved.
-            Some((Section::Conflicts | Section::Changes, entry)) => Action::after_change(git::stage(&self.repo, &entry.path)),
+            Some((Section::Conflicts | Section::Changes, entry)) => Action::Staging(Staging::Stage(entry.path.clone())),
             None => Action::None,
         }
     }
