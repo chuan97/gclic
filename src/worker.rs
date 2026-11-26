@@ -186,6 +186,22 @@ mod tests {
     }
 
     #[test]
+    fn a_poll_reads_the_repo_the_worker_was_started_for() {
+        let repo = TestRepo::with_history();
+        repo.write("README.md", "polled\n");
+        let worker = Worker::start(&repo);
+        worker.poll(7, Some(file("README.md")));
+        let done = worker.results.recv_timeout(std::time::Duration::from_secs(10)).unwrap();
+        let Done::Poll { generation, fingerprint, status, diff } = done else { panic!("expected a poll") };
+        assert_eq!(generation, 7);
+        assert_eq!(fingerprint, git::refs_fingerprint(&repo));
+        assert_eq!(status.unwrap().unstaged.len(), 1);
+        let (view, text) = diff.unwrap();
+        assert_eq!(view, file("README.md"));
+        assert!(text.unwrap().contains("+polled"));
+    }
+
+    #[test]
     fn colours_a_diff_in_the_background() {
         // The first commit adds a src/main.rs, which is Rust to colour.
         let repo = TestRepo::with_history();
