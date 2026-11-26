@@ -82,7 +82,7 @@ Modules nest where one has grown parts of its own: `app.rs` declares `app/`'s, a
 | `accent.rs` | Each repo's colour, for the bar at the top |
 | `theme.rs` | The editor's colours for diffs inside Neovim, and gclic's own, VS Code's |
 | `ui.rs` | Shared pieces: colours, key hints, the list `Cursor`, the text `Scroll`, popups of text |
-| `test_repo.rs` | For tests: repos made for each one, removed when it ends |
+| `test_repo.rs` | For tests: repos made for each one, removed when it ends. `git/repo_tests.rs` runs `git.rs` on them |
 
 Dependencies: `ratatui` (with crossterm), `anyhow`, and `syntect`, with its pure-Rust regex engine. Dependencies are optimised even in debug builds, since highlighting is too slow otherwise. The theme, `assets/vscode-dark-modern.tmTheme`, holds VS Code's Dark Modern colours, as Zed's "VSCode Dark Modern" theme has them.
 

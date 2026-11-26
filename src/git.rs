@@ -161,7 +161,17 @@ fn command(args: &[&str]) -> Command {
         .env("GIT_OPTIONAL_LOCKS", "0")
         // Nothing may wait for input on the terminal the TUI is drawing on.
         .stdin(Stdio::null());
+    #[cfg(test)]
+    without_user_config(&mut command);
     command
+}
+
+/// Leaves out the user's and the system's git settings, for tests, which run
+/// on repos made for them with settings of their own: a setting of the
+/// user's, a hook or commit signing, say, could make them fail.
+#[cfg(test)]
+pub fn without_user_config(command: &mut Command) {
+    command.env("GIT_CONFIG_GLOBAL", "/dev/null").env("GIT_CONFIG_NOSYSTEM", "1");
 }
 
 /// Runs a command to the end: what it printed, or why it failed.
@@ -250,6 +260,8 @@ pub fn user_command(repo: &Repo, args: &[String]) -> Command {
         .env("GIT_SEQUENCE_EDITOR", "exit 1 #")
         .env("GIT_PAGER", "cat");
     no_prompts(repo, &mut command);
+    #[cfg(test)]
+    without_user_config(&mut command);
     command
 }
 
@@ -865,18 +877,21 @@ fn parse_track(track: &str) -> Option<(usize, usize)> {
 }
 
 /// The branches, local and remote, whose history holds this commit, by
-/// their short names. None if `sha` isn't a commit.
+/// their short names. None if `sha` isn't a commit. A remote's HEAD, only a
+/// pointer to one of its branches, is left out, as in `branches`.
 pub fn branches_containing(repo: &Repo, sha: &str) -> Option<Vec<String>> {
     let commit = resolve(repo, sha)?;
     let text = try_run(repo, &[
         "for-each-ref",
-        "--format=%(refname:short)",
+        "--format=%(refname)%00%(refname:short)",
         "--contains",
         commit.as_str(),
         "refs/heads",
         "refs/remotes",
     ])?;
-    Some(text.lines().map(str::to_string).collect())
+    let is_remote_head = |full: &str| full.starts_with("refs/remotes/") && full.ends_with("/HEAD");
+    let names = text.lines().filter_map(|line| line.split_once('\0'));
+    Some(names.filter(|(full, _)| !is_remote_head(full)).map(|(_, short)| short.to_string()).collect())
 }
 
 pub fn tags(repo: &Repo) -> Result<Vec<String>> {
@@ -910,6 +925,9 @@ pub fn merge_base(repo: &Repo, a: &str, b: &str) -> Option<String> {
 pub fn changed_files(repo: &Repo, a: &str, b: &str) -> Result<Vec<FileEntry>> {
     files_with_lines(repo, &["diff", "--no-renames", "-z", a, b, "--"])
 }
+
+#[cfg(test)]
+mod repo_tests;
 
 #[cfg(test)]
 mod tests {

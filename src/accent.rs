@@ -132,6 +132,33 @@ fn gamma(c: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_repo::TestRepo;
+
+    #[test]
+    fn a_clone_has_its_origin_s_colour_until_given_its_own() {
+        let origin = TestRepo::with_history();
+        let clone = origin.clone_of();
+        // The origin has no remote, so its folder names it, and the clone's
+        // remote URL ends in that folder.
+        assert_eq!(Accent::of(&clone), Accent::of(&origin));
+        assert!(!Accent::of(&clone).custom);
+        git::set_local_config(&clone, CONFIG_KEY, Some("#ff8800")).unwrap();
+        assert_eq!(Accent::of(&clone), Accent { rgb: (0xff, 0x88, 0x00), custom: true });
+        assert_ne!(Accent::of(&origin), Accent::of(&clone), "only the clone's changed");
+        // A colour that isn't one is passed over.
+        git::set_local_config(&clone, CONFIG_KEY, Some("orange")).unwrap();
+        assert_eq!(Accent::of(&clone), Accent::of(&origin));
+    }
+
+    #[test]
+    fn the_bar_shows_unless_it_was_turned_off() {
+        let repo = TestRepo::new();
+        assert!(bar_shown(&repo));
+        // :color off writes it to the user's config, left out of tests, for
+        // which the repo's own, read first, stands in.
+        git::set_local_config(&repo, BAR_KEY, Some("false")).unwrap();
+        assert!(!bar_shown(&repo));
+    }
 
     #[test]
     fn the_name_comes_from_the_remote_url_in_any_form() {

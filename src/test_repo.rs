@@ -3,7 +3,7 @@
 //! getting in the way of the tests running beside it. Each is a folder of
 //! its own under the system's temporary folder, removed when it's dropped.
 
-use crate::git::Repo;
+use crate::git::{self, Repo};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -39,11 +39,12 @@ fn fresh_folder() -> PathBuf {
     folder.canonicalize().unwrap()
 }
 
-/// Git in `folder`, with the user's and the system's settings left out: with
-/// commit signing on, say, every commit would fail.
+/// Git in `folder`, with the user's and the system's settings left out, as
+/// they are from gclic's own git calls in tests.
 fn git_command(folder: &Path, args: &[&str]) -> Command {
     let mut command = Command::new("git");
-    command.args(args).current_dir(folder).env("GIT_CONFIG_GLOBAL", "/dev/null").env("GIT_CONFIG_NOSYSTEM", "1");
+    command.args(args).current_dir(folder);
+    git::without_user_config(&mut command);
     command
 }
 
@@ -56,8 +57,7 @@ fn git_in(folder: &Path, args: &[&str]) -> String {
     text(&output.stdout)
 }
 
-/// What a repo is set up with, in its own config, as gclic's git calls read
-/// the user's settings too.
+/// What a repo is set up with, in its own config.
 const CONFIG: &[(&str, &str)] = &[
     ("user.name", "Test"),
     ("user.email", "test@example.com"),
@@ -100,10 +100,27 @@ impl TestRepo {
         repo
     }
 
+    /// Another repo, a clone of this one, with this one as its `origin`.
+    pub fn clone_of(&self) -> TestRepo {
+        let folder = fresh_folder();
+        git_in(&folder, &["clone", "-q", &self.root().display().to_string(), "."]);
+        for (key, value) in CONFIG {
+            git_in(&folder, &["config", key, value]);
+        }
+        let repo = Repo::discover(&folder).unwrap();
+        TestRepo { repo, folder }
+    }
+
     /// Runs git here, failing the test if git fails, and returns what it
     /// printed.
     pub fn git(&self, args: &[&str]) -> String {
         git_in(self.root(), args)
+    }
+
+    /// Like `git`, but for commands expected to fail, as a merge that stops on
+    /// conflicts does. Whether it succeeded.
+    pub fn git_may_fail(&self, args: &[&str]) -> bool {
+        git_command(self.root(), args).output().unwrap().status.success()
     }
 
     /// Writes a file, by its path from the root, making its folders.
@@ -127,5 +144,19 @@ impl TestRepo {
     /// The commit a ref points at.
     pub fn sha(&self, reference: &str) -> String {
         self.git(&["rev-parse", &format!("{reference}^{{commit}}")]).trim().to_string()
+    }
+
+    /// Changes `path` differently on `main` and on a new branch, `other`, then
+    /// merges `other` into `main`, which stops on the conflict.
+    pub fn conflicting_merge(&self, path: &str) {
+        self.write(path, "base\n");
+        self.commit("Base");
+        self.git(&["switch", "-q", "-c", "other"]);
+        self.write(path, "theirs\n");
+        self.commit("Theirs");
+        self.git(&["switch", "-q", "main"]);
+        self.write(path, "ours\n");
+        self.commit("Ours");
+        assert!(!self.git_may_fail(&["merge", "other"]), "the merge should stop on the conflict");
     }
 }

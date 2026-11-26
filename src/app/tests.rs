@@ -372,3 +372,288 @@ fn only_the_last_two_yanks_are_kept() {
 fn yanking_a_commit_again_moves_it_to_the_end() {
     assert_eq!(yanks(&["aaa  one", "bbb  two", "aaa  one"]), ["bbb  two", "aaa  one"]);
 }
+
+// These set up what they test in a repo of their own, as the user would
+// meet it, and drive the app with keys.
+
+/// The screen as the app draws it, as text.
+fn screen(app: &mut App) -> String {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    let mut terminal = Terminal::new(TestBackend::new(140, 40)).unwrap();
+    terminal.draw(|frame| app.render(frame)).unwrap();
+    let buffer = terminal.backend().buffer();
+    let width = buffer.area.width as usize;
+    let cells: Vec<&str> = buffer.content().iter().map(|cell| cell.symbol()).collect();
+    cells.chunks(width).map(|row| row.concat() + "\n").collect()
+}
+
+fn ctrl(app: &mut App, ch: char) {
+    app.handle_key(KeyEvent::new(KeyCode::Char(ch), KeyModifiers::CONTROL));
+}
+
+/// A repo with one stash, of a change to the README and a new file.
+fn stashed() -> TestRepo {
+    let repo = TestRepo::with_history();
+    repo.write("README.md", "# Test\n\nStashed.\n");
+    repo.write("untracked.txt", "new\n");
+    repo.git(&["stash", "push", "-q", "--include-untracked", "-m", "try this"]);
+    repo
+}
+
+#[test]
+fn an_empty_repo_opens_without_an_error() {
+    let repo = TestRepo::new();
+    let mut app = app_on(&repo);
+    assert!(matches!(app.modal, Modal::None), "{}", app.message);
+    let shown = screen(&mut app);
+    assert!(shown.contains("Changes") && shown.contains("Graph"), "{shown}");
+    // Its first files can be staged and committed.
+    repo.write("first.txt", "first\n");
+    app.refresh();
+    app.focus_left(Pane::Changes);
+    press(&mut app, KeyCode::Char(' '));
+    press(&mut app, KeyCode::Char('c'));
+    type_text(&mut app, "First");
+    ctrl(&mut app, 's');
+    assert_eq!(app.message, "Committed");
+    assert_eq!(git::commit_label(&repo, "HEAD").map(|label| label.ends_with("  First")), Some(true));
+}
+
+#[test]
+fn a_file_is_staged_and_committed_from_the_changes_pane() {
+    let repo = TestRepo::with_history();
+    repo.write("README.md", "# Test\n\nEdited.\n");
+    let mut app = app_on(&repo);
+    app.focus_left(Pane::Changes);
+    assert!(screen(&mut app).contains("Changes (1)"));
+    press(&mut app, KeyCode::Char(' '));
+    assert_eq!(git::status(&repo).unwrap().staged.len(), 1);
+    assert!(screen(&mut app).contains("Staged (1)"));
+    // An empty message isn't committed.
+    press(&mut app, KeyCode::Char('c'));
+    ctrl(&mut app, 's');
+    assert_eq!(app.message, "The commit message is empty");
+    type_text(&mut app, "Edit the README");
+    ctrl(&mut app, 's');
+    assert_eq!(app.message, "Committed");
+    assert_eq!(git::commit_details(&repo, "HEAD").unwrap().message, "Edit the README");
+    assert_eq!(git::status(&repo).unwrap(), git::Status::default());
+    // With nothing staged, c says so rather than open the box.
+    press(&mut app, KeyCode::Char('c'));
+    assert!(matches!(app.modal, Modal::None));
+    assert_eq!(app.message, "Nothing staged to commit");
+}
+
+#[test]
+fn a_failed_commit_keeps_its_message() {
+    let repo = TestRepo::with_history();
+    repo.write("README.md", "edited\n");
+    let mut app = app_on(&repo);
+    app.focus_left(Pane::Changes);
+    press(&mut app, KeyCode::Char(' '));
+    // A hook that refuses every commit.
+    repo.write("hooks/pre-commit", "#!/bin/sh\necho refused >&2\nexit 1\n");
+    repo.git(&["config", "core.hooksPath", &repo.file("hooks").display().to_string()]);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(repo.file("hooks/pre-commit"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    press(&mut app, KeyCode::Char('c'));
+    type_text(&mut app, "Refused");
+    ctrl(&mut app, 's');
+    assert!(matches!(&app.modal, Modal::Error(error) if error.contains("refused")), "{:?}", app.message);
+    assert_eq!(app.commit_draft, "Refused");
+    assert_eq!(git::commit_label(&repo, "HEAD").map(|label| label.ends_with("  Third")), Some(true));
+}
+
+#[test]
+fn restoring_a_file_asks_first() {
+    let repo = TestRepo::with_history();
+    repo.write("README.md", "edited\n");
+    let mut app = app_on(&repo);
+    app.focus_left(Pane::Changes);
+    press(&mut app, KeyCode::Char('d'));
+    assert!(matches!(&app.modal, Modal::Confirm(Confirm::Restore(path)) if path == "README.md"));
+    press(&mut app, KeyCode::Esc);
+    assert_eq!(repo.read("README.md").as_deref(), Some("edited\n"));
+    press(&mut app, KeyCode::Char('d'));
+    press(&mut app, KeyCode::Enter);
+    assert_eq!(repo.read("README.md").as_deref(), Some("# Test\n\nMore.\n"));
+    assert!(screen(&mut app).contains("No changes"));
+}
+
+#[test]
+fn discarding_everything_asks_first_and_takes_new_files_too() {
+    let repo = TestRepo::with_history();
+    repo.write("README.md", "edited\n");
+    repo.write("new.txt", "new\n");
+    let mut app = app_on(&repo);
+    app.focus_left(Pane::Changes);
+    press(&mut app, KeyCode::Char('D'));
+    assert!(matches!(app.modal, Modal::Confirm(Confirm::DiscardAll { .. })));
+    press(&mut app, KeyCode::Enter);
+    assert_eq!(git::status(&repo).unwrap(), git::Status::default());
+    assert_eq!(repo.read("new.txt"), None);
+}
+
+#[test]
+fn a_merge_conflict_shows_in_the_changes_pane_with_both_sides() {
+    let repo = TestRepo::with_history();
+    repo.conflicting_merge("clash.txt");
+    let mut app = app_on(&repo);
+    let shown = screen(&mut app);
+    assert!(shown.contains("merging"), "{shown}");
+    assert!(shown.contains("Conflicts (1)"), "{shown}");
+    app.focus_left(Pane::Changes);
+    press(&mut app, KeyCode::Enter);
+    let diff = app.view.diff().expect("the conflict's diff");
+    assert_eq!(diff.source, DiffSource::Conflict("clash.txt".to_string()));
+    assert!(diff.text().contains("<<<<<<< HEAD"));
+    assert!(screen(&mut app).contains("conflict: yours ↔ theirs"));
+    // Staging it marks it resolved.
+    repo.write("clash.txt", "both\n");
+    press(&mut app, KeyCode::Char(' '));
+    assert!(git::status(&repo).unwrap().conflicted.is_empty());
+}
+
+#[test]
+fn a_conflict_met_while_rebasing_names_its_sides_the_other_way() {
+    let repo = TestRepo::with_history();
+    repo.conflicting_merge("clash.txt");
+    repo.git(&["merge", "--abort"]);
+    repo.git(&["switch", "-q", "other"]);
+    assert!(!repo.git_may_fail(&["rebase", "main"]));
+    let mut app = app_on(&repo);
+    assert!(screen(&mut app).contains("rebasing"));
+    app.focus_left(Pane::Changes);
+    press(&mut app, KeyCode::Enter);
+    assert!(screen(&mut app).contains("conflict: upstream ↔ your commit"));
+}
+
+#[test]
+fn popping_the_stash_shown_on_the_compare_tab_closes_it_from_the_repo_tab() {
+    // #55, as it happened: a stash open on the Compare tab, popped from the
+    // graph on the Repo tab.
+    let repo = stashed();
+    let mut app = app_on(&repo);
+    let stash = git::stashes(&repo).unwrap().remove(0);
+    app.open_stash(stash.clone());
+    assert!(app.tab == Tab::Compare && app.compare.as_ref().and_then(|c| c.stash_shown()) == Some(&stash));
+    press(&mut app, KeyCode::Tab);
+    app.focus_left(Pane::Graph);
+    // The stash sits above its base, the newest commit, at the top.
+    press(&mut app, KeyCode::Char('g'));
+    press(&mut app, KeyCode::Char('g'));
+    press(&mut app, KeyCode::Char('p'));
+    assert_eq!(app.message, "Popped stash@{0}");
+    assert!(git::stashes(&repo).unwrap().is_empty());
+    assert_eq!(repo.read("README.md").as_deref(), Some("# Test\n\nStashed.\n"));
+    assert!(app.tab == Tab::Repo && app.compare.is_none());
+    assert!(screen(&mut app).contains("Changes (2)"));
+    // The Compare tab is empty, ready for another comparison.
+    press(&mut app, KeyCode::Tab);
+    assert!(app.tab == Tab::Compare && app.view.diff().is_none());
+}
+
+#[test]
+fn dropping_a_stash_asks_first() {
+    let repo = stashed();
+    let mut app = app_on(&repo);
+    let stash = git::stashes(&repo).unwrap().remove(0);
+    app.open_stash(stash);
+    press(&mut app, KeyCode::Char('d'));
+    assert!(matches!(app.modal, Modal::Confirm(Confirm::DropStash(_))));
+    press(&mut app, KeyCode::Esc);
+    assert_eq!(git::stashes(&repo).unwrap().len(), 1);
+    press(&mut app, KeyCode::Char('d'));
+    press(&mut app, KeyCode::Enter);
+    assert_eq!(app.message, "Dropped stash@{0}");
+    assert!(git::stashes(&repo).unwrap().is_empty());
+    // Dropping puts nothing back.
+    assert_eq!(git::status(&repo).unwrap(), git::Status::default());
+    assert!(app.compare.is_none());
+}
+
+#[test]
+fn applying_a_stash_keeps_it_and_its_view() {
+    let repo = stashed();
+    let mut app = app_on(&repo);
+    let stash = git::stashes(&repo).unwrap().remove(0);
+    app.open_stash(stash.clone());
+    press(&mut app, KeyCode::Char('a'));
+    assert_eq!(app.message, "Applied stash@{0}");
+    assert_eq!(git::stashes(&repo).unwrap()[0].sha, stash.sha);
+    assert_eq!(repo.read("untracked.txt").as_deref(), Some("new\n"));
+    assert!(app.tab == Tab::Compare && app.compare.is_some());
+}
+
+#[test]
+fn a_stash_s_files_open_in_its_view() {
+    let repo = stashed();
+    let mut app = app_on(&repo);
+    app.open_stash(git::stashes(&repo).unwrap().remove(0));
+    let shown = screen(&mut app);
+    assert!(shown.contains("README.md") && shown.contains("untracked.txt"), "{shown}");
+    press(&mut app, KeyCode::Enter);
+    let diff = app.view.diff().expect("the first file's diff");
+    assert!(diff.text().contains("+Stashed."), "{}", diff.text());
+}
+
+#[test]
+fn the_stash_command_lists_the_stashes_or_says_there_are_none() {
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
+    app.open_stash_picker();
+    assert!(matches!(app.modal, Modal::None));
+    assert!(app.message.starts_with("No stashes"));
+    repo.write("README.md", "changed\n");
+    repo.git(&["stash", "-q"]);
+    app.open_stash_picker();
+    assert!(matches!(&app.modal, Modal::Picker(_, PickerUse::Stash(stashes)) if stashes.len() == 1));
+}
+
+#[test]
+fn the_branches_pane_checks_out_the_branch_picked() {
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
+    app.focus_left(Pane::Branches);
+    let shown = screen(&mut app);
+    assert!(shown.contains("feature") && shown.contains("main"), "{shown}");
+    press(&mut app, KeyCode::Char('i'));
+    type_text(&mut app, "feat");
+    press(&mut app, KeyCode::Enter);
+    press(&mut app, KeyCode::Enter);
+    assert_eq!(git::current_branch(&repo).as_deref(), Some("feature"));
+    // The graph follows.
+    assert_eq!(app.graph.shown_refs(), ["feature"]);
+}
+
+#[test]
+fn comparing_two_branches_shows_what_one_has_that_the_other_lacks() {
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
+    app.start_compare("main".to_string(), "feature".to_string());
+    assert!(matches!(app.modal, Modal::None));
+    let shown = screen(&mut app);
+    assert!(shown.contains("feature.txt"), "{shown}");
+    press(&mut app, KeyCode::Enter);
+    assert!(app.view.diff().is_some_and(|diff| diff.text().contains("+new")));
+    // A ref that isn't there says so.
+    app.start_compare("main".to_string(), "no-such-branch".to_string());
+    assert!(matches!(app.modal, Modal::Error(_)));
+}
+
+#[test]
+fn changes_made_outside_gclic_show_after_a_refresh() {
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
+    assert!(screen(&mut app).contains("No changes"));
+    repo.write("elsewhere.txt", "made in another terminal\n");
+    repo.commit("Made elsewhere");
+    repo.write("README.md", "and an edit\n");
+    app.refresh();
+    let shown = screen(&mut app);
+    assert!(shown.contains("Changes (1)") && shown.contains("Made elsewhere"), "{shown}");
+}
