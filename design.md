@@ -127,7 +127,7 @@ The measuring scripts lived in the git-ignored `target/bench/`. `docs/screenshot
 - The clipboard goes through `arboard`, which works on macOS, Windows and Linux.
 - The graph's beads are the branch-drawing characters (U+F5EE to U+F60D) in Ghostty and kitty, which draw them themselves, told apart by `TERM_PROGRAM` and `TERM`. WezTerm draws them only in nightly builds (since its PR #6873, April 2025), so it isn't detected. Elsewhere they're plain `●`/`○`, whose lines don't reach them.
 - `o` opens the editor named by `$GCLIC_EDITOR`, `$VISUAL` or `$EDITOR`, with the line given the way each common editor takes it, and says so if it isn't on the `PATH`.
-- CI (`.github/workflows/ci.yml`) runs clippy and the tests on macOS and Windows. Pushing a version tag such as `v0.2.0` runs the release workflow (`release.yml`): it checks the tag against `Cargo.toml` and publishes a Windows zip as a GitHub Release.
+- The code is formatted with `cargo fmt`, at rustfmt's defaults, and CI (`.github/workflows/ci.yml`) checks it, then runs clippy and the tests on macOS and Windows. The commit that first formatted it is in `.git-blame-ignore-revs`, for `git blame` to skip. Pushing a version tag such as `v0.2.0` runs the release workflow (`release.yml`): it checks the tag against `Cargo.toml` and publishes a Windows zip as a GitHub Release.
 
 ## Decisions, and why
 
