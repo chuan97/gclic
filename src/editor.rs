@@ -188,7 +188,7 @@ impl Follow {
         }
         self.seen = Some(changed);
         let folder = std::fs::read_to_string(&self.file).ok()?;
-        let root = crate::git::repo_root_of(Path::new(folder.trim()))?;
+        let root = crate::git::Repo::discover(Path::new(folder.trim()))?.root().to_path_buf();
         let same = |a: &Path, b: &Path| match (a.canonicalize(), b.canonicalize()) {
             (Ok(a), Ok(b)) => a == b,
             _ => a == b,

@@ -2,7 +2,7 @@
 
 use crate::app::{Action, Confirm};
 use crate::file_list::{FOLDER, NAME, NAME_KEPT, file_line};
-use crate::git::{self, DiffSource, FileEntry, Status};
+use crate::git::{self, DiffSource, FileEntry, Repo, Status};
 use crate::ui;
 use anyhow::Result;
 use ratatui::Frame;
@@ -24,6 +24,7 @@ enum Section {
 }
 
 pub struct StagingPanel {
+    repo: Repo,
     status: Status,
     /// A merge, rebase or the like that stopped halfway, shown in the title.
     operation: Option<&'static str>,
@@ -32,8 +33,14 @@ pub struct StagingPanel {
 }
 
 impl StagingPanel {
-    pub fn new() -> StagingPanel {
-        StagingPanel { status: Status::default(), operation: None, cursor: ui::Cursor::default() }
+    pub fn new(repo: &Repo) -> StagingPanel {
+        StagingPanel { repo: repo.clone(), status: Status::default(), operation: None, cursor: ui::Cursor::default() }
+    }
+
+    /// Whether an untracked entry is a folder, which git lists when it holds
+    /// a repo of its own.
+    fn is_folder(&self, path: &str) -> bool {
+        self.repo.file(path).is_dir()
     }
 
     fn has_staged(&self) -> bool {
@@ -148,7 +155,7 @@ impl StagingPanel {
     /// walks down the list.
     pub fn set_status(&mut self, status: Status) {
         // Reading a few file names, so cheap enough for every refresh.
-        self.operation = git::operation_in_progress();
+        self.operation = git::operation_in_progress(&self.repo);
         let previous = self
             .selection()
             .map(|(section, entry)| (section, entry.path.clone()));
@@ -172,7 +179,7 @@ impl StagingPanel {
     }
 
     pub fn refresh(&mut self) -> Result<()> {
-        self.set_status(git::status()?);
+        self.set_status(git::status(&self.repo)?);
         Ok(())
     }
 
@@ -186,8 +193,8 @@ impl StagingPanel {
                 };
             }
             KeyCode::Char(' ') => return self.toggle_stage(),
-            KeyCode::Char('a') => return Action::after_change(git::stage_all()),
-            KeyCode::Char('A') => return Action::after_change(git::unstage_all()),
+            KeyCode::Char('a') => return Action::after_change(git::stage_all(&self.repo)),
+            KeyCode::Char('A') => return Action::after_change(git::unstage_all(&self.repo)),
             KeyCode::Char('d') => return self.ask_to_restore(),
             KeyCode::Char('D') => return self.ask_to_discard_all(),
             KeyCode::Char('c') => {
@@ -212,9 +219,9 @@ impl StagingPanel {
 
     fn toggle_stage(&self) -> Action {
         match self.selection() {
-            Some((Section::Staged, entry)) => Action::after_change(git::unstage(&entry.path)),
+            Some((Section::Staged, entry)) => Action::after_change(git::unstage(&self.repo, &entry.path)),
             // Staging a conflicted file is how git marks it resolved.
-            Some((Section::Conflicts | Section::Changes, entry)) => Action::after_change(git::stage(&entry.path)),
+            Some((Section::Conflicts | Section::Changes, entry)) => Action::after_change(git::stage(&self.repo, &entry.path)),
             None => Action::None,
         }
     }
@@ -222,14 +229,14 @@ impl StagingPanel {
     /// Whether d can restore the selected file: a change not yet staged, other
     /// than a submodule, which restoring doesn't handle.
     fn can_restore(&self) -> bool {
-        matches!(self.selection(), Some((Section::Changes, entry)) if !is_folder(&entry.path))
+        matches!(self.selection(), Some((Section::Changes, entry)) if !self.is_folder(&entry.path))
     }
 
     /// What D would discard: as d does it, file by file, the changed files to
     /// restore and the untracked ones to delete. Submodules are left to git,
     /// and conflicts and staged changes aren't in the list.
     fn discardable(&self) -> (Vec<String>, Vec<String>) {
-        let files = self.status.unstaged.iter().filter(|entry| !is_folder(&entry.path));
+        let files = self.status.unstaged.iter().filter(|entry| !self.is_folder(&entry.path));
         let (delete, restore): (Vec<&FileEntry>, Vec<&FileEntry>) = files.partition(|entry| entry.status == '?');
         let paths = |entries: Vec<&FileEntry>| entries.into_iter().map(|entry| entry.path.clone()).collect();
         (paths(restore), paths(delete))
@@ -253,7 +260,7 @@ impl StagingPanel {
             ),
             // git lists a submodule, or a repo nested inside this one, as a
             // folder. Restoring one isn't a plain restore, so it's left to git.
-            Some((Section::Changes, entry)) if is_folder(&entry.path) => Action::Message(format!(
+            Some((Section::Changes, entry)) if self.is_folder(&entry.path) => Action::Message(format!(
                 "{} is a submodule or a nested repo: reset it with git, e.g. git submodule update",
                 entry.path.trim_end_matches('/')
             )),
@@ -328,10 +335,6 @@ impl StagingPanel {
     }
 }
 
-fn is_folder(path: &str) -> bool {
-    std::path::Path::new(path).is_dir()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -345,6 +348,7 @@ mod tests {
 
     fn panel(staged: &[&str], unstaged: &[&str], selected: usize) -> StagingPanel {
         let mut panel = StagingPanel {
+            repo: git::gclic_repo(),
             status: Status { staged: entries(staged), unstaged: entries(unstaged), ..Status::default() },
             operation: None,
             cursor: ui::Cursor::default(),

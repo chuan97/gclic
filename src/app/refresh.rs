@@ -21,9 +21,9 @@ impl App {
     /// their time is waiting for git. The graph's colours wait for the branch
     /// list, which the Branches pane fetches.
     pub(super) fn reload_panels(&mut self) -> Result<()> {
-        let App { branches, staging, graph, compare, .. } = self;
+        let App { repo, branches, staging, graph, compare, .. } = self;
         let (fingerprint, results) = thread::scope(|scope| {
-            let fingerprint = scope.spawn(git::refs_fingerprint);
+            let fingerprint = scope.spawn(|| git::refs_fingerprint(repo));
             let staged = scope.spawn(|| staging.refresh());
             let graphed = scope.spawn(|| graph.refresh());
             let compared = scope.spawn(|| compare.as_mut().map_or(Ok(()), |c| c.refresh()));
@@ -58,8 +58,7 @@ impl App {
         // Not while a popup or the command line is open, which switching
         // repos would throw away: it waits for the next check after it.
         if matches!(self.modal, Modal::None)
-            && let Ok(current) = std::env::current_dir()
-            && let Some(root) = self.follow.as_mut().and_then(|follow| follow.moved_to(&current))
+            && let Some(root) = self.follow.as_mut().and_then(|follow| follow.moved_to(self.repo.root()))
         {
             self.switch_repo(&root, false);
             let name = root.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
@@ -82,7 +81,7 @@ impl App {
             }
         }
         if !alive {
-            self.worker = Worker::start();
+            self.worker = Worker::start(&self.repo);
             self.message = "The background worker stopped, so it was restarted".to_string();
         }
         any
@@ -198,7 +197,7 @@ impl App {
                 None => self.view.close_diff(),
             }
         } else if let Some(diff) = self.view.diff_mut() {
-            let result = diff.reload();
+            let result = diff.reload(&self.repo);
             self.report(result);
         }
     }
@@ -214,7 +213,7 @@ impl App {
             return;
         };
         if details.sha() != sha {
-            match git::commit_details(sha) {
+            match git::commit_details(&self.repo, sha) {
                 Ok(details) => self.view.preview = Preview::Details(DetailsPane::new(details)),
                 Err(error) => self.message = error.to_string(),
             }
