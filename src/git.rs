@@ -39,6 +39,14 @@ impl Repo {
         self.root.join(path)
     }
 
+    /// For tests of what runs no git: a repo that isn't there, so a git call
+    /// that slips in fails rather than reads some other repo.
+    #[cfg(test)]
+    pub fn nowhere() -> Repo {
+        let root = std::env::temp_dir().join("gclic-no-repo-here");
+        Repo { git_dir: root.join(".git"), root }
+    }
+
     /// A git command run in the repo's root.
     fn command(&self, args: &[&str]) -> Command {
         let mut command = command(args);
@@ -140,12 +148,6 @@ impl DiffSource {
             DiffSource::Commit { path, .. } | DiffSource::Refs { path, .. } | DiffSource::Stash { path, .. } => path,
         }
     }
-}
-
-/// gclic's own repo, for tests that read its history.
-#[cfg(test)]
-pub fn gclic_repo() -> Repo {
-    Repo::discover(Path::new(env!("CARGO_MANIFEST_DIR"))).expect("the tests run in gclic's repo")
 }
 
 /// A git command as gclic runs its own, in no repo in particular: `Repo`
@@ -912,6 +914,7 @@ pub fn changed_files(repo: &Repo, a: &str, b: &str) -> Result<Vec<FileEntry>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_repo::TestRepo;
 
     fn entry(status: char, path: &str) -> FileEntry {
         FileEntry { status, path: path.to_string(), ..Default::default() }
@@ -1006,59 +1009,54 @@ mod tests {
         assert!(branches[1].is_remote);
     }
 
-    // These run against gclic's own repo, comparing the quick answers with
+    // These run on repos made for them, comparing the quick answers with
     // what git itself says.
 
     #[test]
     fn a_repo_is_found_from_any_folder_inside_it() {
-        let folder = std::env::temp_dir().join(format!("gclic-discover-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&folder);
-        std::fs::create_dir_all(folder.join("deep/er")).unwrap();
-        Command::new("git").args(["init", "-q"]).current_dir(&folder).status().unwrap();
-        // Compared canonically, as Windows writes the same folder two ways:
-        // `C:/…` from git, `\\?\C:\…` from canonicalize.
-        let repo = Repo::discover(&folder.join("deep/er")).unwrap();
-        assert_eq!(repo.root().canonicalize().ok(), folder.canonicalize().ok());
-        assert_eq!(repo.git_dir.canonicalize().ok(), folder.join(".git").canonicalize().ok());
-        let _ = std::fs::remove_dir_all(&folder);
+        let made = TestRepo::new();
+        made.write("deep/er/file", "");
+        assert_eq!(Repo::discover(&made.file("deep/er")).as_ref(), Some(&made.repo));
+        assert!(made.git_dir.ends_with(".git"));
         assert_eq!(Repo::discover(&std::env::temp_dir().join("gclic-no-such-folder")), None);
     }
 
     #[test]
     fn current_branch_agrees_with_git() {
-        let repo = &gclic_repo();
-        let from_git = try_run(repo, &["symbolic-ref", "--short", "-q", "HEAD"]);
-        assert_eq!(current_branch(repo), from_git);
+        let repo = TestRepo::with_history();
+        let from_git = try_run(&repo, &["symbolic-ref", "--short", "-q", "HEAD"]);
+        assert_eq!(current_branch(&repo), from_git);
+        assert_eq!(current_branch(&repo).as_deref(), Some("main"));
     }
 
     #[test]
     fn resolving_several_refs_at_once_matches_one_at_a_time() {
-        let repo = &gclic_repo();
-        let refs = ["HEAD".to_string(), "HEAD~1".to_string()];
-        let expected: Vec<_> = refs.iter().map(|r| resolve(repo, r)).collect();
+        let repo = TestRepo::with_history();
+        let refs = ["HEAD".to_string(), "HEAD~1".to_string(), "feature".to_string()];
+        let expected: Vec<_> = refs.iter().map(|r| resolve(&repo, r)).collect();
         assert!(expected.iter().all(Option::is_some));
-        assert_eq!(resolve_all(repo, &refs), expected);
+        assert_eq!(resolve_all(&repo, &refs), expected);
+        assert_eq!(expected[1].as_deref(), Some(repo.sha("HEAD~1").as_str()));
     }
 
     #[test]
     fn a_missing_ref_resolves_to_nothing_without_losing_the_others() {
-        let repo = &gclic_repo();
+        let repo = TestRepo::with_history();
         let refs = ["HEAD".to_string(), "no-such-branch-here".to_string(), "-x".to_string()];
-        let shas = resolve_all(repo, &refs);
-        assert_eq!(shas[0], resolve(repo, "HEAD"));
+        let shas = resolve_all(&repo, &refs);
+        assert_eq!(shas[0], Some(repo.sha("HEAD")));
         assert_eq!(shas[1..], [None, None]);
     }
 
     #[test]
     fn a_whole_file_diff_holds_every_line_of_the_file() {
-        let repo = &gclic_repo();
-        // The first commit's Cargo.toml was edited later, so a diff against it
-        // has changes, and unchanged lines that only a whole-file diff shows.
-        let first = log(repo, &["HEAD".to_string()], 10_000).unwrap().pop().unwrap();
-        let source = DiffSource::Refs { a: first.sha, b: "HEAD".to_string(), path: "Cargo.toml".to_string() };
-        let changes = diff(repo, &source, false).unwrap();
-        let whole = diff(repo, &source, true).unwrap();
-        let lines_now = run(repo, &["show", "HEAD:Cargo.toml"]).unwrap().lines().count();
+        // The first commit's src/main.rs was edited later, so a diff against
+        // it has changes, and unchanged lines that only a whole-file diff shows.
+        let repo = TestRepo::with_history();
+        let source = DiffSource::Refs { a: repo.sha("main~2"), b: "HEAD".to_string(), path: "src/main.rs".to_string() };
+        let changes = diff(&repo, &source, false).unwrap();
+        let whole = diff(&repo, &source, true).unwrap();
+        let lines_now = repo.read("src/main.rs").unwrap().lines().count();
         let shown = |diff: &str| {
             let new_side = |l: &&str| l.starts_with(' ') || (l.starts_with('+') && !l.starts_with("+++"));
             diff.lines().filter(new_side).count()
@@ -1069,20 +1067,21 @@ mod tests {
 
     #[test]
     fn both_versions_of_a_file_come_back() {
-        let repo = &gclic_repo();
-        let source = DiffSource::Commit { sha: "HEAD".to_string(), path: "Cargo.toml".to_string() };
-        let (old, new) = file_versions(repo, &source);
-        assert!(old.is_some_and(|text| text.contains("[package]")));
-        assert!(new.is_some_and(|text| text.contains("[package]")));
+        // The second commit changes src/main.rs.
+        let repo = TestRepo::with_history();
+        let source = DiffSource::Commit { sha: repo.sha("main~1"), path: "src/main.rs".to_string() };
+        let (old, new) = file_versions(&repo, &source);
+        assert_eq!(old.as_deref(), Some("fn main() {\n    println!(\"one\");\n}\n"));
+        assert!(new.is_some_and(|text| text.contains("let n = 2;")));
     }
 
     #[test]
     fn a_commit_s_files_come_with_their_lines() {
-        let repo = &gclic_repo();
-        // The latest commit of gclic's own history.
-        let files = commit_files(repo, "HEAD").unwrap();
-        assert!(!files.is_empty());
-        assert!(files.iter().all(|file| file.lines != Lines::Unknown), "{files:?}");
+        let repo = TestRepo::with_history();
+        let files = commit_files(&repo, "HEAD").unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].path, "README.md");
+        assert_eq!(files[0].lines, Lines::Counted { added: 2, removed: 0 });
     }
 
     #[test]

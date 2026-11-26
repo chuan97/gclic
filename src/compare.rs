@@ -221,7 +221,7 @@ mod tests {
             FileEntry { status: 'A', path: "new".to_string(), ..Default::default() },
         ];
         ComparePanel {
-            repo: git::gclic_repo(),
+            repo: Repo::nowhere(),
             subject: Subject::Refs {
                 from: "main".to_string(),
                 to: "feature".to_string(),
@@ -285,7 +285,7 @@ mod tests {
             FileEntry { status: 'M', path: "edited".to_string(), lines: Lines::Counted { added: 4, removed: 1 } },
             FileEntry { status: '?', path: "new".to_string(), ..Default::default() },
         ];
-        ComparePanel { repo: git::gclic_repo(), files: FileList::stash(stash.sha.clone(), files), subject: Subject::Stash(stash) }
+        ComparePanel { repo: Repo::nowhere(), files: FileList::stash(stash.sha.clone(), files), subject: Subject::Stash(stash) }
     }
 
     #[test]

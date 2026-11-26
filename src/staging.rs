@@ -348,7 +348,7 @@ mod tests {
 
     fn panel(staged: &[&str], unstaged: &[&str], selected: usize) -> StagingPanel {
         let mut panel = StagingPanel {
-            repo: git::gclic_repo(),
+            repo: Repo::nowhere(),
             status: Status { staged: entries(staged), unstaged: entries(unstaged), ..Status::default() },
             operation: None,
             cursor: ui::Cursor::default(),

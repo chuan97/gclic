@@ -18,10 +18,7 @@ jobs:
         os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      # Some tests read gclic's own history, so all of it is fetched.
       - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy

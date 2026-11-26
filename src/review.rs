@@ -380,7 +380,7 @@ mod tests {
     #[test]
     fn conflicts_take_no_comments() {
         let anchor = Some(Anchor { side: Side::New, number: 1, text: String::new() });
-        assert!(Comment::new(&git::gclic_repo(), DiffSource::Conflict("a.rs".to_string()), anchor, "x".to_string()).is_none());
+        assert!(Comment::new(&Repo::nowhere(), DiffSource::Conflict("a.rs".to_string()), anchor, "x".to_string()).is_none());
     }
 
     #[test]

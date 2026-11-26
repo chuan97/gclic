@@ -18,6 +18,8 @@ mod review;
 mod running;
 mod staging;
 mod terminal;
+#[cfg(test)]
+mod test_repo;
 mod theme;
 mod ui;
 mod worker;

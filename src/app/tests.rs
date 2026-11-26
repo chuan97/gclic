@@ -2,8 +2,12 @@ use super::*;
 use super::layout::{accent_bar, fit_folder};
 use super::popups::render_text_box;
 use super::status_line::hint_spans;
+use crate::test_repo::TestRepo;
 
-// These build a whole app on gclic's own repo.
+/// A whole app on `repo`, which must outlive it.
+fn app_on(repo: &TestRepo) -> App {
+    App::new(repo.repo.clone(), PathBuf::new())
+}
 
 fn press(app: &mut App, code: KeyCode) {
     app.handle_key(KeyEvent::from(code));
@@ -32,7 +36,8 @@ fn the_project_shortens_its_folder_before_its_name() {
 
 #[test]
 fn each_tab_keeps_its_own_focus() {
-    let mut app = App::new(git::gclic_repo(), PathBuf::new());
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
     app.focus_left(Pane::Graph);
     press(&mut app, KeyCode::Tab);
     assert!(app.tab == Tab::Compare && app.view.focused(Pane::Compare));
@@ -42,7 +47,8 @@ fn each_tab_keeps_its_own_focus() {
 
 #[test]
 fn h_and_l_still_move_on_the_repo_tab_with_a_comparison_kept() {
-    let mut app = App::new(git::gclic_repo(), PathBuf::new());
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
     app.start_compare("HEAD~1".to_string(), "HEAD".to_string());
     press(&mut app, KeyCode::Tab);
     assert!(app.tab == Tab::Repo && app.compare.is_some());
@@ -55,7 +61,8 @@ fn h_and_l_still_move_on_the_repo_tab_with_a_comparison_kept() {
 
 #[test]
 fn gg_goes_to_the_top_of_a_picker_and_a_single_g_does_not() {
-    let mut app = App::new(git::gclic_repo(), PathBuf::new());
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
     app.focus_left(Pane::Graph);
     press(&mut app, KeyCode::Char('b'));
     let row = |app: &App| match &app.modal {
@@ -115,7 +122,8 @@ fn assert_hints_in_help(app: &App) {
 
 #[test]
 fn every_hint_is_in_the_help() {
-    let mut app = App::new(git::gclic_repo(), PathBuf::new());
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
     for pane in [Pane::Branches, Pane::Changes, Pane::Graph] {
         app.focus_left(pane);
         assert_hints_in_help(&app);
@@ -142,7 +150,8 @@ fn every_hint_is_in_the_help() {
 
 #[test]
 fn confirming_the_default_branches_keeps_the_default_view() {
-    let mut app = App::new(git::gclic_repo(), PathBuf::new());
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
     let shown = app.graph.shown_refs();
     assert!(app.graph.is_default_view() && !shown.is_empty());
     app.use_picked(PickerUse::GraphBranches, shown.into_iter().rev().collect());
@@ -154,7 +163,8 @@ fn confirming_the_default_branches_keeps_the_default_view() {
 
 #[test]
 fn esc_on_an_empty_compare_tab_goes_back_to_repo() {
-    let mut app = App::new(git::gclic_repo(), PathBuf::new());
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
     press(&mut app, KeyCode::Tab);
     press(&mut app, KeyCode::Esc);
     assert!(app.tab == Tab::Repo);
@@ -162,7 +172,8 @@ fn esc_on_an_empty_compare_tab_goes_back_to_repo() {
 
 #[test]
 fn c_on_the_compare_tab_asks_for_refs() {
-    let mut app = App::new(git::gclic_repo(), PathBuf::new());
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
     press(&mut app, KeyCode::Tab);
     press(&mut app, KeyCode::Char('c'));
     assert!(matches!(app.modal, Modal::Picker(_, PickerUse::CompareA)));
@@ -170,7 +181,8 @@ fn c_on_the_compare_tab_asks_for_refs() {
 
 #[test]
 fn starting_a_comparison_switches_to_its_tab() {
-    let mut app = App::new(git::gclic_repo(), PathBuf::new());
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
     app.start_compare("HEAD~1".to_string(), "HEAD".to_string());
     assert!(app.tab == Tab::Compare && app.view.focused(Pane::Compare));
     assert!(app.compare.as_ref().is_some_and(|c| c.refs() == "HEAD~1 → HEAD"));
@@ -187,7 +199,8 @@ fn starting_a_comparison_switches_to_its_tab() {
 
 #[test]
 fn closing_a_comparison_from_the_repo_tab_leaves_the_repo_tab_alone() {
-    let mut app = App::new(git::gclic_repo(), PathBuf::new());
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
     app.start_compare("HEAD~1".to_string(), "HEAD".to_string());
     app.show_diff(last_commit_diff());
     press(&mut app, KeyCode::Tab);
@@ -207,11 +220,9 @@ fn type_text(app: &mut App, text: &str) {
 
 #[test]
 fn a_comment_opens_the_review_tab_and_deleting_the_last_closes_it() {
-    let mut app = App::new(git::gclic_repo(), PathBuf::new());
-    // A file the last commit changed, in its diff.
-    let output = std::process::Command::new("git").args(["diff", "--name-only", "HEAD~1", "HEAD"]).output().unwrap();
-    let path = String::from_utf8_lossy(&output.stdout).lines().next().unwrap().to_string();
-    let source = DiffSource::Refs { a: "HEAD~1".to_string(), b: "HEAD".to_string(), path };
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
+    let source = last_commit_diff();
     app.show_diff(source.clone());
     app.focus_preview();
     press(&mut app, KeyCode::Char('j'));
@@ -248,16 +259,15 @@ fn a_comment_opens_the_review_tab_and_deleting_the_last_closes_it() {
     assert!(app.tab == Tab::Repo && !app.tabs().contains(&Tab::Review));
 }
 
-/// A diff of a file the last commit changed, as `a_comment_opens…` uses.
+/// The diff of the file the last commit of `TestRepo::with_history` changed.
 fn last_commit_diff() -> DiffSource {
-    let output = std::process::Command::new("git").args(["diff", "--name-only", "HEAD~1", "HEAD"]).output().unwrap();
-    let path = String::from_utf8_lossy(&output.stdout).lines().next().unwrap().to_string();
-    DiffSource::Refs { a: "HEAD~1".to_string(), b: "HEAD".to_string(), path }
+    DiffSource::Refs { a: "HEAD~1".to_string(), b: "HEAD".to_string(), path: "README.md".to_string() }
 }
 
 #[test]
 fn e_switches_the_diffs_on_every_tab() {
-    let mut app = App::new(git::gclic_repo(), PathBuf::new());
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
     app.show_diff(last_commit_diff());
     app.start_compare("HEAD~1".to_string(), "HEAD".to_string());
     app.show_diff(last_commit_diff());
@@ -273,7 +283,8 @@ fn e_switches_the_diffs_on_every_tab() {
 
 #[test]
 fn gg_goes_to_the_top_and_g_then_another_key_does_nothing() {
-    let mut app = App::new(git::gclic_repo(), PathBuf::new());
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
     app.show_diff(last_commit_diff());
     app.focus_preview();
     press(&mut app, KeyCode::Char('j'));
@@ -288,7 +299,8 @@ fn gg_goes_to_the_top_and_g_then_another_key_does_nothing() {
 
 #[test]
 fn gc_from_a_list_needs_n_to_show_the_active_line_and_gc_upper_takes_the_file() {
-    let mut app = App::new(git::gclic_repo(), PathBuf::new());
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
     app.focus_left(Pane::Graph);
     app.show_diff(last_commit_diff());
     press(&mut app, KeyCode::Char('g'));
@@ -324,7 +336,8 @@ fn a_long_draft_keeps_its_end_in_view() {
 
 #[test]
 fn clearing_the_review_asks_first() {
-    let mut app = App::new(git::gclic_repo(), PathBuf::new());
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
     let anchor = Some(Anchor { side: review::Side::New, number: 1, text: "x".to_string() });
     let source = DiffSource::Unstaged("a.rs".to_string());
     app.review.set(Comment::new(&app.repo, source, anchor, "y".to_string()).unwrap());

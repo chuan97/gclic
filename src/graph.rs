@@ -992,7 +992,7 @@ mod tests {
         let commits: Vec<Commit> = (0..COMMIT_LIMIT)
             .map(|i| commit(&i.to_string(), &[&(i + 1).to_string()]))
             .collect();
-        let mut graph = GraphPanel::new(&git::gclic_repo());
+        let mut graph = GraphPanel::new(&Repo::nowhere());
         (graph.commits, graph.stashes) = with_stashes(commits, vec![stash("s0", "3")]);
         assert!(graph.has_more_history());
         graph.commits.pop();
@@ -1279,7 +1279,7 @@ mod tests {
 
     /// A panel showing `shas` as a linear history, with the given commits expanded.
     fn panel_with_expanded(shas: &[&str], open: &[&str], files: &[&str]) -> GraphPanel {
-        let mut panel = GraphPanel::new(&git::gclic_repo());
+        let mut panel = GraphPanel::new(&Repo::nowhere());
         panel.commits = shas.iter().map(|sha| commit(sha, &[])).collect();
         for sha in open {
             panel.expanded.push(Expanded {
