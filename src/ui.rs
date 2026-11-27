@@ -21,9 +21,40 @@ pub fn selected_bg() -> Color {
             .and_then(|value| crate::accent::parse_hex(value.trim()));
         match editor {
             Some((r, g, b)) => Color::Rgb(r, g, b),
-            None => Color::Indexed(237),
+            None => GREY_BG,
         }
     })
+}
+
+/// gclic's own selection, and the diff's active line everywhere, which a
+/// list's selection colour would drown in a colour scheme's.
+pub const GREY_BG: Color = Color::Indexed(237);
+
+/// What a pane's border, git's changes and errors are drawn in: the editor's
+/// colours for them inside Neovim, or gclic's own.
+pub fn border(focused: bool) -> Color {
+    let theme = crate::theme::ui_colors();
+    if focused {
+        theme.focused_border.unwrap_or(Color::Cyan)
+    } else {
+        theme.border.unwrap_or(DIM)
+    }
+}
+
+pub fn added() -> Color {
+    crate::theme::ui_colors().added.unwrap_or(Color::Green)
+}
+
+pub fn removed() -> Color {
+    crate::theme::ui_colors().removed.unwrap_or(Color::Red)
+}
+
+pub fn error() -> Color {
+    crate::theme::ui_colors().error.unwrap_or(Color::Red)
+}
+
+pub fn warning() -> Color {
+    crate::theme::ui_colors().warning.unwrap_or(Color::Yellow)
 }
 
 pub const DIM: Color = Color::DarkGray;
@@ -79,7 +110,7 @@ pub fn line_count_spans(lines: Lines) -> Vec<Span<'static>> {
     if added > 0 {
         spans.push(Span::styled(
             format!("+{added}"),
-            Style::default().fg(Color::Green),
+            Style::default().fg(self::added()),
         ));
     }
     if removed > 0 {
@@ -88,7 +119,7 @@ pub fn line_count_spans(lines: Lines) -> Vec<Span<'static>> {
         }
         spans.push(Span::styled(
             format!("−{removed}"),
-            Style::default().fg(Color::Red),
+            Style::default().fg(self::removed()),
         ));
     }
     spans
@@ -336,7 +367,7 @@ pub fn key_hints(hints: &[(&str, &str)], danger: Option<&str>) -> Line<'static> 
             spans.push(Span::styled(" · ", Style::default().fg(DIM)));
         }
         let key_style = if danger == Some(*action) {
-            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+            Style::default().fg(error()).add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(KEY)
         };
@@ -352,7 +383,7 @@ pub fn key_hints(hints: &[(&str, &str)], danger: Option<&str>) -> Line<'static> 
 }
 
 pub fn panel(title: String, focused: bool) -> Block<'static> {
-    let color = if focused { Color::Cyan } else { DIM };
+    let color = border(focused);
     Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
@@ -474,9 +505,20 @@ pub fn centered(area: Rect, width: u16, height: u16) -> Rect {
     }
 }
 
-/// The colour of a file's status letter, as VS Code's Dark Modern theme
-/// colours files in its git panel. The letters stay git's own.
+/// The colour of a file's status letter: the editor's git colours inside
+/// Neovim, or as VS Code's Dark Modern theme colours files in its git panel.
+/// The letters stay git's own.
 pub fn status_color(status: char) -> Color {
+    let theme = crate::theme::ui_colors();
+    let editor = match status {
+        'A' | '?' => theme.added,
+        'D' => theme.removed,
+        'U' => theme.error,
+        _ => theme.changed,
+    };
+    if let Some(color) = editor {
+        return color;
+    }
     match status {
         'A' => Color::Rgb(0x81, 0xB8, 0x8B), // added
         '?' => Color::Rgb(0x73, 0xC9, 0x91), // untracked

@@ -83,6 +83,12 @@ check("one too close to the background is passed over", gc._selected_bg() == "#2
 vim.api.nvim_set_hl(0, "PmenuSel", {})
 vim.api.nvim_set_hl(0, "Visual", {})
 check("with only a faint CursorLine, gclic keeps its grey", gc._selected_bg() == nil)
+-- The interface's colours, by group, for gclic to pick what each is for.
+vim.api.nvim_set_hl(0, "WinSeparator", { fg = "#444444" })
+vim.api.nvim_set_hl(0, "DiagnosticError", { fg = "#f44747" })
+local ui = gc._ui_colors()
+check("the interface's colours name their groups", ui:find("WinSeparator:fg=#444444", 1, true) ~= nil
+  and ui:find("DiagnosticError:fg=#f44747", 1, true) ~= nil and ui:find("Normal:fg=#d4d4d4", 1, true) ~= nil)
 
 -- Opening: the sidebar at the left, 40 wide, in focus, the code beside it.
 gc.toggle()
