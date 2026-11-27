@@ -118,6 +118,10 @@ check("the float has the focus", vim.api.nvim_get_current_win() == f)
 wait("the diff shows right of the panes", function()
   return screen():find("three") ~= nil
 end)
+-- The panes keep the sidebar's 40 columns beside it: the diff's pane starts
+-- at the 41st.
+local first_row = vim.api.nvim_buf_get_lines(term(), 1, 2, false)[1] or ""
+check("the panes stay 40 wide beside the diff", vim.fn.strcharpart(first_row, 40, 1) == "╭")
 
 -- Resizing the editor resizes the float.
 vim.o.columns = 140

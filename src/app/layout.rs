@@ -33,11 +33,15 @@ impl App {
                 } else {
                     DIFF_PERCENT
                 };
-                let [left, right] = Layout::horizontal([
-                    Constraint::Percentage(100 - diff_percent),
-                    Constraint::Percentage(diff_percent),
-                ])
-                .areas(main);
+                let panes = match self.panes_width {
+                    // Set, as Neovim's plugin does: never more than half,
+                    // leaving the diff room.
+                    Some(width) if self.tab == Tab::Repo => {
+                        Constraint::Length(width.min(main.width / 2))
+                    }
+                    _ => Constraint::Percentage(100 - diff_percent),
+                };
+                let [left, right] = Layout::horizontal([panes, Constraint::Min(0)]).areas(main);
                 self.render_left(frame, left);
                 self.render_preview(frame, right);
             }

@@ -1726,3 +1726,23 @@ fn z_only_makes_gclic_bigger_and_back_from_the_biggest() {
     assert!(!app.view.has_preview());
     assert_eq!(app.layout_change(), Some(true));
 }
+
+#[test]
+fn the_panes_take_the_width_they_re_given_beside_a_diff() {
+    let (_repo, mut app) = in_sidebar();
+    press(&mut app, KeyCode::Enter);
+    // gclic's fifth, on its own.
+    let fifth = screen_at(&mut app, 200, 30);
+    assert!(columns(&fifth, 1, 40).starts_with("╭ README.md"), "{fifth}");
+    // As wide as the sidebar, when the plugin says so.
+    app.panes_width = Some(50);
+    let given = screen_at(&mut app, 200, 30);
+    assert!(columns(&given, 1, 50).starts_with("╭ README.md"), "{given}");
+    // Never more than half, leaving the diff room.
+    app.panes_width = Some(150);
+    let capped = screen_at(&mut app, 200, 30);
+    assert!(
+        columns(&capped, 1, 100).starts_with("╭ README.md"),
+        "{capped}"
+    );
+}

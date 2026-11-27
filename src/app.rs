@@ -353,6 +353,8 @@ pub struct App {
     /// The user went over the whole editor with z, and stays there until z
     /// or ctrl-g goes back, rather than when the diff closes.
     chose_full: bool,
+    /// The Repo tab's panes' width beside a diff, if set, in columns.
+    panes_width: Option<u16>,
     /// What `o` does, "open in nvim", naming the editor it opens.
     editor_hint: String,
     /// Where `:cd` looks for repos. It stays put as the repo changes, so the
@@ -385,6 +387,7 @@ impl App {
             sidebar: editor::sidebar_width(),
             asked_full: false,
             chose_full: false,
+            panes_width: editor::panes_width(),
             editor_hint: match editor::parent_nvim() {
                 Some(_) => "open in nvim".to_string(),
                 None => format!("open in {}", editor::name(&editor::setting())),
