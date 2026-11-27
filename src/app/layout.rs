@@ -94,7 +94,7 @@ impl App {
             };
             if tab == self.tab {
                 let style = Style::default()
-                    .fg(Color::Cyan)
+                    .fg(ui::accent())
                     .bg(ui::selected_bg())
                     .add_modifier(Modifier::BOLD);
                 spans.push(Span::styled(label, style));
@@ -112,7 +112,7 @@ impl App {
             frame.render_widget(tabs, area);
             return;
         }
-        let name_color = Color::Cyan;
+        let name_color = ui::accent();
         // Two columns at least between the tabs and the project.
         let room = (area.width as usize).saturating_sub(tabs.width() + 2);
         let (folder, name) = &self.project;

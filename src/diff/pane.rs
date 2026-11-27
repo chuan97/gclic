@@ -856,7 +856,7 @@ impl DiffPane {
             let heading = match row {
                 Row::Heading(text) => Some(Line::styled(
                     text.as_str(),
-                    Style::default().fg(Color::Cyan),
+                    Style::default().fg(ui::accent()),
                 )),
                 Row::Hunk {
                     line,
@@ -1126,7 +1126,7 @@ fn finish_line<'a>(
 fn hunk_heading(line: usize, added: usize, removed: usize, context: &str) -> Line<'_> {
     let mut spans = vec![Span::styled(
         format!("line {line}"),
-        Style::default().fg(Color::Cyan),
+        Style::default().fg(ui::accent()),
     )];
     let counts = ui::line_count_spans(git::Lines::Counted { added, removed });
     if !counts.is_empty() {

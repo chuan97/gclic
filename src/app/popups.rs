@@ -350,7 +350,7 @@ impl App {
                 let hints = ui::key_hints(&[("enter", action), ("esc", "cancel")], Some(action));
                 // The borders, plus a row in case a long path or ref wraps.
                 let height = body.len() as u16 + 3;
-                render_popup(frame, area, title, body, hints, (56, height), Color::Cyan);
+                render_popup(frame, area, title, body, hints, (56, height), ui::accent());
             }
             Modal::ConfirmQuit => {
                 // Quitting loses whatever was open: the graph's branches, the
@@ -374,7 +374,7 @@ impl App {
                     body,
                     hints,
                     (44, height),
-                    Color::Cyan,
+                    ui::accent(),
                 );
             }
             Modal::CommentBox(comment) => {
@@ -525,7 +525,7 @@ pub(super) fn render_text_box(
     let popup = ui::centered(area, width, height);
     frame.render_widget(Clear, popup);
     let block = ui::panel(title.to_string(), true)
-        .border_style(Style::default().fg(Color::Cyan))
+        .border_style(Style::default().fg(ui::accent()))
         .title_bottom(hints);
     frame.render_widget(Paragraph::new(lines.split_off(hidden)).block(block), popup);
 }

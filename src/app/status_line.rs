@@ -14,12 +14,12 @@ impl App {
         };
         // The command line takes the place of the hints, as in vim.
         if let Modal::Command(line) = &self.modal {
-            let cyan = Style::default().fg(Color::Cyan);
+            let accent = Style::default().fg(ui::accent());
             let dim = Style::default().fg(ui::DIM);
             let mut spans = vec![
-                Span::styled(":", cyan),
+                Span::styled(":", accent),
                 Span::raw(line.as_str()),
-                Span::styled("▏", cyan),
+                Span::styled("▏", accent),
             ];
             // The rest of a suggested command, after what's typed, as fish
             // shows its suggestions.

@@ -30,14 +30,22 @@ pub fn selected_bg() -> Color {
 /// list's selection colour would drown in a colour scheme's.
 pub const GREY_BG: Color = Color::Indexed(237);
 
+/// gclic's one accent, for what's focused or selected, where to type, and
+/// headings: cyan, or inside Neovim the colour its floating windows are
+/// outlined in, or its text's, so gclic reads as the editor's own.
+pub fn accent() -> Color {
+    crate::theme::ui_colors()
+        .focused_border
+        .unwrap_or(Color::Cyan)
+}
+
 /// What a pane's border, git's changes and errors are drawn in: the editor's
 /// colours for them inside Neovim, or gclic's own.
 pub fn border(focused: bool) -> Color {
-    let theme = crate::theme::ui_colors();
     if focused {
-        theme.focused_border.unwrap_or(Color::Cyan)
+        accent()
     } else {
-        theme.border.unwrap_or(DIM)
+        crate::theme::ui_colors().border.unwrap_or(DIM)
     }
 }
 

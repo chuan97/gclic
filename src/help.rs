@@ -6,7 +6,7 @@ use crate::ui;
 use ratatui::Frame;
 use ratatui::crossterm::event::KeyEvent;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
 /// A group of keys and what each does, under a heading.
@@ -207,7 +207,7 @@ impl HelpPopup {
     /// A column of sections as lines, each as wide as `width`.
     fn column(&self, sections: &[Section], width: usize) -> Vec<Line<'static>> {
         let heading = Style::default()
-            .fg(Color::Cyan)
+            .fg(ui::accent())
             .add_modifier(Modifier::BOLD);
         let key = Style::default().fg(ui::KEY);
         let mut lines = Vec::new();

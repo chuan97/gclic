@@ -368,14 +368,14 @@ impl Picker {
 
     pub fn render_query(&self, frame: &mut Frame, area: Rect) {
         let mut query = vec![
-            Span::styled("> ", Style::default().fg(Color::Cyan)),
+            Span::styled("> ", Style::default().fg(ui::accent())),
             Span::raw(self.query.as_str()),
         ];
         // Each mode says how to leave it, right where the search is: "i to
         // search" before typing, and "esc done" just past the cursor while
         // typing, moving along as the search grows.
         if self.typing {
-            query.push(Span::styled("▏", Style::default().fg(Color::Cyan)));
+            query.push(Span::styled("▏", Style::default().fg(ui::accent())));
             query.push(Span::styled(" esc done", Style::default().fg(ui::DIM)));
         } else if self.query.is_empty() {
             query.push(Span::styled("i to search", Style::default().fg(ui::DIM)));
