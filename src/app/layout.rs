@@ -229,6 +229,12 @@ pub(super) fn render_empty_compare(frame: &mut Frame, area: Rect, focused: bool)
 /// it, the folder shortened or left out where there's no room for it, and
 /// the name too, so that at least a short line shows. A column of margin at
 /// each end, as the panes have.
+/// What the colour bar's line is drawn with: the middle third of a cell,
+/// level with the name after it, and thicker than a line character, whose
+/// thickness is up to the font. Most terminals draw it themselves, to fill
+/// the cell exactly.
+pub(super) const ACCENT_LINE: &str = "🬋";
+
 pub(super) fn accent_bar(
     width: usize,
     folder: &str,
@@ -242,7 +248,7 @@ pub(super) fn accent_bar(
     let label_width = label.as_ref().map_or(0, |(folder, name)| {
         1 + folder.chars().count() + name.chars().count()
     });
-    ("━".repeat(inside - label_width), label)
+    (ACCENT_LINE.repeat(inside - label_width), label)
 }
 
 /// The folder holding the repo, ending in a separator and with `~` for the
