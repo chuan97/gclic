@@ -5,9 +5,9 @@
 --
 -- In the sidebar, the Changes pane shows a file as it's saved: the plugin
 -- counts saves in a file, named in $GCLIC_SAVED, which gclic checks twice a
--- second. enter or z on a file or commit shows its diff or details over the
--- whole editor, the sidebar's panes staying where they were, and esc, or
--- ctrl-g, goes back. gclic says which it wants, as it knows what it shows,
+-- second. enter or z on a file shows its diff over the whole editor, and i
+-- or z on a commit its details, the sidebar's panes staying where they were,
+-- and esc, or ctrl-g, goes back. gclic says which it wants, as it knows what it shows,
 -- and the plugin moves the one terminal buffer between the sidebar's split
 -- and a float, so gclic keeps its state. ctrl-g in the sidebar hides gclic,
 -- ctrl-h and ctrl-l go to the windows beside it, and the toggle shows it, or

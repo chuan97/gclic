@@ -45,6 +45,7 @@ impl DetailsPane {
                 Span::styled("date   ", label),
                 Span::raw(details.date.as_str()),
             ]),
+            Line::from(changes_spans(details)),
             Line::default(),
         ];
         // Terminals can't draw tabs in a cell, and the widget would drop them.
@@ -77,6 +78,25 @@ impl DetailsPane {
     }
 }
 
+/// `changes 3 files  +42 −7`: how big the commit is, in the graph's colours,
+/// as there's no room for its files beside the panes in a sidebar.
+fn changes_spans(details: &CommitDetails) -> Vec<Span<'static>> {
+    let label = Style::default().fg(ui::DIM);
+    let mut spans = vec![Span::styled("changes ", label)];
+    if details.files == 0 {
+        spans.push(Span::styled("none", label));
+        return spans;
+    }
+    let noun = if details.files == 1 { "file" } else { "files" };
+    spans.push(Span::raw(format!("{} {noun}", details.files)));
+    let counts = ui::line_count_spans(details.lines);
+    if !counts.is_empty() {
+        spans.push(Span::raw("  "));
+        spans.extend(counts);
+    }
+    spans
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -90,6 +110,11 @@ mod tests {
             author: "Ann".to_string(),
             date: "today".to_string(),
             message: message.to_string(),
+            files: 2,
+            lines: git::Lines::Counted {
+                added: 12,
+                removed: 3,
+            },
         })
     }
 
@@ -106,7 +131,7 @@ mod tests {
 
     #[test]
     fn scrolling_stops_at_both_ends() {
-        // 4 lines of header plus 50 of message, in 12 rows of text.
+        // 5 lines of header plus 50 of message, in 12 rows of text.
         let mut popup = popup(&vec!["line"; 50].join("\n"));
         draw(&mut popup, 100, 14);
         press(&mut popup, 'k');
@@ -116,7 +141,21 @@ mod tests {
         draw(&mut popup, 100, 14);
         press(&mut popup, 'j');
         draw(&mut popup, 100, 14);
-        assert_eq!(popup.scroll.offset(), 54 - 12);
+        assert_eq!(popup.scroll.offset(), 55 - 12);
+    }
+
+    #[test]
+    fn the_header_says_how_many_files_and_lines_the_commit_changes() {
+        let mut terminal = Terminal::new(TestBackend::new(40, 10)).unwrap();
+        let mut popup = popup("Fix it");
+        terminal
+            .draw(|frame| popup.render(frame, frame.area(), true))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let width = buffer.area.width as usize;
+        let cells: Vec<&str> = buffer.content().iter().map(|cell| cell.symbol()).collect();
+        let shown: String = cells.chunks(width).map(|row| row.concat() + "\n").collect();
+        assert!(shown.contains("changes 2 files  +12 −3"), "{shown}");
     }
 
     #[test]

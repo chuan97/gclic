@@ -1696,3 +1696,16 @@ fn a_save_in_neovim_shows_in_changes_at_once() {
         std::thread::sleep(Duration::from_millis(10));
     }
 }
+
+#[test]
+fn z_on_a_commit_in_the_sidebar_shows_its_details_over_the_whole_editor() {
+    let (_repo, mut app) = in_sidebar();
+    press(&mut app, KeyCode::Char('l'));
+    assert!(app.view.focused(Pane::Graph));
+    press(&mut app, KeyCode::Char('z'));
+    assert!(
+        app.view.details().is_some(),
+        "z should show the commit's details"
+    );
+    assert_eq!(app.layout_change(), Some(true));
+}

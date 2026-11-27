@@ -656,14 +656,21 @@ impl App {
             // On the Compare tab, c starts a new comparison, as c compares from
             // where the user is in the other panes.
             KeyCode::Char('c') if self.view.focused(Pane::Compare) => self.open_compare_picker(),
-            // In the sidebar, z shows what's selected, over the whole editor,
-            // as enter does: a file's diff, a commit's details.
+            // In the sidebar, z shows what's selected over the whole editor:
+            // a file's diff, as enter does, or a commit's details, as i does.
             KeyCode::Char('z')
                 if self.sidebar.is_some()
                     && !self.view.has_preview()
                     && matches!(self.view.pane, Pane::Changes | Pane::Graph) =>
             {
-                self.send_to_focused_panel(KeyEvent::from(KeyCode::Enter));
+                let on_commit =
+                    self.view.pane == Pane::Graph && self.graph.selected_file_source().is_none();
+                let key = if on_commit {
+                    KeyCode::Char('i')
+                } else {
+                    KeyCode::Enter
+                };
+                self.send_to_focused_panel(KeyEvent::from(key));
             }
             KeyCode::Char('z') if self.view.has_preview() => {
                 self.view.zoomed = !self.view.zoomed;

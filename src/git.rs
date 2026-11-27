@@ -104,6 +104,10 @@ pub struct CommitDetails {
     pub author: String,
     pub date: String,
     pub message: String,
+    /// How many files it changes, and the lines it adds and removes in them,
+    /// against its first parent for a merge, as the graph lists its files.
+    pub files: usize,
+    pub lines: Lines,
 }
 
 #[derive(Debug, Clone)]
@@ -945,23 +949,53 @@ pub fn commit_label(repo: &Repo, sha: &str) -> Option<String> {
 }
 
 pub fn commit_details(repo: &Repo, sha: &str) -> Result<CommitDetails> {
+    // The message ends in a NUL, as it can hold anything else, and the
+    // change's size follows it, in the same call.
     let text = run(
         repo,
         &[
             "show",
-            "-s",
+            "--shortstat",
+            "--diff-merges=first-parent",
             "--date=iso",
-            "--format=%H%n%an <%ae>%n%ad%n%B",
+            "--format=%H%n%an <%ae>%n%ad%n%B%x00",
             sha,
         ],
     )?;
-    let mut lines = text.splitn(4, '\n');
+    let (header, stat) = text.split_once('\0').unwrap_or((&text, ""));
+    let mut lines = header.splitn(4, '\n');
+    let (files, lines_changed) = parse_shortstat(stat);
     Ok(CommitDetails {
         sha: lines.next().unwrap_or("").to_string(),
         author: lines.next().unwrap_or("").to_string(),
         date: lines.next().unwrap_or("").to_string(),
         message: lines.next().unwrap_or("").trim_end().to_string(),
+        files,
+        lines: lines_changed,
     })
+}
+
+/// The files and lines in git's `--shortstat`: ` 3 files changed, 42
+/// insertions(+), 7 deletions(-)`, either count left out when it's 0, and
+/// nothing at all for a commit that changes nothing.
+fn parse_shortstat(stat: &str) -> (usize, Lines) {
+    let (mut files, mut added, mut removed) = (0, 0, 0);
+    for part in stat.trim().split(", ") {
+        let Some((count, what)) = part.split_once(' ') else {
+            continue;
+        };
+        let Ok(count) = count.parse() else {
+            continue;
+        };
+        if what.starts_with("file") {
+            files = count;
+        } else if what.starts_with("insertion") {
+            added = count;
+        } else if what.starts_with("deletion") {
+            removed = count;
+        }
+    }
+    (files, Lines::Counted { added, removed })
 }
 
 pub fn commit_files(repo: &Repo, sha: &str) -> Result<Vec<FileEntry>> {
@@ -1252,6 +1286,18 @@ mod tests {
             path: path.to_string(),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn shortstat_reads_files_and_lines_either_left_out() {
+        let counted = |added, removed| Lines::Counted { added, removed };
+        let stat = " 3 files changed, 42 insertions(+), 7 deletions(-)\n";
+        assert_eq!(parse_shortstat(stat), (3, counted(42, 7)));
+        assert_eq!(
+            parse_shortstat(" 1 file changed, 1 deletion(-)"),
+            (1, counted(0, 1))
+        );
+        assert_eq!(parse_shortstat(""), (0, counted(0, 0)));
     }
 
     #[test]
