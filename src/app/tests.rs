@@ -1,4 +1,4 @@
-use super::layout::{accent_bar, fit_folder};
+use super::layout::{ACCENT_LINE, accent_bar, fit_folder};
 use super::popups::render_text_box;
 use super::status_line::hint_spans;
 use super::*;
@@ -20,14 +20,14 @@ fn the_colour_bar_ends_in_the_repo_s_folder_and_name_as_far_as_they_fit() {
     assert_eq!(
         bar(30),
         (
-            "━".repeat(15),
+            ACCENT_LINE.repeat(15),
             Some(("~/Code/".to_string(), "gclic".to_string()))
         )
     );
     // Shorter: the folder goes before the name, and some line always shows.
     assert_eq!(bar(16).1, Some((String::new(), "gclic".to_string())));
     assert_eq!(bar(16).0.chars().count(), 8);
-    assert_eq!(bar(8), ("━".repeat(6), None));
+    assert_eq!(bar(8), (ACCENT_LINE.repeat(6), None));
     assert_eq!(bar(1), (String::new(), None));
 }
 

@@ -104,7 +104,9 @@ function M.tabline()
   local name = vim.fn.fnamemodify(accent.root, ":t")
   local folder = vim.fn.fnamemodify(accent.root, ":~:h") .. "/"
   local label = " " .. folder .. name .. " "
-  local line = string.rep("━", math.max(0, vim.o.columns - vim.fn.strdisplaywidth(label)))
+  -- The middle third of a cell, as gclic's bar: level with the name, and
+  -- thicker than a line character, whose thickness is up to the font.
+  local line = string.rep("🬋", math.max(0, vim.o.columns - vim.fn.strdisplaywidth(label)))
   return "%#GclicAccentBar#" .. line .. "%#GclicAccentFolder# " .. escape(folder) .. "%#GclicAccentName#" .. escape(name) .. " "
 end
 
