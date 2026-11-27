@@ -364,7 +364,7 @@ impl App {
                     n => Some(format!("Your review's {n} comments will be lost.")),
                 };
                 body.extend(
-                    lost.map(|lost| Line::styled(lost, Style::default().fg(Color::Yellow))),
+                    lost.map(|lost| Line::styled(lost, Style::default().fg(ui::warning()))),
                 );
                 let height = body.len() as u16 + 3;
                 render_popup(
@@ -416,7 +416,7 @@ impl App {
                     body,
                     hints,
                     (72, height),
-                    Color::Red,
+                    ui::error(),
                 );
             }
             Modal::Help(help) => help.render(frame, area),

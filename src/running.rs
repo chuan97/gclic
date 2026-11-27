@@ -6,7 +6,7 @@ use crate::ui;
 use ratatui::Frame;
 use ratatui::crossterm::event::KeyEvent;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use std::io::Read;
 use std::process::{Child, Command, ExitStatus, Stdio};
@@ -233,7 +233,7 @@ impl OutputPopup {
         let popup = ui::centered(area, width, height);
         let mut block = ui::panel(self.title.clone(), true);
         if self.failed {
-            block = block.border_style(Style::default().fg(Color::Red));
+            block = block.border_style(Style::default().fg(ui::error()));
         }
         ui::text_popup(frame, popup, block, lines, &mut self.scroll);
     }

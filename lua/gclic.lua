@@ -214,6 +214,28 @@ function M._selected_bg()
   end
 end
 
+-- The groups gclic's interface takes its colours from, by what they're for,
+-- as theme.rs's UiColors reads them: its panes' borders, as windows are
+-- divided and floats outlined, its git colours, as the sign column's, and
+-- its errors and warnings, as diagnostics'.
+local UI_GROUPS = {
+  "WinSeparator", "FloatBorder", "Normal", "GitSignsAdd", "GitSignsChange", "GitSignsDelete",
+  "Added", "Changed", "Removed", "DiagnosticError", "DiagnosticWarn",
+}
+
+--- The colours for gclic's interface, as its $GCLIC_UI_COLORS, in the same
+--- form as the diff's.
+function M._ui_colors()
+  local pairs_ = {}
+  for _, group in ipairs(UI_GROUPS) do
+    local color = group_color(group, "fg")
+    if color then
+      table.insert(pairs_, group .. ":fg=" .. color)
+    end
+  end
+  return table.concat(pairs_, ";")
+end
+
 --- The colours to give gclic, as its $GCLIC_EDITOR_COLORS: `group:part=#rrggbb`
 --- pairs separated by `;`.
 function M._editor_colors()
@@ -736,6 +758,7 @@ function M.show()
   end
   if M.config.colors == "editor" then
     env.GCLIC_SELECTED_BG = M._selected_bg()
+    env.GCLIC_UI_COLORS = M._ui_colors()
   end
   -- In gclic's window, wherever it shows.
   vim.api.nvim_win_call(vim.fn.bufwinid(state.buf), function()

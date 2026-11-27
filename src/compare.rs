@@ -13,7 +13,7 @@ use anyhow::Result;
 use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use std::thread;
 
@@ -238,14 +238,11 @@ impl ComparePanel {
                     Line::from(vec![
                         Span::styled(to.as_str(), bold),
                         Span::raw(" is "),
-                        Span::styled(
-                            format!("{only_to} ahead"),
-                            Style::default().fg(Color::Green),
-                        ),
+                        Span::styled(format!("{only_to} ahead"), Style::default().fg(ui::added())),
                         Span::raw(", "),
                         Span::styled(
                             format!("{only_from} behind"),
-                            Style::default().fg(Color::Red),
+                            Style::default().fg(ui::removed()),
                         ),
                         Span::raw(" "),
                         Span::styled(from.as_str(), bold),

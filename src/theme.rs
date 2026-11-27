@@ -1,8 +1,9 @@
 //! The colours of the editor gclic runs inside, for its diffs, so code looks
 //! as it does in the editor: its background and text, its diff colours, and
 //! its syntax colours. The plugin gives gclic's own interface the colour
-//! scheme's too, through Neovim's terminal, and the selection's in
-//! `$GCLIC_SELECTED_BG`.
+//! scheme's too: its palette through Neovim's terminal, the selection's in
+//! `$GCLIC_SELECTED_BG`, and its borders', git's and diagnostics' colours
+//! in `$GCLIC_UI_COLORS`.
 //!
 //! Neovim's plugin passes them in `$GCLIC_EDITOR_COLORS`, as `group:part=#rrggbb`
 //! pairs separated by `;`, such as `Normal:bg=#1f1f1f;@keyword:fg=#569cd6`.
@@ -100,28 +101,121 @@ fn to_color((r, g, b): (u8, u8, u8)) -> Color {
     Color::Rgb(r, g, b)
 }
 
+/// How far apart two colours are, as a straight line between them.
+fn distance(a: (u8, u8, u8), b: (u8, u8, u8)) -> f64 {
+    let d = |x: u8, y: u8| (x as f64 - y as f64).powi(2);
+    (d(a.0, b.0) + d(a.1, b.1) + d(a.2, b.2)).sqrt()
+}
+
+fn rgb_of(color: Color) -> (u8, u8, u8) {
+    match color {
+        Color::Rgb(r, g, b) => (r, g, b),
+        _ => (0, 0, 0),
+    }
+}
+
+/// `color`'s hue, `strength` away from `background`, as gclic's own tints
+/// are from theirs: never further than `color` itself.
+fn tint(background: (u8, u8, u8), color: (u8, u8, u8), strength: f64) -> (u8, u8, u8) {
+    let full = distance(background, color);
+    if full == 0.0 {
+        return color;
+    }
+    mix(background, color, (strength / full).min(1.0))
+}
+
 impl DiffColors {
-    /// The editor's, where it has them, and gclic's own otherwise. A theme's
-    /// diff colours are often just a background, so changed words get theirs
-    /// by mixing in some of the text's colour, which brightens a dark one and
-    /// darkens a light one, keeping its hue.
+    /// The editor's, where it has them, and gclic's own otherwise. Colour
+    /// schemes' diff colours are opaque, often strong enough to drown the code,
+    /// where editors such as VS Code lay theirs over it translucent. So gclic
+    /// takes their hue at its own strengths: removed and added lines as far
+    /// from the background as its own tints, and changed words as far as its
+    /// own words, never further than the colour scheme's own colour.
     pub fn from_editor(editor: &EditorColors) -> DiffColors {
-        let text = editor.rgb("Normal", "fg");
-        let line = |group: &str| editor.rgb(group, "bg");
-        let word = |line: (u8, u8, u8)| text.map(|text| to_color(mix(line, text, 0.18)));
+        let background = editor.rgb("Normal", "bg");
+        let built_in_bg = rgb_of(BUILT_IN.background);
+        let strength = |own: Color| distance(built_in_bg, rgb_of(own));
+        let shade = |group: &str, own: Color| {
+            let line = editor.rgb(group, "bg")?;
+            Some(to_color(tint(
+                background.unwrap_or(built_in_bg),
+                line,
+                strength(own),
+            )))
+        };
         DiffColors {
             background: editor.color("Normal", "bg").unwrap_or(BUILT_IN.background),
             text: editor.color("Normal", "fg").unwrap_or(BUILT_IN.text),
-            removed: line("DiffDelete").map(to_color).unwrap_or(BUILT_IN.removed),
-            added: line("DiffAdd").map(to_color).unwrap_or(BUILT_IN.added),
-            removed_word: line("DiffDelete")
-                .and_then(word)
+            removed: shade("DiffDelete", BUILT_IN.removed).unwrap_or(BUILT_IN.removed),
+            added: shade("DiffAdd", BUILT_IN.added).unwrap_or(BUILT_IN.added),
+            removed_word: shade("DiffDelete", BUILT_IN.removed_word)
                 .unwrap_or(BUILT_IN.removed_word),
-            added_word: line("DiffAdd")
-                .and_then(word)
-                .unwrap_or(BUILT_IN.added_word),
+            added_word: shade("DiffAdd", BUILT_IN.added_word).unwrap_or(BUILT_IN.added_word),
         }
     }
+}
+
+/// The variable the colours of gclic's interface come in, inside Neovim, in
+/// the same form as the diff's: its window borders, its git colours and its
+/// diagnostics'. Without it, gclic keeps its own.
+pub const UI_VARIABLE: &str = "GCLIC_UI_COLORS";
+
+/// The colours of gclic's interface, by what they're for, each from the
+/// editor's group for the same thing.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UiColors {
+    /// A pane's border: as Neovim's windows are divided, and, focused, as
+    /// its floating windows are outlined, or in its text's colour.
+    pub border: Option<Color>,
+    pub focused_border: Option<Color>,
+    /// Files and lines added, changed and removed, as the sign column marks
+    /// them, or as Neovim's own git colours have them.
+    pub added: Option<Color>,
+    pub changed: Option<Color>,
+    pub removed: Option<Color>,
+    /// Errors and destructive keys, and warnings.
+    pub error: Option<Color>,
+    pub warning: Option<Color>,
+}
+
+impl UiColors {
+    pub fn from_editor(editor: &EditorColors) -> UiColors {
+        let first = |groups: &[&str]| groups.iter().find_map(|group| editor.color(group, "fg"));
+        UiColors {
+            border: first(&["WinSeparator"]),
+            focused_border: first(&["FloatBorder", "Normal"]),
+            added: first(&["GitSignsAdd", "Added"]),
+            changed: first(&["GitSignsChange", "Changed"]),
+            removed: first(&["GitSignsDelete", "Removed"]),
+            error: first(&["DiagnosticError"]),
+            warning: first(&["DiagnosticWarn"]),
+        }
+    }
+
+    const NONE: UiColors = UiColors {
+        border: None,
+        focused_border: None,
+        added: None,
+        changed: None,
+        removed: None,
+        error: None,
+        warning: None,
+    };
+}
+
+/// The interface's colours: the editor's, inside Neovim, and none, for
+/// gclic's own, elsewhere and in tests.
+pub fn ui_colors() -> UiColors {
+    static COLORS: OnceLock<UiColors> = OnceLock::new();
+    *COLORS.get_or_init(|| {
+        if cfg!(test) {
+            return UiColors::NONE;
+        }
+        match std::env::var(UI_VARIABLE) {
+            Ok(text) => UiColors::from_editor(&EditorColors::parse(&text)),
+            Err(_) => UiColors::NONE,
+        }
+    })
 }
 
 /// The diff's colours: the editor's, inside one, or gclic's own.
@@ -239,17 +333,60 @@ mod tests {
     fn a_diff_takes_the_editor_s_colours_and_falls_back_to_gclic_s() {
         let diff = DiffColors::from_editor(&neovim());
         assert_eq!(diff.background, Color::Rgb(0x1e, 0x1e, 0x1e));
-        assert_eq!(diff.added, Color::Rgb(0x37, 0x3d, 0x29));
-        // A word is its line's colour with some of the text's mixed in.
-        assert_eq!(
-            diff.added_word,
-            to_color(mix((0x37, 0x3d, 0x29), (0xd4, 0xd4, 0xd4), 0.18))
-        );
         let bare = DiffColors::from_editor(&EditorColors::parse("Normal:bg=#000000"));
         assert_eq!(
             (bare.removed, bare.removed_word, bare.text),
             (BUILT_IN.removed, BUILT_IN.removed_word, BUILT_IN.text)
         );
+    }
+
+    #[test]
+    fn a_colour_scheme_s_diff_colours_are_taken_at_gclic_s_strengths() {
+        // vscode.nvim's, opaque and strong, where VS Code's are translucent.
+        let vscode = EditorColors::parse(
+            "Normal:bg=#1f1f1f;Normal:fg=#d4d4d4;DiffAdd:bg=#4b5632;DiffDelete:bg=#6f1313",
+        );
+        let diff = DiffColors::from_editor(&vscode);
+        let bg = (0x1f, 0x1f, 0x1f);
+        let near = |a: f64, b: f64| (a - b).abs() < 1.5;
+        // Lines as faint as gclic's own, in the colour scheme's hue.
+        let own = distance(rgb_of(BUILT_IN.background), rgb_of(BUILT_IN.added));
+        assert!(
+            near(distance(bg, rgb_of(diff.added)), own),
+            "{:?}",
+            diff.added
+        );
+        let (r, g, b) = rgb_of(diff.added);
+        assert!(g > r && r > b, "still olive: {:?}", diff.added);
+        // Words as strong as gclic's, which here is the colour scheme's own.
+        assert_eq!(diff.added_word, Color::Rgb(0x4b, 0x56, 0x32));
+        assert_eq!(diff.removed_word, Color::Rgb(0x6f, 0x13, 0x13));
+        // A faint colour scheme isn't made any stronger.
+        let faint = EditorColors::parse("Normal:bg=#1f1f1f;DiffAdd:bg=#222822");
+        let diff = DiffColors::from_editor(&faint);
+        assert_eq!(
+            (diff.added, diff.added_word),
+            (Color::Rgb(0x22, 0x28, 0x22), Color::Rgb(0x22, 0x28, 0x22))
+        );
+    }
+
+    #[test]
+    fn the_interface_takes_the_editor_s_colours_for_the_same_things() {
+        let editor = EditorColors::parse(
+            "WinSeparator:fg=#444444;Normal:fg=#d4d4d4;Added:fg=#b3f6c0;GitSignsAdd:fg=#6a9955;\
+             Removed:fg=#ffc0b9;DiagnosticError:fg=#f44747",
+        );
+        let ui = UiColors::from_editor(&editor);
+        assert_eq!(ui.border, Some(Color::Rgb(0x44, 0x44, 0x44)));
+        // No FloatBorder: the text's colour.
+        assert_eq!(ui.focused_border, Some(Color::Rgb(0xd4, 0xd4, 0xd4)));
+        // The sign column's git colours first, Neovim's own after.
+        assert_eq!(ui.added, Some(Color::Rgb(0x6a, 0x99, 0x55)));
+        assert_eq!(ui.removed, Some(Color::Rgb(0xff, 0xc0, 0xb9)));
+        assert_eq!(ui.error, Some(Color::Rgb(0xf4, 0x47, 0x47)));
+        // What the editor doesn't say, gclic keeps its own for.
+        assert_eq!((ui.changed, ui.warning), (None, None));
+        assert_eq!(ui_colors(), UiColors::NONE, "never in tests");
     }
 
     #[test]
