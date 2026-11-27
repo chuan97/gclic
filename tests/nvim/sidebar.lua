@@ -71,6 +71,19 @@ local function keys(text)
   vim.api.nvim_chan_send(vim.bo[term()].channel, text)
 end
 
+-- The selection's colour: a list's selected item's, unless it hardly stands
+-- out from the background, as CursorLine often doesn't.
+vim.api.nvim_set_hl(0, "Normal", { fg = "#d4d4d4", bg = "#1f1f1f" })
+vim.api.nvim_set_hl(0, "CursorLine", { bg = "#222222" })
+vim.api.nvim_set_hl(0, "Visual", { bg = "#264f78" })
+vim.api.nvim_set_hl(0, "PmenuSel", { bg = "#04395e" })
+check("the selection takes PmenuSel's colour", gc._selected_bg() == "#04395e")
+vim.api.nvim_set_hl(0, "PmenuSel", { bg = "#202020" })
+check("one too close to the background is passed over", gc._selected_bg() == "#264f78")
+vim.api.nvim_set_hl(0, "PmenuSel", {})
+vim.api.nvim_set_hl(0, "Visual", {})
+check("with only a faint CursorLine, gclic keeps its grey", gc._selected_bg() == nil)
+
 -- Opening: the sidebar at the left, 40 wide, in focus, the code beside it.
 gc.toggle()
 wait("gclic draws in the sidebar", function()

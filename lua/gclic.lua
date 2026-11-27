@@ -64,7 +64,7 @@ M.config = {
   -- the sidebar from the whole editor first, as gclic's own ctrl-g does.
   toggle_key = "<C-g>",
   -- Whose colours gclic's window takes: "editor", the colour scheme's, its
-  -- background, text, terminal colours and the selected line's, so gclic
+  -- background, text, terminal colours and a list's selection, so gclic
   -- looks of a piece with the code beside it, or "terminal", the terminal
   -- Neovim runs in, so gclic looks as it does outside Neovim.
   colors = "editor",
@@ -185,6 +185,32 @@ local function group_color(group, part)
       end
     end
     group = group:match("^(.+)%.[^.]+$")
+  end
+end
+
+--- The selected line's background for gclic, as `#rrggbb`: the colour
+--- scheme's for a list's selected item, PmenuSel's, or else Visual's or
+--- CursorLine's, the first that stands out from the background. CursorLine
+--- is often barely off it, as the editor's cursor and line number mark the
+--- line too, which gclic has nothing like. Nil for none: gclic's grey.
+function M._selected_bg()
+  local background = group_color("Normal", "bg")
+  local function apart(color)
+    if not background then
+      return true
+    end
+    local most = 0
+    for i = 2, 6, 2 do
+      local a, b = tonumber(color:sub(i, i + 1), 16), tonumber(background:sub(i, i + 1), 16)
+      most = math.max(most, math.abs(a - b))
+    end
+    return most >= 24
+  end
+  for _, group in ipairs({ "PmenuSel", "Visual", "CursorLine" }) do
+    local color = group_color(group, "bg")
+    if color and apart(color) then
+      return color
+    end
   end
 end
 
@@ -709,7 +735,7 @@ function M.show()
     env.GCLIC_EDITOR_COLORS = M._editor_colors()
   end
   if M.config.colors == "editor" then
-    env.GCLIC_SELECTED_BG = group_color("CursorLine", "bg") or group_color("Visual", "bg")
+    env.GCLIC_SELECTED_BG = M._selected_bg()
   end
   -- In gclic's window, wherever it shows.
   vim.api.nvim_win_call(vim.fn.bufwinid(state.buf), function()
