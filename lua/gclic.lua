@@ -21,9 +21,9 @@
 -- picked in gclic.
 --
 -- Without the sidebar, ctrl-g hides gclic without quitting it, and the toggle
--- brings it back as it was. q quits it, either way. Its diffs are in the
--- colour scheme's colours, as code is in the editor, while the rest of it
--- keeps the terminal's.
+-- brings it back as it was. q quits it, either way. gclic takes the colour
+-- scheme's colours, its diffs as code is in the editor, and the rest, unless
+-- set to keep the terminal's.
 --
 -- A bar across the top shows the repo in the colour gclic gives it, with its
 -- name, as gclic's own does, following the working folder. The plugin has to
@@ -48,6 +48,11 @@ M.config = {
   -- The sidebar and a file tree take turns at the left: opening one closes
   -- the other. Snacks's explorer, LazyVim's, neo-tree and nvim-tree.
   close_file_tree = true,
+  -- A key in gclic that opens the file tree in its place. False for none.
+  file_tree_key = "<C-e>",
+  -- How to open the file tree: nil for Snacks's explorer, LazyVim's, or
+  -- neo-tree or nvim-tree, whichever is there, or a function.
+  file_tree = nil,
   -- Without the sidebar, the window's share of the editor, wide and high:
   -- all of it, but for the command line, unless set lower for a pop-up,
   -- which a border then suits.
@@ -58,10 +63,11 @@ M.config = {
   -- One gclic doesn't use. False for none. With the sidebar, it goes back to
   -- the sidebar from the whole editor first, as gclic's own ctrl-g does.
   toggle_key = "<C-g>",
-  -- Whose colours gclic's window takes: "terminal", the terminal Neovim runs
-  -- in, so gclic looks as it does outside Neovim, whatever the editor's
-  -- colour scheme, or "editor", the colour scheme's.
-  colors = "terminal",
+  -- Whose colours gclic's window takes: "editor", the colour scheme's, its
+  -- background, text, terminal colours and the selected line's, so gclic
+  -- looks of a piece with the code beside it, or "terminal", the terminal
+  -- Neovim runs in, so gclic looks as it does outside Neovim.
+  colors = "editor",
   -- Whose colours gclic's diffs take: "editor", the colour scheme's, so code
   -- looks as it does in the editor, or "gclic", VS Code Dark Modern's, which
   -- gclic has on its own.
@@ -429,6 +435,25 @@ local function is_file_tree(buf)
   return filetype:match("^snacks_") ~= nil and #explorers() > 0
 end
 
+--- Opens the file tree, gclic going for it: the one configured, or Snacks's
+--- explorer, neo-tree or nvim-tree, the first there.
+function M.file_tree()
+  M.hide()
+  if type(M.config.file_tree) == "function" then
+    return M.config.file_tree()
+  end
+  local ok, snacks = pcall(require, "snacks")
+  if ok and snacks.explorer then
+    return snacks.explorer()
+  end
+  for _, command in ipairs({ "Neotree", "NvimTreeOpen" }) do
+    if vim.fn.exists(":" .. command) == 2 then
+      return vim.cmd(command)
+    end
+  end
+  vim.notify("gclic: no file tree found. Set the plugin's `file_tree`", vim.log.levels.WARN)
+end
+
 --- An empty buffer in gclic's colours, for the sidebar's window to hold
 --- while gclic shows over the whole editor, so the code beside it doesn't
 --- move.
@@ -462,7 +487,11 @@ local function open_side(buf)
     local current = vim.api.nvim_get_current_win()
     vim.cmd("topleft " .. sidebar_width() .. "vsplit")
     state.side = vim.api.nvim_get_current_win()
-    vim.api.nvim_win_set_buf(state.side, buf)
+    -- Bare before gclic goes in: split from the code, the window has its line
+    -- numbers and signs, and Neovim's terminal, narrowed by them for a moment
+    -- and widened back, would lose its last columns, unknown to gclic, as
+    -- its size ends the same.
+    vim.api.nvim_win_set_buf(state.side, placeholder())
     local wo = vim.wo[state.side]
     wo.winfixwidth = true
     wo.number = false
@@ -476,6 +505,7 @@ local function open_side(buf)
     wo.list = false
     wo.wrap = true
     color_window(state.side)
+    vim.api.nvim_win_set_buf(state.side, buf)
     local side = state.side
     vim.api.nvim_create_autocmd("WinClosed", {
       pattern = tostring(side),
@@ -680,6 +710,9 @@ function M.show()
   if M.config.diff_colors == "editor" then
     env.GCLIC_EDITOR_COLORS = M._editor_colors()
   end
+  if M.config.colors == "editor" then
+    env.GCLIC_SELECTED_BG = group_color("CursorLine", "bg") or group_color("Visual", "bg")
+  end
   -- In gclic's window, wherever it shows.
   vim.api.nvim_win_call(vim.fn.bufwinid(state.buf), function()
     if vim.fn.has("nvim-0.11") == 1 then
@@ -710,6 +743,9 @@ function M.show()
         vim.api.nvim_chan_send(state.job, "\007")
       end, { buffer = state.buf, desc = "Back to the sidebar, or hide gclic" })
     end
+  end
+  if M.config.file_tree_key then
+    vim.keymap.set("t", M.config.file_tree_key, M.file_tree, { buffer = state.buf, desc = "Open the file tree" })
   end
   -- From the sidebar, ctrl-h and ctrl-l go to the windows beside it, as they
   -- do between Neovim's windows. Over the whole editor there are none.

@@ -95,7 +95,7 @@ impl App {
             if tab == self.tab {
                 let style = Style::default()
                     .fg(Color::Cyan)
-                    .bg(ui::SELECTED_BG)
+                    .bg(ui::selected_bg())
                     .add_modifier(Modifier::BOLD);
                 spans.push(Span::styled(label, style));
             } else {
