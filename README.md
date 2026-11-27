@@ -145,7 +145,7 @@ The plugin runs gclic, so [install it](#installation) first, and update the two 
 
 With another plugin manager, install the repo and call `require("gclic").setup()`.
 
-The key shows gclic, or goes into it from the code, and `ctrl-h`/`ctrl-l` move between gclic and the code, as between Neovim's windows. In the sidebar, `ctrl-g` hides gclic; over the whole editor, it goes back to the sidebar. `q` quits it. `:Gclic` does what the key does.
+The sidebar and a file tree take turns at the left: opening gclic closes Snacks's explorer, LazyVim's, or neo-tree or nvim-tree, and opening one hides gclic, which keeps running. The key shows gclic, or goes into it from the code, and `ctrl-h`/`ctrl-l` move between gclic and the code, as between Neovim's windows. In the sidebar, `ctrl-g` hides gclic; over the whole editor, it goes back to the sidebar. `q` quits it. `:Gclic` does what the key does.
 
 With `sidebar = false`, gclic shows over the whole editor only, as a floating window the key toggles, and `o` hides it and opens the file in the window beneath. `:checkhealth gclic` checks that gclic and git are found, and which gclic it is.
 
@@ -156,6 +156,7 @@ opts = {
   cmd = "gclic",           -- `gclic` on the PATH, or a path to it
   sidebar = { width = 40 }, -- the sidebar's width; false for the whole editor only
   panes_width = nil,        -- the panes' width beside a diff; nil for the sidebar's
+  close_file_tree = true,   -- the sidebar and a file tree take turns at the left
   width = 1, height = 1,   -- without the sidebar, the window's share of the editor; lower for a pop-up
   border = "none",         -- a border, which suits a pop-up
   toggle_key = "<C-g>",    -- hides gclic from inside it, or back to the sidebar; false for none

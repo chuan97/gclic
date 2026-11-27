@@ -1,6 +1,6 @@
 -- The Neovim plugin's sidebar, end to end, in headless Neovim with a real
 -- gclic: opening, saving, going over the whole editor and back, resizing, `o`
--- from each, hiding and quitting. Run from the repo's root, after a build:
+-- from each, wrapping, taking turns with a file tree, hiding and quitting. Run from the repo's root, after a build:
 --
 --   nvim --headless --clean -l tests/nvim/sidebar.lua target/debug/gclic
 --
@@ -190,6 +190,32 @@ end)
 check("gclic keeps running while hidden", term() ~= nil)
 gc.toggle()
 check("the toggle brings the sidebar back", side() ~= nil and vim.api.nvim_win_get_buf(side()) == term())
+
+-- gclic's lines never scroll sideways, by the mouse either while the code has
+-- the focus: wrapped, in the sidebar too, after its trips over the editor.
+check("the sidebar's lines are wrapped", vim.wo[side()].wrap)
+
+-- A file tree and the sidebar take turns at the left.
+vim.api.nvim_set_current_win(code)
+vim.cmd("topleft vnew")
+vim.bo.filetype = "neo-tree"
+local tree = vim.api.nvim_get_current_win()
+wait("a file tree opening hides the sidebar", function()
+  return side() == nil
+end)
+check("gclic keeps running behind the tree", term() ~= nil)
+gc.toggle()
+check("the sidebar closes the file tree", not vim.api.nvim_win_is_valid(tree))
+check("the sidebar comes back 40 wide", side() ~= nil and vim.api.nvim_win_get_width(side()) == 40)
+-- Snacks's pickers share the explorer's filetypes, but without an explorer
+-- open, a picker isn't a tree.
+vim.api.nvim_set_current_win(code)
+local picker = vim.api.nvim_create_buf(false, true)
+vim.bo[picker].filetype = "snacks_picker_list"
+local picker_win = vim.api.nvim_open_win(picker, true, { relative = "editor", row = 2, col = 60, width = 30, height = 5 })
+vim.wait(200)
+check("a picker leaves the sidebar", side() ~= nil)
+vim.api.nvim_win_close(picker_win, true)
 
 -- Quitting from the whole editor closes both windows and the buffer.
 keys("z")
