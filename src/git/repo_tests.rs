@@ -855,3 +855,28 @@ fn the_refs_fingerprint_changes_when_a_ref_or_head_moves_and_only_then() {
     repo.write("feature.txt", "to stash\n");
     moves(&["stash", "-q"]);
 }
+
+#[test]
+fn a_commit_s_details_count_its_files_and_lines_and_keep_its_message_whole() {
+    let repo = TestRepo::with_history();
+    repo.write("a.txt", "one\ntwo\nthree\n");
+    repo.write("README.md", "# Test\n");
+    repo.git(&["add", "."]);
+    // A message that looks like a stat, which mustn't be read as one.
+    repo.git(&["commit", "-qm", "Add a\n\n 1 file changed, 9 insertions(+)"]);
+    let details = commit_details(&repo.repo, "HEAD").unwrap();
+    assert_eq!(details.message, "Add a\n\n 1 file changed, 9 insertions(+)");
+    let lines = ui_total(&repo, "HEAD");
+    assert_eq!((details.files, details.lines), (2, lines));
+    // A commit that changes nothing.
+    repo.git(&["commit", "-q", "--allow-empty", "-m", "Nothing"]);
+    let details = commit_details(&repo.repo, "HEAD").unwrap();
+    assert_eq!(details.files, 0);
+    assert_eq!(details.message, "Nothing");
+}
+
+/// What the graph's files for a commit add up to, which the details must match.
+fn ui_total(repo: &TestRepo, sha: &str) -> Lines {
+    let files = commit_files(&repo.repo, sha).unwrap();
+    crate::ui::total_lines(files.into_iter().map(|file| file.lines))
+}
