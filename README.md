@@ -40,8 +40,6 @@ cargo install --git https://github.com/chuan97/gclic
 
 Then run `gclic` inside a git repository. Press `?` for help.
 
-**Note:** gclic is fully *vibe-coded*. It's used daily on macOS, in [Ghostty](https://ghostty.org) and inside Neovim, and its tests run on macOS and Windows, the Neovim plugin's on macOS. Windows builds are released but less used, and Linux should work but is untested.
-
 gclic currently expects **git** on the `PATH`.
 
 In [Ghostty](https://ghostty.org), [kitty](https://sw.kovidgoyal.net/kitty/) and [Rex](https://www.superlogical.com/rex), which draw git graph symbols themselves, the graph's beads join up with their lines, as in the screenshots. Other terminals, including Windows Terminal, get plain beads, and look the same otherwise. Set `GCLIC_BRANCH_SYMBOLS=1` to use the joined beads in another terminal that draws them, or `GCLIC_BRANCH_SYMBOLS=0` to always use plain beads.
