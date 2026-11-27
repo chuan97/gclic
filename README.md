@@ -126,7 +126,7 @@ To set it, add `export GCLIC_EDITOR=nvim` to your `~/.zshrc` or `~/.bashrc`, or 
 
 ## In Neovim
 
-gclic comes with a Neovim plugin, for Neovim 0.10 or later, that shows gclic in a sidebar at the left, beside the code: the Repo tab's Branches, Changes and Graph, with the Changes pane showing a file as soon as it's saved. Everything works there, staging, discarding, undo and committing included. `enter` on a file shows its diff over the whole editor, and `i` on a commit its details, which say how many files and lines it changes; closing them goes back to the sidebar. The Compare and Review tabs show over the whole editor too. `z` only changes the size: from the sidebar it goes over the whole editor, where gclic's panes take the whole width, or the sidebar's beside a diff, so they stay put as it opens; there, `z` zooms a diff and comes back out, and with nothing open goes back to the sidebar. After `z`, gclic stays over the whole editor as diffs close, until `z` or `ctrl-g` goes back. gclic keeps running while hidden, so it's as you left it each time it comes back. `o` opens the file in the editor beside the sidebar, at the line. `:cd` in gclic changes Neovim's working folder, and `:cd` in Neovim moves gclic to that repo. A bar across the top shows the repo in gclic's colour for it, and gclic's diffs take the colour scheme's colours.
+gclic comes with a Neovim plugin, for Neovim 0.10 or later, that shows gclic in a sidebar at the left, beside the code: the Repo tab's Branches, Changes and Graph, with the Changes pane showing a file as soon as it's saved. Everything works there, staging, discarding, undo and committing included. `enter` on a file shows its diff over the whole editor, and `i` on a commit its details, which say how many files and lines it changes; closing them goes back to the sidebar. The Compare and Review tabs show over the whole editor too. `z` only changes the size: from the sidebar it goes over the whole editor, where gclic's panes take the whole width, or the sidebar's beside a diff, so they stay put as it opens; there, `z` zooms a diff and comes back out, and with nothing open goes back to the sidebar. After `z`, gclic stays over the whole editor as diffs close, until `z` or `ctrl-g` goes back. gclic keeps running while hidden, so it's as you left it each time it comes back. `o` opens the file in the editor beside the sidebar, at the line. `:cd` in gclic changes Neovim's working folder, and `:cd` in Neovim moves gclic to that repo. A bar across the top shows the repo in gclic's colour for it, and gclic takes the colour scheme's colours, its diffs included.
 
 The plugin runs gclic, so [install it](#installation) first, and update the two together. With [lazy.nvim](https://github.com/folke/lazy.nvim):
 
@@ -145,7 +145,7 @@ The plugin runs gclic, so [install it](#installation) first, and update the two 
 
 With another plugin manager, install the repo and call `require("gclic").setup()`.
 
-The sidebar and a file tree take turns at the left: opening gclic closes Snacks's explorer, LazyVim's, or neo-tree or nvim-tree, and opening one hides gclic, which keeps running. The key shows gclic, or goes into it from the code, and `ctrl-h`/`ctrl-l` move between gclic and the code, as between Neovim's windows. In the sidebar, `ctrl-g` hides gclic; over the whole editor, it goes back to the sidebar. `q` quits it. `:Gclic` does what the key does.
+The sidebar and a file tree take turns at the left: opening gclic closes Snacks's explorer, LazyVim's, or neo-tree or nvim-tree, and opening one hides gclic, which keeps running. `ctrl-e` in gclic opens the file tree in its place. The key shows gclic, or goes into it from the code, and `ctrl-h`/`ctrl-l` move between gclic and the code, as between Neovim's windows. In the sidebar, `ctrl-g` hides gclic; over the whole editor, it goes back to the sidebar. `q` quits it. `:Gclic` does what the key does.
 
 With `sidebar = false`, gclic shows over the whole editor only, as a floating window the key toggles, and `o` hides it and opens the file in the window beneath. `:checkhealth gclic` checks that gclic and git are found, and which gclic it is.
 
@@ -157,10 +157,12 @@ opts = {
   sidebar = { width = 40 }, -- the sidebar's width; false for the whole editor only
   panes_width = nil,        -- the panes' width beside a diff; nil for the sidebar's
   close_file_tree = true,   -- the sidebar and a file tree take turns at the left
+  file_tree_key = "<C-e>",  -- opens the file tree from gclic, in its place; false for none
+  file_tree = nil,          -- how: nil for Snacks's explorer, neo-tree or nvim-tree; or a function
   width = 1, height = 1,   -- without the sidebar, the window's share of the editor; lower for a pop-up
   border = "none",         -- a border, which suits a pop-up
   toggle_key = "<C-g>",    -- hides gclic from inside it, or back to the sidebar; false for none
-  colors = "terminal",     -- gclic's window in the "terminal"'s colours, or the "editor"'s
+  colors = "editor",       -- gclic's window in the colour scheme's colours, or the "terminal"'s
   diff_colors = "editor",  -- the diffs in the "editor"'s colours, or "gclic"'s own
   accent = true,           -- the bar across the top in the repo's colour
 }

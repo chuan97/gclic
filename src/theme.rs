@@ -1,6 +1,8 @@
 //! The colours of the editor gclic runs inside, for its diffs, so code looks
 //! as it does in the editor: its background and text, its diff colours, and
-//! its syntax colours. gclic's own interface keeps the terminal's colours.
+//! its syntax colours. The plugin gives gclic's own interface the colour
+//! scheme's too, through Neovim's terminal, and the selection's in
+//! `$GCLIC_SELECTED_BG`.
 //!
 //! Neovim's plugin passes them in `$GCLIC_EDITOR_COLORS`, as `group:part=#rrggbb`
 //! pairs separated by `;`, such as `Normal:bg=#1f1f1f;@keyword:fg=#569cd6`.

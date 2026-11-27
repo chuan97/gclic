@@ -8,7 +8,24 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Clear};
 
-pub const SELECTED_BG: Color = Color::Indexed(237);
+/// The selected row's background: the editor's, inside Neovim, which its
+/// plugin passes in `$GCLIC_SELECTED_BG` as `#rrggbb`, so gclic looks like
+/// the colour scheme around it, or else a grey that suits dark terminals.
+/// The grey in tests, wherever they run.
+pub fn selected_bg() -> Color {
+    static COLOR: std::sync::OnceLock<Color> = std::sync::OnceLock::new();
+    *COLOR.get_or_init(|| {
+        let editor = (!cfg!(test))
+            .then(|| std::env::var("GCLIC_SELECTED_BG").ok())
+            .flatten()
+            .and_then(|value| crate::accent::parse_hex(value.trim()));
+        match editor {
+            Some((r, g, b)) => Color::Rgb(r, g, b),
+            None => Color::Indexed(237),
+        }
+    })
+}
+
 pub const DIM: Color = Color::DarkGray;
 
 /// A list's row, highlighted if it's the selected one: on the selection's
@@ -17,10 +34,10 @@ pub const DIM: Color = Color::DarkGray;
 pub fn selected(line: Line<'_>, selected: bool, focused: bool) -> Line<'_> {
     match (selected, focused) {
         (false, _) => line,
-        (true, false) => line.style(Style::default().bg(SELECTED_BG)),
+        (true, false) => line.style(Style::default().bg(selected_bg())),
         (true, true) => line.style(
             Style::default()
-                .bg(SELECTED_BG)
+                .bg(selected_bg())
                 .add_modifier(Modifier::BOLD),
         ),
     }

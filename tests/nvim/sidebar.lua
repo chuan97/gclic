@@ -216,6 +216,20 @@ local picker_win = vim.api.nvim_open_win(picker, true, { relative = "editor", ro
 vim.wait(200)
 check("a picker leaves the sidebar", side() ~= nil)
 vim.api.nvim_win_close(picker_win, true)
+-- ctrl-e in gclic opens the file tree in its place.
+check("ctrl-e in gclic is mapped", vim.api.nvim_buf_call(term(), function()
+  return vim.fn.maparg("<C-e>", "t", false, true).buffer == 1
+end))
+gc.config.file_tree = function()
+  vim.cmd("topleft vnew")
+  vim.bo.filetype = "neo-tree"
+end
+gc.file_tree()
+local opened = vim.api.nvim_get_current_win()
+check("the file tree opens, and gclic goes", side() == nil and vim.bo[vim.api.nvim_win_get_buf(opened)].filetype == "neo-tree")
+gc.config.file_tree = nil
+gc.toggle()
+check("gclic comes back in the tree's place", side() ~= nil and not vim.api.nvim_win_is_valid(opened))
 
 -- Quitting from the whole editor closes both windows and the buffer.
 keys("z")

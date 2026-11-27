@@ -868,7 +868,7 @@ impl DiffPane {
             };
             if let Some(line) = heading {
                 let line = if active {
-                    line.style(Style::default().bg(ui::SELECTED_BG))
+                    line.style(Style::default().bg(ui::selected_bg()))
                 } else {
                     line
                 };
@@ -1000,7 +1000,7 @@ fn gutter_style(active: bool) -> Style {
     if active {
         Style::default()
             .fg(Color::White)
-            .bg(ui::SELECTED_BG)
+            .bg(ui::selected_bg())
             .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(ui::DIM)
