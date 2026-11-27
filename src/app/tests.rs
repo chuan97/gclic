@@ -1593,27 +1593,6 @@ fn the_sidebar_shows_the_repo_tab_s_panes_in_its_width() {
 }
 
 #[test]
-fn over_the_whole_editor_the_panes_keep_the_sidebar_s_width() {
-    let (_repo, mut app) = in_sidebar();
-    let narrow = screen_at(&mut app, 40, 30);
-    press(&mut app, KeyCode::Enter);
-    // Still in the sidebar, before the plugin makes room: the panes as they were.
-    assert_eq!(screen_at(&mut app, 40, 30), narrow);
-    // Over the whole editor: the same panes, row for row, and the diff beside them.
-    let full = screen_at(&mut app, 140, 30);
-    for row in 1..29 {
-        let left: String = full.lines().nth(row).unwrap().chars().take(40).collect();
-        assert_eq!(left, narrow.lines().nth(row).unwrap(), "row {row}:\n{full}");
-    }
-    assert!(columns(&full, 1, 40).contains("README.md"), "{full}");
-    // Without a diff, the rest of the editor is left empty, for the moment
-    // before the plugin goes back to the sidebar.
-    press(&mut app, KeyCode::Esc);
-    let back = screen_at(&mut app, 140, 30);
-    assert_eq!(columns(&back, 5, 40).trim(), "", "{back}");
-}
-
-#[test]
 fn a_narrow_terminal_shows_a_diff_on_its_own() {
     let repo = TestRepo::with_history();
     repo.write("README.md", "# Test\n\nChanged.\n");
@@ -1624,38 +1603,6 @@ fn a_narrow_terminal_shows_a_diff_on_its_own() {
     assert!(shown.contains("Changed."), "{shown}");
     // Wide enough, the panes and the diff share the width, as ever.
     assert!(screen_at(&mut app, 100, 30).contains("Branches"));
-}
-
-#[test]
-fn the_sidebar_asks_for_the_whole_editor_while_there_s_more_to_show() {
-    let (_repo, mut app) = in_sidebar();
-    assert_eq!(app.layout_change(), None, "it starts in the sidebar");
-    // A file's diff: the whole editor, asked once.
-    press(&mut app, KeyCode::Enter);
-    assert_eq!(app.layout_change(), Some(true));
-    assert_eq!(app.layout_change(), None);
-    // enter again goes into it; esc leaves it, beside the panes, and esc
-    // again closes it.
-    press(&mut app, KeyCode::Enter);
-    assert!(app.view.in_preview);
-    press(&mut app, KeyCode::Esc);
-    assert_eq!(app.layout_change(), None);
-    press(&mut app, KeyCode::Esc);
-    assert_eq!(app.layout_change(), Some(false));
-    // z shows the selection too, as enter does.
-    press(&mut app, KeyCode::Char('z'));
-    assert!(app.view.diff().is_some());
-    assert_eq!(app.layout_change(), Some(true));
-    // ctrl-g goes back to the sidebar.
-    ctrl(&mut app, 'g');
-    assert!(!app.view.has_preview());
-    assert_eq!(app.layout_change(), Some(false));
-    // Another tab is shown over the whole editor, and ctrl-g comes back to Repo.
-    press(&mut app, KeyCode::Tab);
-    assert_eq!(app.layout_change(), Some(true));
-    ctrl(&mut app, 'g');
-    assert!(app.tab == Tab::Repo);
-    assert_eq!(app.layout_change(), Some(false));
 }
 
 #[test]
@@ -1698,14 +1645,84 @@ fn a_save_in_neovim_shows_in_changes_at_once() {
 }
 
 #[test]
-fn z_on_a_commit_in_the_sidebar_shows_its_details_over_the_whole_editor() {
+fn over_the_whole_editor_gclic_is_laid_out_as_anywhere() {
     let (_repo, mut app) = in_sidebar();
+    let narrow = screen_at(&mut app, 40, 30);
+    press(&mut app, KeyCode::Enter);
+    // Still in the sidebar, before the plugin makes room: the panes as they were.
+    assert_eq!(screen_at(&mut app, 40, 30), narrow);
+    // Over the whole editor: the panes take their fifth, and the diff the rest.
+    let full = screen_at(&mut app, 140, 30);
+    assert!(columns(&full, 1, 28).starts_with("╭ README.md"), "{full}");
+    // z with nothing open: the panes over the whole width.
+    let (_repo, mut app) = in_sidebar();
+    press(&mut app, KeyCode::Char('z'));
+    let wide = screen_at(&mut app, 140, 30);
+    assert!(columns(&wide, 1, 120).contains("─"), "{wide}");
+    assert!(columns(&wide, 1, 139).starts_with("╮"), "{wide}");
+    // Without z, the moment before the plugin goes back to the sidebar keeps
+    // the panes in its width, so they don't jump wide.
+    let (_repo, mut app) = in_sidebar();
+    let back = screen_at(&mut app, 140, 30);
+    assert_eq!(columns(&back, 5, 40).trim(), "", "{back}");
+}
+
+#[test]
+fn enter_goes_over_the_whole_editor_until_the_diff_closes() {
+    let (_repo, mut app) = in_sidebar();
+    assert_eq!(app.layout_change(), None, "it starts in the sidebar");
+    // A file's diff: the whole editor, asked once.
+    press(&mut app, KeyCode::Enter);
+    assert_eq!(app.layout_change(), Some(true));
+    assert_eq!(app.layout_change(), None);
+    // enter again goes into it; esc leaves it, beside the panes, and esc
+    // again closes it, and gclic goes back to the sidebar.
+    press(&mut app, KeyCode::Enter);
+    assert!(app.view.in_preview);
+    press(&mut app, KeyCode::Esc);
+    assert_eq!(app.layout_change(), None);
+    press(&mut app, KeyCode::Esc);
+    assert_eq!(app.layout_change(), Some(false));
+    // Another tab shows over the whole editor, and ctrl-g comes back to Repo.
+    press(&mut app, KeyCode::Tab);
+    assert_eq!(app.layout_change(), Some(true));
+    ctrl(&mut app, 'g');
+    assert!(app.tab == Tab::Repo);
+    assert_eq!(app.layout_change(), Some(false));
+}
+
+#[test]
+fn z_only_makes_gclic_bigger_and_back_from_the_biggest() {
+    let (_repo, mut app) = in_sidebar();
+    // From the sidebar, over the whole editor, opening nothing.
+    press(&mut app, KeyCode::Char('z'));
+    assert!(!app.view.has_preview());
+    assert_eq!(app.layout_change(), Some(true));
+    // A diff there zooms with z, and z comes out of the zoom, as anywhere.
+    press(&mut app, KeyCode::Enter);
+    press(&mut app, KeyCode::Char('z'));
+    assert!(app.view.zoomed);
+    press(&mut app, KeyCode::Char('z'));
+    assert!(!app.view.zoomed && app.view.has_preview());
+    // Closing the diff stays over the whole editor, as z went there.
+    press(&mut app, KeyCode::Esc);
+    press(&mut app, KeyCode::Esc);
+    assert!(!app.view.has_preview());
+    assert_eq!(app.layout_change(), None);
+    // z with nothing open is the biggest: back to the sidebar.
+    press(&mut app, KeyCode::Char('z'));
+    assert_eq!(app.layout_change(), Some(false));
+    // ctrl-g goes back too, from wherever z went.
+    press(&mut app, KeyCode::Char('z'));
+    press(&mut app, KeyCode::Enter);
+    ctrl(&mut app, 'g');
+    assert!(!app.view.has_preview());
+    assert_eq!(app.layout_change(), None, "out and back: nothing to ask");
+    assert!(!app.wants_full());
+    // z on a commit makes gclic bigger, rather than open its details.
     press(&mut app, KeyCode::Char('l'));
     assert!(app.view.focused(Pane::Graph));
     press(&mut app, KeyCode::Char('z'));
-    assert!(
-        app.view.details().is_some(),
-        "z should show the commit's details"
-    );
+    assert!(!app.view.has_preview());
     assert_eq!(app.layout_change(), Some(true));
 }

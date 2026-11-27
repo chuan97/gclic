@@ -151,6 +151,24 @@ wait("o from the whole editor goes back to the sidebar", function()
 end)
 check("the sidebar holds gclic again", vim.api.nvim_win_get_buf(side()) == term())
 
+-- After z, closing a diff stays over the whole editor, and z goes back.
+vim.api.nvim_set_current_win(side())
+keys("z")
+wait("z goes over the whole editor, opening nothing", function()
+  return float() ~= nil
+end)
+keys("\r")
+vim.wait(300)
+keys("\027")
+vim.wait(300)
+keys("\027")
+vim.wait(600)
+check("closing a diff after z stays over the whole editor", float() ~= nil)
+keys("z")
+wait("z with nothing open goes back to the sidebar", function()
+  return float() == nil and vim.api.nvim_win_get_buf(side()) == term()
+end)
+
 -- ctrl-g: from the whole editor to the sidebar, from the sidebar hidden.
 vim.api.nvim_set_current_win(side())
 keys("z")

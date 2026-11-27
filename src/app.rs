@@ -350,6 +350,9 @@ pub struct App {
     /// What gclic last asked the sidebar's plugin for: the whole editor, or
     /// the sidebar, where it starts.
     asked_full: bool,
+    /// The user went over the whole editor with z, and stays there until z
+    /// or ctrl-g goes back, rather than when the diff closes.
+    chose_full: bool,
     /// What `o` does, "open in nvim", naming the editor it opens.
     editor_hint: String,
     /// Where `:cd` looks for repos. It stays put as the repo changes, so the
@@ -381,6 +384,7 @@ impl App {
             saved: editor::Saved::from_env(),
             sidebar: editor::sidebar_width(),
             asked_full: false,
+            chose_full: false,
             editor_hint: match editor::parent_nvim() {
                 Some(_) => "open in nvim".to_string(),
                 None => format!("open in {}", editor::name(&editor::setting())),
@@ -656,21 +660,11 @@ impl App {
             // On the Compare tab, c starts a new comparison, as c compares from
             // where the user is in the other panes.
             KeyCode::Char('c') if self.view.focused(Pane::Compare) => self.open_compare_picker(),
-            // In the sidebar, z shows what's selected over the whole editor:
-            // a file's diff, as enter does, or a commit's details, as i does.
-            KeyCode::Char('z')
-                if self.sidebar.is_some()
-                    && !self.view.has_preview()
-                    && matches!(self.view.pane, Pane::Changes | Pane::Graph) =>
-            {
-                let on_commit =
-                    self.view.pane == Pane::Graph && self.graph.selected_file_source().is_none();
-                let key = if on_commit {
-                    KeyCode::Char('i')
-                } else {
-                    KeyCode::Enter
-                };
-                self.send_to_focused_panel(KeyEvent::from(key));
+            // In Neovim's sidebar, z makes gclic bigger, and back from the
+            // biggest it can be: from the sidebar over the whole editor, and
+            // back without a diff or details, which z zooms as anywhere.
+            KeyCode::Char('z') if self.sidebar.is_some() && !self.view.has_preview() => {
+                self.grow_or_shrink()
             }
             KeyCode::Char('z') if self.view.has_preview() => {
                 self.view.zoomed = !self.view.zoomed;
