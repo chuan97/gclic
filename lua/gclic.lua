@@ -45,6 +45,9 @@ M.config = {
   -- columns: nil for the sidebar's, so they stay put as the diff opens, or
   -- gclic's fifth of the width without the sidebar.
   panes_width = nil,
+  -- The sidebar and a file tree take turns at the left: opening one closes
+  -- the other. Snacks's explorer, LazyVim's, neo-tree and nvim-tree.
+  close_file_tree = true,
   -- Without the sidebar, the window's share of the editor, wide and high:
   -- all of it, but for the command line, unless set lower for a pop-up,
   -- which a border then suits.
@@ -361,6 +364,69 @@ local function restore_command_line()
   end
 end
 
+--- Keeps gclic's lines from scrolling sideways, by the mouse too while the
+--- code has the focus: wrapped, they're pinned to the first column, though
+--- they're as wide as the window anyway. A terminal starts without it.
+local function pin(win)
+  vim.wo[win].wrap = true
+  vim.api.nvim_win_call(win, function()
+    vim.fn.winrestview({ leftcol = 0 })
+  end)
+end
+
+-- The file trees' windows, by filetype, besides Snacks's explorer, which
+-- Snacks lists.
+local TREES = { ["neo-tree"] = true, NvimTree = true }
+
+--- Snacks's explorers open on this tab.
+local function explorers()
+  local ok, picker = pcall(require, "snacks.picker")
+  if not ok or type(picker.get) ~= "function" then
+    return {}
+  end
+  local got, list = pcall(picker.get, { source = "explorer" })
+  return got and list or {}
+end
+
+--- Closes the file trees, for the sidebar to take their place.
+local function close_file_trees()
+  if not M.config.close_file_tree then
+    return
+  end
+  for _, explorer in ipairs(explorers()) do
+    pcall(function()
+      explorer:close()
+    end)
+  end
+  local function tree_windows()
+    return vim.tbl_filter(function(win)
+      local filetype = vim.bo[vim.api.nvim_win_get_buf(win)].filetype
+      return TREES[filetype] or filetype == "snacks_layout_box"
+    end, vim.api.nvim_tabpage_list_wins(0))
+  end
+  for _, win in ipairs(tree_windows()) do
+    if TREES[vim.bo[vim.api.nvim_win_get_buf(win)].filetype] then
+      pcall(vim.api.nvim_win_close, win, false)
+    end
+  end
+  -- Snacks closes its windows a moment later: the sidebar waits, to open in
+  -- their place at its own width, rather than beside them.
+  vim.wait(500, function()
+    return #tree_windows() == 0
+  end, 10)
+end
+
+--- Whether `buf` is a file tree's: neo-tree's or nvim-tree's, by its
+--- filetype, or one of Snacks's while an explorer is open, as all its
+--- pickers' windows share filetypes, and the explorer's float in a split.
+local function is_file_tree(buf)
+  local filetype = vim.bo[buf].filetype
+  if TREES[filetype] then
+    return true
+  end
+  return filetype:match("^snacks_") ~= nil and #explorers() > 0
+end
+
 --- An empty buffer in gclic's colours, for the sidebar's window to hold
 --- while gclic shows over the whole editor, so the code beside it doesn't
 --- move.
@@ -390,6 +456,7 @@ end
 --- gclic is never in both.
 local function open_side(buf)
   if not valid(state.side) then
+    close_file_trees()
     local current = vim.api.nvim_get_current_win()
     vim.cmd("topleft " .. sidebar_width() .. "vsplit")
     state.side = vim.api.nvim_get_current_win()
@@ -417,10 +484,13 @@ local function open_side(buf)
         end
       end,
     })
-    vim.api.nvim_set_current_win(current)
+    if vim.api.nvim_win_is_valid(current) then
+      vim.api.nvim_set_current_win(current)
+    end
   elseif vim.api.nvim_win_get_buf(state.side) ~= buf then
     vim.api.nvim_win_set_buf(state.side, buf)
   end
+  pin(state.side)
   return state.side
 end
 
@@ -429,12 +499,7 @@ local function open_float(options)
   options.style = "minimal"
   options.border = sidebar_on() and "none" or M.config.border
   state.win = vim.api.nvim_open_win(state.buf, true, options)
-  -- Never scrolled sideways: wrapping pins it to the first column, though
-  -- gclic's lines are as wide as the window anyway.
-  vim.wo[state.win].wrap = true
-  vim.api.nvim_win_call(state.win, function()
-    vim.fn.winrestview({ leftcol = 0 })
-  end)
+  pin(state.win)
   local win = state.win
   -- However the window closes, :quit included, the command line comes back.
   vim.api.nvim_create_autocmd("WinClosed", {
@@ -621,6 +686,14 @@ function M.show()
       state.job = vim.fn.termopen({ M.config.cmd }, { env = env, on_exit = on_exit })
     end
   end)
+  pin(vim.fn.bufwinid(state.buf))
+  -- And wherever it shows next.
+  vim.api.nvim_create_autocmd("BufWinEnter", {
+    buffer = state.buf,
+    callback = function()
+      pin(vim.api.nvim_get_current_win())
+    end,
+  })
   -- A filetype of its own, for configs to tell gclic's window apart, say to
   -- keep a status line or winbar out of it.
   vim.bo[state.buf].filetype = "gclic"
@@ -741,6 +814,21 @@ function M.setup(opts)
       if state.follow and vim.v.event.scope ~= "window" then
         vim.fn.writefile({ vim.fn.getcwd() }, state.follow)
       end
+    end,
+  })
+  -- A file tree opening hides the sidebar, whose place it takes.
+  vim.api.nvim_create_autocmd({ "FileType", "BufWinEnter" }, {
+    group = vim.api.nvim_create_augroup("gclic_trees", { clear = true }),
+    callback = function(ev)
+      if not (M.config.close_file_tree and sidebar_on() and valid(state.side)) then
+        return
+      end
+      -- Once the tree's window is up and Snacks has listed its explorer.
+      vim.schedule(function()
+        if vim.api.nvim_buf_is_valid(ev.buf) and valid(state.side) and is_file_tree(ev.buf) then
+          M.hide()
+        end
+      end)
     end,
   })
   -- A file saved, or changed by a shell command or outside while Neovim was
