@@ -253,6 +253,22 @@ impl Follow {
     }
 }
 
+/// How many columns the Repo tab's panes take beside a diff or details, when
+/// set in `$GCLIC_PANES_WIDTH`, rather than gclic's fifth of the width.
+/// Neovim's plugin sets it to the sidebar's width, as wide as a file tree,
+/// so the panes stay put as the diff opens. Never in tests.
+pub fn panes_width() -> Option<u16> {
+    if cfg!(test) {
+        return None;
+    }
+    std::env::var("GCLIC_PANES_WIDTH")
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
+        .filter(|width| *width > 0)
+}
+
 /// The width of the sidebar gclic's Neovim plugin shows it in, beside the
 /// code, when it does: `$GCLIC_SIDEBAR_WIDTH`. The plugin moves gclic between
 /// the sidebar and the whole editor as gclic asks, and keeps the sidebar's

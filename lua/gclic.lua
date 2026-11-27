@@ -41,6 +41,10 @@ M.config = {
   -- whole editor for diffs, details and the other tabs. False for the whole
   -- editor only, sized below.
   sidebar = { width = 40 },
+  -- The Repo tab's panes' width beside a diff over the whole editor, in
+  -- columns: nil for the sidebar's, so they stay put as the diff opens, or
+  -- gclic's fifth of the width without the sidebar.
+  panes_width = nil,
   -- Without the sidebar, the window's share of the editor, wide and high:
   -- all of it, but for the command line, unless set lower for a pop-up,
   -- which a border then suits.
@@ -603,6 +607,10 @@ function M.show()
   local env = { GCLIC_FOLLOW = follow, GCLIC_SAVED = saved, GCLIC_NVIM = vim.v.progpath }
   if sidebar_on() then
     env.GCLIC_SIDEBAR_WIDTH = tostring(sidebar_width())
+  end
+  local panes_width = M.config.panes_width or (sidebar_on() and sidebar_width())
+  if panes_width then
+    env.GCLIC_PANES_WIDTH = tostring(panes_width)
   end
   if M.config.diff_colors == "editor" then
     env.GCLIC_EDITOR_COLORS = M._editor_colors()
