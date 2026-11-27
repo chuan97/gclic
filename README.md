@@ -40,7 +40,7 @@ cargo install --git https://github.com/chuan97/gclic
 
 Then run `gclic` inside a git repository. Press `?` for help.
 
-**Note:** As of now, gclic is fully *vibe-coded*. It is barely a working prototype, and has only been tested in macOS with [Ghostty](https://ghostty.org) as the terminal emulator.
+**Note:** gclic is fully *vibe-coded*. It's used daily on macOS, in [Ghostty](https://ghostty.org) and inside Neovim, and its tests run on macOS and Windows, the Neovim plugin's on macOS. Windows builds are released but less used, and Linux should work but is untested.
 
 gclic currently expects **git** on the `PATH`.
 
