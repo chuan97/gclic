@@ -7,7 +7,7 @@ use crate::ui;
 use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
 /// Also read by the app, for the tab's label.
@@ -351,7 +351,7 @@ impl ReviewList {
                 heading = Some(&comment.heading);
                 headings.push(lines.len());
                 let style = Style::default()
-                    .fg(Color::Cyan)
+                    .fg(ui::accent())
                     .add_modifier(Modifier::BOLD);
                 lines.push(Line::styled(comment.heading.clone(), style));
             }
