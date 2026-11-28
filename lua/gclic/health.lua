@@ -48,6 +48,32 @@ function M.check()
   else
     health.error("gclic needs git on the PATH")
   end
+
+  health.start("Sidebar and file tree")
+  local config = gclic.config
+  if type(config.sidebar) == "table" then
+    health.ok("gclic opens in a sidebar at the left, " .. (config.sidebar.width or 40) .. " columns wide")
+  else
+    health.ok("gclic opens over the whole editor, without the sidebar (`sidebar = false`)")
+  end
+  local status = gclic._file_tree_status()
+  if status.tree then
+    local key = config.file_tree_key and (config.file_tree_key .. " in gclic opens " .. status.tree) or status.tree
+    health.ok(key)
+  elseif config.file_tree_key then
+    health.warn("no file tree found, for " .. config.file_tree_key .. " in gclic to open", {
+      "Install Snacks's explorer, neo-tree or nvim-tree, or set the plugin's `file_tree` to a function",
+    })
+  end
+  if status.tree and config.close_file_tree and type(config.sidebar) == "table" then
+    if status.seen then
+      health.ok("the sidebar and the file tree take turns at the left")
+    else
+      health.warn("this Snacks doesn't list its open pickers as gclic expects", {
+        "The sidebar and the explorer won't take turns: update Snacks, or set `close_file_tree = false`",
+      })
+    end
+  end
 end
 
 return M

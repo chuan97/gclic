@@ -1,5 +1,6 @@
 # Builds and tests gclic on macOS, Linux and Windows for pull requests: when one is
-# opened, reopened, or gets new commits.
+# opened, reopened, or gets new commits. On macOS it checks the Neovim plugin
+# too, end to end, in headless Neovim with the gclic just built.
 name: CI
 
 on:
@@ -29,3 +30,9 @@ jobs:
         run: cargo clippy --all-targets --locked -- -D warnings
       - name: Tests
         run: cargo test --locked
+      - name: Neovim plugin
+        if: runner.os == 'macOS'
+        run: |
+          brew install neovim
+          cargo build --locked
+          nvim --headless --clean -l tests/nvim/sidebar.lua target/debug/gclic

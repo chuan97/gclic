@@ -498,6 +498,30 @@ local function is_file_tree(buf)
   return filetype:match("^snacks_") ~= nil and #explorers() > 0
 end
 
+--- Which file tree `ctrl-e` opens, and whether the sidebar can tell when
+--- it's open, for :checkhealth: `{ tree = "Snacks's explorer" | "neo-tree" |
+--- "nvim-tree" | "your file_tree function" | nil, seen = bool }`. Snacks's
+--- explorer is seen through Snacks's list of open pickers, which a Snacks
+--- without it would lack.
+function M._file_tree_status()
+  local ok, snacks = pcall(require, "snacks")
+  local seen = true
+  local tree
+  if ok and snacks.explorer then
+    tree = "Snacks's explorer"
+    local listed, picker = pcall(require, "snacks.picker")
+    seen = listed and type(picker.get) == "function"
+  elseif vim.fn.exists(":Neotree") == 2 then
+    tree = "neo-tree"
+  elseif vim.fn.exists(":NvimTreeOpen") == 2 then
+    tree = "nvim-tree"
+  end
+  if type(M.config.file_tree) == "function" then
+    tree = "your file_tree function"
+  end
+  return { tree = tree, seen = seen }
+end
+
 --- Opens the file tree, gclic going for it: the one configured, or Snacks's
 --- explorer, neo-tree or nvim-tree, the first there.
 function M.file_tree()

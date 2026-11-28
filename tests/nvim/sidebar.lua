@@ -1,6 +1,7 @@
 -- The Neovim plugin's sidebar, end to end, in headless Neovim with a real
 -- gclic: opening, saving, going over the whole editor and back, resizing, `o`
--- from each, wrapping, taking turns with a file tree, hiding and quitting. Run from the repo's root, after a build:
+-- from each, wrapping, taking turns with a file tree, hiding and quitting.
+-- CI runs it on macOS. Run it from the repo's root, after a build:
 --
 --   nvim --headless --clean -l tests/nvim/sidebar.lua target/debug/gclic
 --
@@ -239,10 +240,12 @@ vim.api.nvim_win_close(picker_win, true)
 check("ctrl-e in gclic is mapped", vim.api.nvim_buf_call(term(), function()
   return vim.fn.maparg("<C-e>", "t", false, true).buffer == 1
 end))
+check(":checkhealth finds no file tree, in a bare Neovim", gc._file_tree_status().tree == nil)
 gc.config.file_tree = function()
   vim.cmd("topleft vnew")
   vim.bo.filetype = "neo-tree"
 end
+check(":checkhealth names the file_tree function", gc._file_tree_status().tree == "your file_tree function")
 gc.file_tree()
 local opened = vim.api.nvim_get_current_win()
 check("the file tree opens, and gclic goes", side() == nil and vim.bo[vim.api.nvim_win_get_buf(opened)].filetype == "neo-tree")
