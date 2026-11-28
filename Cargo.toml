@@ -1,6 +1,6 @@
 [package]
 name = "gclic"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2024"
 license = "MIT"
 description = "A git TUI: staging, a branch graph, comparisons and reviews, in the terminal or beside the code in Neovim"
