@@ -1899,3 +1899,34 @@ fn the_ref_branch_and_repo_pickers_open_ready_to_type_and_the_stash_list_does_no
     app.open_stash_picker();
     assert!(matches!(&app.modal, Modal::Picker(picker, _) if !picker.is_typing()));
 }
+
+#[test]
+fn a_comparison_or_a_stash_opens_with_its_first_file_s_diff_and_esc_still_closes_it() {
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
+    app.start_compare("HEAD~1".to_string(), "HEAD".to_string());
+    // The diff shows, with the list still in focus.
+    assert!(
+        app.view
+            .diff()
+            .is_some_and(|diff| diff.source == last_commit_diff())
+    );
+    assert!(app.view.focused(Pane::Compare) && !app.view.in_preview);
+    // enter moves into it.
+    press(&mut app, KeyCode::Enter);
+    assert!(app.view.in_preview);
+    // esc comes back out, then asks to close the comparison.
+    press(&mut app, KeyCode::Esc);
+    press(&mut app, KeyCode::Esc);
+    assert!(matches!(app.modal, Modal::Confirm(Confirm::CloseCompare)));
+    press(&mut app, KeyCode::Enter);
+    assert!(app.compare.is_none() && app.view.diff().is_none());
+
+    repo.write("README.md", "changed\n");
+    repo.git(&["stash", "-q"]);
+    app.open_stash(git::stashes(&repo).unwrap().remove(0));
+    assert!(app.view.diff().is_some());
+    // esc goes back to the stashes.
+    press(&mut app, KeyCode::Esc);
+    assert!(matches!(&app.modal, Modal::Picker(_, PickerUse::Stash(_))));
+}
