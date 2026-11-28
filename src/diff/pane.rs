@@ -324,7 +324,7 @@ impl DiffPane {
     ) -> DiffPane {
         let DiffView { source, whole } = view;
         let Colored { rows, file_lines } = colored;
-        DiffPane {
+        let mut pane = DiffPane {
             rebasing,
             source,
             whole,
@@ -340,7 +340,15 @@ impl DiffPane {
             colored: is_colored,
             navigated: false,
             comments: Vec::new(),
+        };
+        // The whole file opens at its first change, which may be far down,
+        // as only the changes open at their first hunk.
+        if whole {
+            pane.active = (0..pane.items.len())
+                .find(|&i| pane.starts_change(i))
+                .unwrap_or(0);
         }
+        pane
     }
 
     pub fn text(&self) -> &str {
@@ -702,9 +710,15 @@ impl DiffPane {
             }
             // Between changes rather than hunks, so it still works when a whole
             // file is one hunk. From inside a change, N goes to its start.
+            // The first n stays on the change a whole file opened at.
             KeyCode::Char('n') => {
+                let from = if !self.navigated && self.starts_change(self.active) {
+                    self.active
+                } else {
+                    self.active + 1
+                };
                 self.navigated = true;
-                let next = (self.active + 1..self.items.len()).find(|&i| self.starts_change(i));
+                let next = (from..self.items.len()).find(|&i| self.starts_change(i));
                 self.active = next.unwrap_or(self.active);
             }
             KeyCode::Char('N') => {
@@ -1342,6 +1356,38 @@ mod tests {
             layout(&rows, false, false),
             [Item::Row(0), Item::Row(1), Item::New(2), Item::Row(3)]
         );
+    }
+
+    #[test]
+    fn a_whole_file_opens_at_its_first_change() {
+        let text = "@@ -1,7 +1,7 @@\n a\n b\n c\n-d\n+D\n e\n-f\n+F\n g";
+        let open = |whole| {
+            DiffPane::new(
+                DiffView {
+                    source: DiffSource::Unstaged("f".to_string()),
+                    whole,
+                },
+                String::new(),
+                Colored {
+                    rows: parse_diff(text),
+                    file_lines: 0,
+                },
+                true,
+                false,
+            )
+        };
+        let mut pane = open(true);
+        pane.height = 20;
+        assert_eq!(pane.active, 3); // d → D
+        assert_eq!(pane.active_line(), Some(4));
+        // n goes to that change first, then on.
+        press(&mut pane, 'n');
+        assert_eq!(pane.active, 3);
+        assert_eq!(pane.change_counter().as_deref(), Some(" change 1 of 2 "));
+        press(&mut pane, 'n');
+        assert_eq!(pane.active, 5);
+        // Just the changes open at the top, the first hunk's heading.
+        assert_eq!(open(false).active, 0);
     }
 
     #[test]

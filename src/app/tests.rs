@@ -1852,3 +1852,21 @@ fn in_the_sidebar_a_git_command_s_popup_goes_over_the_whole_editor_until_it_clos
     app.modal = Modal::None;
     assert!(app.wants_full());
 }
+
+#[test]
+fn with_whole_files_on_a_diff_opens_at_its_first_change() {
+    let repo = TestRepo::with_history();
+    let lines: Vec<String> = (1..=200).map(|n| format!("line {n}")).collect();
+    repo.write("long.txt", &(lines.join("\n") + "\n"));
+    repo.git(&["add", "long.txt"]);
+    repo.commit("Long");
+    let mut changed = lines.clone();
+    changed[149] = "line 150, changed".to_string();
+    repo.write("long.txt", &(changed.join("\n") + "\n"));
+    let mut app = app_on(&repo);
+    app.whole = true;
+    app.show_diff(DiffSource::Unstaged("long.txt".to_string()));
+    let shown = screen(&mut app);
+    assert!(shown.contains("line 150, changed"), "{shown}");
+    assert!(!shown.contains("line 1 "), "{shown}");
+}
