@@ -449,7 +449,7 @@ impl App {
     pub(super) fn fetch_command(&mut self, setting: &str) {
         match setting {
             "" if self.fetcher.is_fetching() => self.message = "Already fetching".to_string(),
-            "" => self.fetcher.start(),
+            "" => self.fetcher.fetch_now(),
             "on" => {
                 self.fetcher.auto = true;
                 self.message = "Fetching every minute".to_string();

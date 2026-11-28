@@ -436,6 +436,10 @@ impl App {
             changed |= self.take_worker_results();
             changed |= self.take_command_result();
             changed |= self.fetcher.keep_fetching();
+            if let Some(report) = self.fetcher.take_report() {
+                self.message = report;
+                changed = true;
+            }
             self.branches.search_sha();
             let note = self.fetcher.note();
             changed |= note != fetch_note;
