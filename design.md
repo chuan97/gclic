@@ -101,11 +101,11 @@ Dependencies: `ratatui` (with crossterm), `anyhow`, and `syntect`, with its pure
 
 ### Concurrency
 
-- **The worker thread** (`worker.rs`) does the slow reads: the auto-refresh poll (the refs fingerprint, `git status`, the open diff), which carries on under popups, as they only cover part of the screen, and syntax highlighting. The UI hands it jobs through a small queue and picks up results from a channel every 30 ms, so keys never wait for it. The screen is drawn only when something changed: a key, a result, a command or fetch ending, or the fetch note's "10s ago" moving on.
+- **The worker thread** (`worker.rs`) does the slow reads: the auto-refresh poll (the refs fingerprint, `git status`, the open diff), which carries on under popups, as they only cover part of the screen, a commit's size for its details, and syntax highlighting. The UI hands it jobs through a small queue and picks up results from a channel every 30 ms, so keys never wait for it. The screen is drawn only when something changed: a key, a result, a command or fetch ending, or the fetch note's "10s ago" moving on.
 - **Refreshing by key presses:** each poll starts a few git processes, about 30–50 ms of CPU, so gclic polls every second while in use and every 10 s once no key has been pressed for 30 s, and the first key after that polls at once. Idle, gclic and its git processes take about 0.5–0.7% of a core, a minute's fetch included, down from 7–11% polling every 500 ms (#68, #77).
 - **Only reads happen on it.** Anything that changes the repo, and the full refresh after it, stays on the UI thread, in order, so a change shows at once.
 - **Stale results are dropped:** each full refresh bumps a generation counter, and a poll asked for before the latest refresh is ignored. Colours only apply to the exact diff text they were made from.
-- **Short-lived parallelism** with `std::thread::scope`: the panes' refreshes, the graph's log and unpushed check, a poll's git calls, a comparison's refresh, and the two file versions read for highlighting all run at once.
+- **Short-lived parallelism** with `std::thread::scope`: the panes' refreshes, the graph's log and unpushed check, a poll's git calls, a comparison's refresh, and the two file versions read for highlighting, and their colourings, all run at once.
 
 ### Speed
 
@@ -113,6 +113,8 @@ Most of the time goes into starting git processes and into highlighting. Measure
 
 - A full refresh takes about 15 ms, down from 45 ms: the branch list is fetched once, refs are resolved in one `rev-parse`, the checked-out branch is read from `.git/HEAD`, and the rest runs in parallel.
 - Moving between files with a diff open takes about 1 ms until the redraw starts, since the diffs one key away (`j`, `k`, `g`, `G`, and `r` in Compare) are prefetched and coloured into a cache of up to 20,000 rows, and shown from it without asking git.
+- Colouring both sides of a diff at once, rather than one after the other, takes about 40% less time: 120 ms rather than 200 ms for a 1,750-line Rust file.
+- Moving through the graph with its details open takes about 10 ms a commit, as its message shows at once and its size, which git counts as long as the diff takes, comes from the worker: on a commit of 3,000 files, that's 400 ms the keys no longer wait for.
 - Memory is about 24 MB, most of it syntect's grammars.
 
 The measuring scripts lived in the git-ignored `target/bench/`. `docs/screenshots.py` shows how to drive gclic in a pseudo-terminal and read its screen.
