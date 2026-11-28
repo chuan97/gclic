@@ -205,7 +205,7 @@ impl App {
                 let ticked = self.graph.shown_refs();
                 let hints = [
                     ("space", "tick"),
-                    ("ctrl-a/d", "all, none"),
+                    ("ctrl-a", "all or none"),
                     ("enter", "apply"),
                     ("esc", "close"),
                 ];

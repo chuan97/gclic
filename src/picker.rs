@@ -238,8 +238,8 @@ impl Picker {
             KeyCode::Char('j' | 'n') if ctrl => self.move_down(),
             KeyCode::Char('k' | 'p') if ctrl => self.move_up(),
             KeyCode::Char(' ') if self.multi => self.toggle_tick(),
-            KeyCode::Char('a') if self.multi && ctrl => self.tick_all_matches(),
-            KeyCode::Char('d') if self.multi && ctrl => self.untick_all_matches(),
+            // A finder's keys are the same typing or not: letters search.
+            KeyCode::Char('a') if self.multi && ctrl => self.toggle_all_matches(),
 
             // Typing mode, where a popup picker starts. With nothing typed,
             // esc closes it, as there's nothing to keep.
@@ -257,8 +257,6 @@ impl Picker {
             // Navigation mode, after esc, or the Branches pane's search.
             KeyCode::Esc => return Outcome::Cancelled,
             KeyCode::Char('i') => self.typing = true,
-            KeyCode::Char('a') if self.multi => self.tick_all_matches(),
-            KeyCode::Char('A') if self.multi => self.untick_all_matches(),
             KeyCode::Char('j' | 'k' | 'g' | 'G') => {
                 self.cursor.handle_key(key, self.matches.len());
             }
@@ -299,7 +297,21 @@ impl Picker {
         }
     }
 
-    /// Ticks everything passing the filter, which without a search is everything.
+    /// ctrl-a: ticks everything shown, or unticks it if it's all ticked
+    /// already. Without a search, that's everything.
+    fn toggle_all_matches(&mut self) {
+        let all_ticked = self
+            .matches
+            .iter()
+            .all(|&index| self.ticked.contains(&self.items[index]));
+        if all_ticked {
+            self.untick_all_matches();
+        } else {
+            self.tick_all_matches();
+        }
+    }
+
+    /// Ticks everything passing the filter, keeping earlier ticks first.
     fn tick_all_matches(&mut self) {
         for &index in &self.matches {
             let item = &self.items[index];
@@ -544,42 +556,37 @@ mod tests {
         }
     }
 
+    fn ctrl_a() -> KeyEvent {
+        KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL)
+    }
+
     #[test]
-    fn a_ticks_everything_and_capital_a_unticks_everything() {
+    fn ctrl_a_ticks_everything_then_unticks_it() {
         let items = vec!["x".to_string(), "y".to_string()];
         let mut picker = Picker::multi("t", items, Vec::new());
-        picker.handle_key(key(KeyCode::Char('a')));
+        picker.handle_key(ctrl_a());
         assert_eq!(picked(&mut picker), ["x", "y"]);
-        picker.handle_key(key(KeyCode::Char('A')));
+        picker.handle_key(ctrl_a());
         assert!(picked(&mut picker).is_empty());
     }
 
     #[test]
-    fn a_keeps_earlier_ticks_first_without_repeating_them() {
+    fn ctrl_a_keeps_earlier_ticks_first_without_repeating_them() {
         let items = vec!["x".to_string(), "y".to_string()];
         let mut picker = Picker::multi("t", items, vec!["y".to_string()]);
-        picker.handle_key(key(KeyCode::Char('a')));
+        picker.handle_key(ctrl_a());
         assert_eq!(picked(&mut picker), ["y", "x"]);
     }
 
     #[test]
-    fn a_and_capital_a_only_touch_the_filtered_items() {
-        let items = vec!["origin/x".to_string(), "main".to_string()];
-        let mut picker = Picker::multi("t", items, vec!["main".to_string()]);
-        type_text(&mut picker, "origin");
-        picker.handle_key(key(KeyCode::Esc));
-        picker.handle_key(key(KeyCode::Char('a')));
-        assert_eq!(picked(&mut picker), ["main", "origin/x"]);
-        picker.handle_key(key(KeyCode::Char('A')));
-        assert_eq!(picked(&mut picker), ["main"]);
-    }
-
-    #[test]
-    fn a_is_a_letter_while_typing() {
+    fn a_and_capital_a_are_letters_typing_or_not() {
         let items = vec!["x".to_string(), "a".to_string()];
         let mut picker = Picker::multi("t", items, Vec::new());
         type_text(&mut picker, "a");
         assert_eq!(picker.query, "a");
+        picker.handle_key(key(KeyCode::Esc));
+        picker.handle_key(key(KeyCode::Char('a')));
+        picker.handle_key(key(KeyCode::Char('A')));
         assert!(picker.ticked.is_empty());
     }
 
@@ -682,25 +689,27 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_a_and_ctrl_d_tick_and_untick_what_a_search_shows_while_typing() {
+    fn ctrl_a_ticks_and_unticks_only_what_a_search_shows_while_typing() {
         let items = vec![
             "main".to_string(),
             "feat/a".to_string(),
             "feat/b".to_string(),
         ];
         let mut picker = Picker::multi("t", items, vec!["main".to_string()]).typing();
-        let ctrl = |ch| KeyEvent::new(KeyCode::Char(ch), KeyModifiers::CONTROL);
         for ch in "feat".chars() {
             picker.handle_key(key(KeyCode::Char(ch)));
         }
-        picker.handle_key(ctrl('a'));
+        picker.handle_key(ctrl_a());
         assert_eq!(picker.ticked, ["main", "feat/a", "feat/b"]);
-        // space ticks while typing, as names have no spaces.
+        picker.handle_key(ctrl_a());
+        assert_eq!(picker.ticked, ["main"]);
+        // Some ticked: ctrl-a ticks the rest. space ticks while typing, as
+        // names have no spaces.
         picker.handle_key(key(KeyCode::Char(' ')));
         assert_eq!(picker.query, "feat");
-        assert_eq!(picker.ticked, ["main", "feat/b"]);
-        picker.handle_key(ctrl('d'));
-        assert_eq!(picker.ticked, ["main"]);
+        assert_eq!(picker.ticked, ["main", "feat/a"]);
+        picker.handle_key(ctrl_a());
+        assert_eq!(picker.ticked, ["main", "feat/a", "feat/b"]);
     }
 
     #[test]

@@ -144,7 +144,7 @@ const RIGHT: &[Section] = &[
         keys: &[
             ("type", "to filter, at once; ctrl-j k move"),
             ("space", "tick a branch"),
-            ("ctrl-a d", "tick all shown, untick all"),
+            ("ctrl-a", "tick all shown, or untick"),
             ("ctrl-v", "paste a ref, when comparing"),
             ("enter", "confirm"),
             ("esc", "close, or stop typing a search"),
