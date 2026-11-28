@@ -1,8 +1,11 @@
 [package]
 name = "gclic"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2024"
 license = "MIT"
+description = "A git TUI: staging, a branch graph, comparisons and reviews, in the terminal or beside the code in Neovim"
+repository = "https://github.com/chuan97/gclic"
+homepage = "https://github.com/chuan97/gclic"
 
 [dependencies]
 anyhow = "1"
@@ -22,3 +25,9 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_
 # painfully slow without it. gclic's own code still builds quickly for debugging.
 [profile.dev.package."*"]
 opt-level = 3
+
+# The build dist releases, as `cargo build --release` with link-time
+# optimisation across crates.
+[profile.dist]
+inherits = "release"
+lto = "thin"

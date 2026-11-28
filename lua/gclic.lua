@@ -35,8 +35,10 @@
 local M = {}
 
 M.config = {
-  -- The command that runs gclic: `gclic` on the PATH, or a path to it.
-  cmd = "gclic",
+  -- The command that runs gclic, a path or a name on the PATH. Nil for the
+  -- gclic the plugin installs, matching its version (see `:GclicInstall`), or
+  -- else `gclic` on the PATH.
+  cmd = nil,
   -- gclic in a sidebar at the left, this many columns wide, going over the
   -- whole editor for diffs, details and the other tabs. False for the whole
   -- editor only, sized below.
@@ -87,9 +89,22 @@ local accent = { color = nil, root = nil, asked = 0 }
 -- The tabline as it was, to put back where there's no bar.
 local plain_showtabline = nil
 
+--- The gclic to run: the `cmd` set, or the one the plugin installed, or
+--- `gclic` on the PATH.
+function M.command()
+  if M.config.cmd then
+    return M.config.cmd
+  end
+  local own = require("gclic.install").binary()
+  if vim.fn.executable(own) == 1 then
+    return own
+  end
+  return "gclic"
+end
+
 --- Whether there's a gclic to run.
 local function installed()
-  return vim.fn.executable(M.config.cmd) == 1
+  return vim.fn.executable(M.command()) == 1
 end
 
 --- The bar, drawn as the tabline: a line in the repo's colour, then its
@@ -143,7 +158,7 @@ function M.refresh_accent()
   -- the latest question's counts.
   accent.asked = accent.asked + 1
   local asked = accent.asked
-  vim.system({ M.config.cmd, "--color" }, { text = true, cwd = vim.fn.getcwd() }, function(result)
+  vim.system({ M.command(), "--color" }, { text = true, cwd = vim.fn.getcwd() }, function(result)
     vim.schedule(function()
       if asked ~= accent.asked then
         return
@@ -725,7 +740,7 @@ function M.show()
   end
   if not installed() then
     vim.notify(
-      "gclic: can't find `" .. M.config.cmd .. "`. Install gclic, or set the plugin's `cmd`. See :checkhealth gclic",
+      "gclic: can't find gclic. Run :GclicInstall, install it, or set the plugin's `cmd`. See :checkhealth gclic",
       vim.log.levels.ERROR
     )
     return
@@ -789,9 +804,9 @@ function M.show()
   -- In gclic's window, wherever it shows.
   vim.api.nvim_win_call(vim.fn.bufwinid(state.buf), function()
     if vim.fn.has("nvim-0.11") == 1 then
-      state.job = vim.fn.jobstart({ M.config.cmd }, { term = true, env = env, on_exit = on_exit })
+      state.job = vim.fn.jobstart({ M.command() }, { term = true, env = env, on_exit = on_exit })
     else
-      state.job = vim.fn.termopen({ M.config.cmd }, { env = env, on_exit = on_exit })
+      state.job = vim.fn.termopen({ M.command() }, { env = env, on_exit = on_exit })
     end
   end)
   pin(vim.fn.bufwinid(state.buf))
@@ -911,9 +926,25 @@ function M.open(file, line)
   vim.cmd.stopinsert()
 end
 
+--- Installs the gclic release matching the plugin, for it to run.
+function M.install(opts)
+  opts = vim.tbl_extend("keep", opts or {}, {
+    say = function(message)
+      vim.notify("gclic: " .. message)
+    end,
+  })
+  require("gclic.install").install(opts)
+end
+
 function M.setup(opts)
   M.config = vim.tbl_deep_extend("force", M.config, opts or {})
   vim.api.nvim_create_user_command("Gclic", M.toggle, { desc = "Toggle gclic" })
+  vim.api.nvim_create_user_command("GclicInstall", function(command)
+    local ok, error = pcall(require("gclic").install, { force = command.bang })
+    if not ok then
+      vim.notify("gclic: " .. error, vim.log.levels.ERROR)
+    end
+  end, { bang = true, desc = "Install the gclic release matching the plugin; ! to install it again" })
   if M.config.colors == "terminal" and #vim.api.nvim_list_uis() > 0 then
     ask_terminal()
   end

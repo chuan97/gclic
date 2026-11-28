@@ -23,20 +23,35 @@ gclic is heavily inspired by the features I like and have grown accustomed to in
 
 ## Installation
 
-**On Windows**, download `gclic-v<version>-windows-x86_64.zip` from the [releases](https://github.com/chuan97/gclic/releases) and extract `gclic.exe`. To run it from any folder, put it in a folder on your `PATH`, for example a `bin` folder in your user folder:
+**On macOS and Linux**, with [Homebrew](https://brew.sh):
 
-1. Create the folder `C:\Users\<you>\bin` and move `gclic.exe` into it.
-2. Open the Start menu, search for *Edit environment variables for your account*, and open it.
-3. Under *User variables*, select `Path`, choose *Edit*, then *New*, and enter `%USERPROFILE%\bin`.
-4. Choose *OK* in both windows, and open a new terminal.
+```sh
+brew install chuan97/tap/gclic
+```
 
-gclic isn't signed yet, so the first time Windows may say it "protected your PC": choose *More info*, then *Run anyway*. It needs [Git for Windows](https://git-scm.com/download/win), and looks best in [Windows Terminal](https://aka.ms/terminal).
+Without Homebrew, or on Windows, an installer puts the latest release in `~/.local/bin` and adds it to your `PATH`. On macOS and Linux:
+
+```sh
+curl -LsSf https://github.com/chuan97/gclic/releases/latest/download/gclic-installer.sh | sh
+```
+
+And on Windows, in PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/chuan97/gclic/releases/latest/download/gclic-installer.ps1 | iex"
+```
+
+Each release also has the builds themselves, for macOS, Linux and Windows, on its [page](https://github.com/chuan97/gclic/releases).
+
+gclic isn't signed, so the first time Windows may say it "protected your PC": choose *More info*, then *Run anyway*. It needs [Git for Windows](https://git-scm.com/download/win), and looks best in [Windows Terminal](https://aka.ms/terminal).
 
 **From source**, on any platform with [Rust](https://rustup.rs) installed:
 
 ```sh
 cargo install --git https://github.com/chuan97/gclic
 ```
+
+**In Neovim**, the plugin installs gclic itself: see [In Neovim](#in-neovim).
 
 Then run `gclic` inside a git repository. Press `?` for help.
 
@@ -126,7 +141,7 @@ To set it, add `export GCLIC_EDITOR=nvim` to your `~/.zshrc` or `~/.bashrc`, or 
 
 gclic comes with a Neovim plugin, for Neovim 0.10 or later, that shows gclic in a sidebar at the left, beside the code: the Repo tab's Branches, Changes and Graph, with the Changes pane showing a file as soon as it's saved. Everything works there, staging, discarding, undo and committing included. `enter` on a file shows its diff over the whole editor, and `i` on a commit its details, which say how many files and lines it changes; closing them goes back to the sidebar. The Compare and Review tabs show over the whole editor too. `z` only changes the size: from the sidebar it goes over the whole editor, where gclic's panes take the whole width, or the sidebar's beside a diff, so they stay put as it opens; there, `z` zooms a diff and comes back out, and with nothing open goes back to the sidebar. After `z`, gclic stays over the whole editor as diffs close, until `z` or `ctrl-g` goes back. gclic keeps running while hidden, so it's as you left it each time it comes back. `o` opens the file in the editor beside the sidebar, at the line. `:cd` in gclic changes Neovim's working folder, and `:cd` in Neovim moves gclic to that repo. A bar across the top shows the repo in gclic's colour for it, and gclic takes the colour scheme's colours, its diffs included.
 
-The plugin runs gclic, so [install it](#installation) first, and update the two together. With [lazy.nvim](https://github.com/folke/lazy.nvim):
+The plugin installs the gclic release matching its version, into Neovim's data folder, and runs it, so there's nothing else to install. With [lazy.nvim](https://github.com/folke/lazy.nvim), which does it on installing and updating the plugin:
 
 ```lua
 {
@@ -141,7 +156,7 @@ The plugin runs gclic, so [install it](#installation) first, and update the two 
 }
 ```
 
-With another plugin manager, install the repo and call `require("gclic").setup()`.
+With another plugin manager, install the repo, call `require("gclic").setup()`, and run `:GclicInstall` once, and again after each update of the plugin; `:checkhealth gclic` says when they differ. A gclic of your own, from Homebrew say, runs instead with `cmd = "gclic"`.
 
 The sidebar and a file tree take turns at the left: opening gclic closes Snacks's explorer, LazyVim's, or neo-tree or nvim-tree, and opening one hides gclic, which keeps running. `ctrl-e` in gclic opens the file tree in its place. The key shows gclic, or goes into it from the code, and `ctrl-h`/`ctrl-l` move between gclic and the code, as between Neovim's windows. In the sidebar, `ctrl-g` hides gclic; over the whole editor, it goes back to the sidebar. `q` quits it. `:Gclic` does what the key does.
 
@@ -151,7 +166,7 @@ The options, with their defaults:
 
 ```lua
 opts = {
-  cmd = "gclic",           -- `gclic` on the PATH, or a path to it
+  cmd = nil,               -- the gclic to run; nil for the plugin's own, or else `gclic` on the PATH
   sidebar = { width = 40 }, -- the sidebar's width; false for the whole editor only
   panes_width = nil,        -- the panes' width beside a diff; nil for the sidebar's
   close_file_tree = true,   -- the sidebar and a file tree take turns at the left
