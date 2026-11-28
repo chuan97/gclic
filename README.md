@@ -29,14 +29,7 @@ gclic is heavily inspired by the features I like and have grown accustomed to in
 brew install chuan97/tap/gclic
 ```
 
-**On Windows**, with [Scoop](https://scoop.sh):
-
-```powershell
-scoop bucket add chuan97 https://github.com/chuan97/scoop-bucket
-scoop install gclic
-```
-
-Without either, an installer puts the latest release in `~/.local/bin` and adds it to your `PATH`. On macOS and Linux:
+Without Homebrew, or on Windows, an installer puts the latest release in `~/.local/bin` and adds it to your `PATH`. On macOS and Linux:
 
 ```sh
 curl -LsSf https://github.com/chuan97/gclic/releases/latest/download/gclic-installer.sh | sh
