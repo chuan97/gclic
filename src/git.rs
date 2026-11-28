@@ -104,8 +104,13 @@ pub struct CommitDetails {
     pub author: String,
     pub date: String,
     pub message: String,
-    /// How many files it changes, and the lines it adds and removes in them,
-    /// against its first parent for a merge, as the graph lists its files.
+}
+
+/// How big a commit is: how many files it changes, and the lines it adds and
+/// removes in them, against its first parent for a merge, as the graph lists
+/// its files.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ChangeSize {
     pub files: usize,
     pub lines: Lines,
 }
@@ -950,37 +955,49 @@ pub fn commit_label(repo: &Repo, sha: &str) -> Option<String> {
     try_run(repo, &["show", "-s", "--format=%h  %s", sha])
 }
 
+/// A commit's message and metadata, without its size, which takes git as
+/// long as the diff does, and comes from `commit_size`.
 pub fn commit_details(repo: &Repo, sha: &str) -> Result<CommitDetails> {
-    // The message ends in a NUL, as it can hold anything else, and the
-    // change's size follows it, in the same call.
     let text = run(
         repo,
         &[
             "show",
-            "--shortstat",
-            "--diff-merges=first-parent",
+            "-s",
             "--date=iso",
-            "--format=%H%n%an <%ae>%n%ad%n%B%x00",
+            "--format=%H%n%an <%ae>%n%ad%n%B",
             sha,
         ],
     )?;
-    let (header, stat) = text.split_once('\0').unwrap_or((&text, ""));
-    let mut lines = header.splitn(4, '\n');
-    let (files, lines_changed) = parse_shortstat(stat);
+    let mut lines = text.splitn(4, '\n');
     Ok(CommitDetails {
         sha: lines.next().unwrap_or("").to_string(),
         author: lines.next().unwrap_or("").to_string(),
         date: lines.next().unwrap_or("").to_string(),
         message: lines.next().unwrap_or("").trim_end().to_string(),
-        files,
-        lines: lines_changed,
     })
+}
+
+/// How big a commit is. Git works out the whole diff for it, which for a
+/// commit of thousands of files takes a good part of a second, so the
+/// worker asks.
+pub fn commit_size(repo: &Repo, sha: &str) -> Result<ChangeSize> {
+    let stat = run(
+        repo,
+        &[
+            "show",
+            "--shortstat",
+            "--diff-merges=first-parent",
+            "--format=",
+            sha,
+        ],
+    )?;
+    Ok(parse_shortstat(&stat))
 }
 
 /// The files and lines in git's `--shortstat`: ` 3 files changed, 42
 /// insertions(+), 7 deletions(-)`, either count left out when it's 0, and
 /// nothing at all for a commit that changes nothing.
-fn parse_shortstat(stat: &str) -> (usize, Lines) {
+fn parse_shortstat(stat: &str) -> ChangeSize {
     let (mut files, mut added, mut removed) = (0, 0, 0);
     for part in stat.trim().split(", ") {
         let Some((count, what)) = part.split_once(' ') else {
@@ -997,7 +1014,10 @@ fn parse_shortstat(stat: &str) -> (usize, Lines) {
             removed = count;
         }
     }
-    (files, Lines::Counted { added, removed })
+    ChangeSize {
+        files,
+        lines: Lines::Counted { added, removed },
+    }
 }
 
 pub fn commit_files(repo: &Repo, sha: &str) -> Result<Vec<FileEntry>> {
@@ -1292,14 +1312,17 @@ mod tests {
 
     #[test]
     fn shortstat_reads_files_and_lines_either_left_out() {
-        let counted = |added, removed| Lines::Counted { added, removed };
+        let size = |files, added, removed| ChangeSize {
+            files,
+            lines: Lines::Counted { added, removed },
+        };
         let stat = " 3 files changed, 42 insertions(+), 7 deletions(-)\n";
-        assert_eq!(parse_shortstat(stat), (3, counted(42, 7)));
+        assert_eq!(parse_shortstat(stat), size(3, 42, 7));
         assert_eq!(
             parse_shortstat(" 1 file changed, 1 deletion(-)"),
-            (1, counted(0, 1))
+            size(1, 0, 1)
         );
-        assert_eq!(parse_shortstat(""), (0, counted(0, 0)));
+        assert_eq!(parse_shortstat(""), size(0, 0, 0));
     }
 
     #[test]

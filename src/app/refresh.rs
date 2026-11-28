@@ -102,6 +102,7 @@ impl App {
                 } => {
                     self.apply_poll(generation, fingerprint, status, diff);
                 }
+                Done::Size { sha, size } => self.apply_size(&sha, size),
                 Done::Highlight {
                     view,
                     text,
@@ -154,6 +155,19 @@ impl App {
             open.set_text(text);
         }
         self.request_colors();
+    }
+
+    /// Fills in a commit's size, on the details still waiting for it, on
+    /// this tab or one put aside meanwhile.
+    pub(super) fn apply_size(&mut self, sha: &str, size: Option<git::ChangeSize>) {
+        let views = std::iter::once(&mut self.view).chain(self.saved_views.iter_mut().flatten());
+        for view in views {
+            if let Preview::Details(details) = &mut view.preview
+                && details.sha_to_count() == Some(sha)
+            {
+                details.set_size(size);
+            }
+        }
     }
 
     pub(super) fn apply_highlight(&mut self, view: DiffView, text: String, colored: Colored) {
@@ -257,7 +271,7 @@ impl App {
         };
         if details.sha() != sha {
             match git::commit_details(&self.repo, sha) {
-                Ok(details) => self.view.preview = Preview::Details(DetailsPane::new(details)),
+                Ok(details) => self.show_details(details),
                 Err(error) => self.message = error.to_string(),
             }
         }

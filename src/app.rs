@@ -535,6 +535,13 @@ impl App {
         }
     }
 
+    /// Shows a commit's details on the right, and asks the worker how big
+    /// it is, which the details show once it's counted.
+    fn show_details(&mut self, details: CommitDetails) {
+        self.worker.count_size(details.sha.clone());
+        self.view.preview = Preview::Details(DetailsPane::new(details));
+    }
+
     fn report(&mut self, result: Result<()>) {
         if let Err(error) = result {
             self.message = error.to_string();
@@ -768,7 +775,7 @@ impl App {
                 {
                     self.focus_preview();
                 } else {
-                    self.view.preview = Preview::Details(DetailsPane::new(details));
+                    self.show_details(details);
                 }
             }
             // Closing a comparison goes back to the Repo tab, as esc does.

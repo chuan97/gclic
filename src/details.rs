@@ -1,6 +1,6 @@
 //! A commit's message and metadata, shown on the right like a diff.
 
-use crate::git::{self, CommitDetails};
+use crate::git::{self, ChangeSize, CommitDetails};
 use crate::ui;
 use ratatui::Frame;
 use ratatui::crossterm::event::KeyEvent;
@@ -11,13 +11,24 @@ use ratatui::widgets::{Paragraph, Wrap};
 
 pub struct DetailsPane {
     details: CommitDetails,
+    /// How big the commit is, which the worker counts, as it can take a while.
+    size: Size,
     scroll: ui::Scroll,
 }
 
+enum Size {
+    Counting,
+    Counted(ChangeSize),
+    /// Git couldn't count it.
+    Unknown,
+}
+
 impl DetailsPane {
+    /// The details, with the size still to count.
     pub fn new(details: CommitDetails) -> DetailsPane {
         DetailsPane {
             details,
+            size: Size::Counting,
             scroll: ui::Scroll::default(),
         }
     }
@@ -26,11 +37,21 @@ impl DetailsPane {
         &self.details.sha
     }
 
+    /// The commit whose size is still to count, if it is.
+    pub fn sha_to_count(&self) -> Option<&str> {
+        matches!(self.size, Size::Counting).then_some(self.sha())
+    }
+
+    /// Its size, once counted, or None if git couldn't count it.
+    pub fn set_size(&mut self, size: Option<ChangeSize>) {
+        self.size = size.map_or(Size::Unknown, Size::Counted);
+    }
+
     pub fn handle_key(&mut self, key: KeyEvent) {
         self.scroll.handle_key(key);
     }
 
-    fn lines(details: &CommitDetails) -> Vec<Line<'_>> {
+    fn lines<'a>(details: &'a CommitDetails, size: &Size) -> Vec<Line<'a>> {
         let label = Style::default().fg(ui::DIM);
         let mut lines = vec![
             Line::from(vec![
@@ -45,7 +66,7 @@ impl DetailsPane {
                 Span::styled("date   ", label),
                 Span::raw(details.date.as_str()),
             ]),
-            Line::from(changes_spans(details)),
+            Line::from(changes_spans(size)),
             Line::default(),
         ];
         // Terminals can't draw tabs in a cell, and the widget would drop them.
@@ -59,8 +80,8 @@ impl DetailsPane {
     }
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
-        let paragraph =
-            Paragraph::new(DetailsPane::lines(&self.details)).wrap(Wrap { trim: false });
+        let lines = DetailsPane::lines(&self.details, &self.size);
+        let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false });
         // Borders take a row or column on each side.
         let total = paragraph.line_count(area.width.saturating_sub(2));
         let page = area.height.saturating_sub(2) as usize;
@@ -80,16 +101,21 @@ impl DetailsPane {
 
 /// `changes 3 files  +42 −7`: how big the commit is, in the graph's colours,
 /// as there's no room for its files beside the panes in a sidebar.
-fn changes_spans(details: &CommitDetails) -> Vec<Span<'static>> {
+fn changes_spans(size: &Size) -> Vec<Span<'static>> {
     let label = Style::default().fg(ui::DIM);
     let mut spans = vec![Span::styled("changes ", label)];
-    if details.files == 0 {
+    let size = match size {
+        Size::Counting => return vec![Span::styled("changes counting…", label)],
+        Size::Unknown => return vec![Span::styled("changes unknown", label)],
+        Size::Counted(size) => size,
+    };
+    if size.files == 0 {
         spans.push(Span::styled("none", label));
         return spans;
     }
-    let noun = if details.files == 1 { "file" } else { "files" };
-    spans.push(Span::raw(format!("{} {noun}", details.files)));
-    let counts = ui::line_count_spans(details.lines);
+    let noun = if size.files == 1 { "file" } else { "files" };
+    spans.push(Span::raw(format!("{} {noun}", size.files)));
+    let counts = ui::line_count_spans(size.lines);
     if !counts.is_empty() {
         spans.push(Span::raw("  "));
         spans.extend(counts);
@@ -110,12 +136,18 @@ mod tests {
             author: "Ann".to_string(),
             date: "today".to_string(),
             message: message.to_string(),
-            files: 2,
-            lines: git::Lines::Counted {
-                added: 12,
-                removed: 3,
-            },
         })
+    }
+
+    fn shown(popup: &mut DetailsPane) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(40, 10)).unwrap();
+        terminal
+            .draw(|frame| popup.render(frame, frame.area(), true))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let width = buffer.area.width as usize;
+        let cells: Vec<&str> = buffer.content().iter().map(|cell| cell.symbol()).collect();
+        cells.chunks(width).map(|row| row.concat() + "\n").collect()
     }
 
     fn draw(popup: &mut DetailsPane, width: u16, height: u16) {
@@ -145,17 +177,24 @@ mod tests {
     }
 
     #[test]
-    fn the_header_says_how_many_files_and_lines_the_commit_changes() {
-        let mut terminal = Terminal::new(TestBackend::new(40, 10)).unwrap();
+    fn the_header_says_how_many_files_and_lines_the_commit_changes_once_counted() {
         let mut popup = popup("Fix it");
-        terminal
-            .draw(|frame| popup.render(frame, frame.area(), true))
-            .unwrap();
-        let buffer = terminal.backend().buffer();
-        let width = buffer.area.width as usize;
-        let cells: Vec<&str> = buffer.content().iter().map(|cell| cell.symbol()).collect();
-        let shown: String = cells.chunks(width).map(|row| row.concat() + "\n").collect();
-        assert!(shown.contains("changes 2 files  +12 −3"), "{shown}");
+        assert_eq!(popup.sha_to_count(), Some("abc1234def"));
+        let counting = shown(&mut popup);
+        assert!(counting.contains("changes counting…"), "{counting}");
+        popup.set_size(Some(ChangeSize {
+            files: 2,
+            lines: git::Lines::Counted {
+                added: 12,
+                removed: 3,
+            },
+        }));
+        assert_eq!(popup.sha_to_count(), None);
+        let counted = shown(&mut popup);
+        assert!(counted.contains("changes 2 files  +12 −3"), "{counted}");
+        popup.set_size(None);
+        let unknown = shown(&mut popup);
+        assert!(unknown.contains("changes unknown"), "{unknown}");
     }
 
     #[test]

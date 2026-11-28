@@ -1,5 +1,5 @@
-//! A background thread for slow reads: polling the repo for changes and
-//! colouring diffs. The UI hands it jobs and picks up the results when they
+//! A background thread for slow reads: polling the repo for changes,
+//! counting a commit's size for its details, and colouring diffs. The UI hands it jobs and picks up the results when they
 //! arrive, so keys never wait for them.
 //!
 //! Only reads happen here. Anything that changes the repo stays on the UI
@@ -7,7 +7,7 @@
 //! that are out of date by the time they arrive.
 
 use crate::diff::{self, Colored, DiffView};
-use crate::git::{self, Repo, Status};
+use crate::git::{self, ChangeSize, Repo, Status};
 use anyhow::Result;
 use std::collections::VecDeque;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
@@ -20,6 +20,8 @@ enum Job {
         generation: u64,
         diff: Option<DiffView>,
     },
+    /// How big a commit is, by its sha, for its details.
+    Size(String),
     /// A diff with its syntax colours.
     Highlight(DiffView),
 }
@@ -33,6 +35,11 @@ pub enum Done {
         status: Result<Status>,
         diff: Option<(DiffView, Result<String>)>,
     },
+    /// None if git couldn't count it.
+    Size {
+        sha: String,
+        size: Option<ChangeSize>,
+    },
     /// `text` is the diff the colours belong to.
     Highlight {
         view: DiffView,
@@ -41,11 +48,13 @@ pub enum Done {
     },
 }
 
-/// The jobs waiting. A poll goes before any highlighting, and there's at most
-/// one, as a newer one makes an older one pointless.
+/// The jobs waiting. A poll goes first, then a commit's size, then any
+/// highlighting. There's at most one poll and one size, as a newer one makes
+/// an older one pointless: the details have moved on to another commit.
 #[derive(Default)]
 struct Queue {
     poll: Option<Job>,
+    size: Option<String>,
     highlights: VecDeque<DiffView>,
     /// The app let go of the worker, as when it moves to another repo, so
     /// the thread ends rather than wait for jobs that won't come.
@@ -56,6 +65,7 @@ impl Queue {
     fn next(&mut self) -> Option<Job> {
         self.poll
             .take()
+            .or_else(|| self.size.take().map(Job::Size))
             .or_else(|| self.highlights.pop_front().map(Job::Highlight))
     }
 }
@@ -94,6 +104,11 @@ impl Worker {
     /// Asks for a poll, replacing one still waiting.
     pub fn poll(&self, generation: u64, diff: Option<DiffView>) {
         self.with_queue(|queue| queue.poll = Some(Job::Poll { generation, diff }));
+    }
+
+    /// Asks for a commit's size, replacing one still waiting.
+    pub fn count_size(&self, sha: String) {
+        self.with_queue(|queue| queue.size = Some(sha));
     }
 
     /// Replaces the diffs waiting to be coloured, most wanted first. Whatever
@@ -172,6 +187,10 @@ fn run(repo: &Repo, job: Job) -> Option<Done> {
                 diff: diff.join().unwrap_or(None),
             }
         })),
+        Job::Size(sha) => {
+            let size = git::commit_size(repo, &sha).ok();
+            Some(Done::Size { sha, size })
+        }
         Job::Highlight(view) => {
             // Without its diff there's nothing to colour, and the UI shows the
             // error when it loads the diff itself.
@@ -202,7 +221,7 @@ mod tests {
     }
 
     #[test]
-    fn a_poll_goes_before_waiting_highlights() {
+    fn a_poll_goes_first_then_a_size_then_highlights() {
         let mut queue = Queue {
             highlights: VecDeque::from([file("a")]),
             ..Queue::default()
@@ -211,7 +230,9 @@ mod tests {
             generation: 1,
             diff: None,
         });
+        queue.size = Some("abc".to_string());
         assert!(matches!(queue.next(), Some(Job::Poll { .. })));
+        assert!(matches!(queue.next(), Some(Job::Size(sha)) if sha == "abc"));
         assert!(matches!(queue.next(), Some(Job::Highlight(view)) if view == file("a")));
         assert!(queue.next().is_none());
     }
@@ -270,6 +291,23 @@ mod tests {
         let (view, text) = diff.unwrap();
         assert_eq!(view, file("README.md"));
         assert!(text.unwrap().contains("+polled"));
+    }
+
+    #[test]
+    fn counts_a_commit_s_size_in_the_background() {
+        let repo = TestRepo::with_history();
+        let worker = Worker::start(&repo);
+        worker.count_size(repo.sha("HEAD"));
+        let done = worker
+            .results
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .unwrap();
+        let Done::Size { sha, size } = done else {
+            panic!("expected a size")
+        };
+        assert_eq!(sha, repo.sha("HEAD"));
+        assert_eq!(size, git::commit_size(&repo, "HEAD").ok());
+        assert!(size.is_some());
     }
 
     #[test]

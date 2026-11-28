@@ -1746,3 +1746,53 @@ fn the_panes_take_the_width_they_re_given_beside_a_diff() {
         "{capped}"
     );
 }
+
+/// Takes in the worker's results until the screen shows `text`.
+fn until_shown(app: &mut App, text: &str) -> String {
+    let start = Instant::now();
+    loop {
+        app.take_worker_results();
+        let shown = screen(app);
+        if shown.contains(text) {
+            return shown;
+        }
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "{text} never showed:\n{shown}"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn a_commit_s_details_show_at_once_and_its_size_once_counted() {
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
+    app.focus_left(Pane::Graph);
+    press(&mut app, KeyCode::Char('i'));
+    // The message is there before the worker has counted anything.
+    assert!(screen(&mut app).contains("changes counting…"));
+    // The last commit adds two lines to the README.
+    until_shown(&mut app, "changes 1 file  +2");
+    // Moving on counts the next commit, even if the user went to another
+    // tab meanwhile.
+    press(&mut app, KeyCode::Char('j'));
+    assert!(screen(&mut app).contains("changes counting…"));
+    press(&mut app, KeyCode::Tab);
+    let counting = |app: &App| match &app.saved_views[Tab::Repo as usize] {
+        Some(View {
+            preview: Preview::Details(details),
+            ..
+        }) => details.sha_to_count().is_some(),
+        _ => panic!("the Repo tab's details were put aside"),
+    };
+    let start = Instant::now();
+    while counting(&app) {
+        assert!(start.elapsed() < Duration::from_secs(5), "never counted");
+        app.take_worker_results();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    press(&mut app, KeyCode::Tab);
+    let shown = screen(&mut app);
+    assert!(shown.contains("changes 1 file"), "{shown}");
+}
