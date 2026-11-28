@@ -71,6 +71,33 @@ function M.installed_version()
   return result.code == 0 and (result.stdout or ""):match("^gclic (%S+)") or nil
 end
 
+--- The tar to unpack with. On Windows, the one Windows comes with, bsdtar,
+--- which unpacks zips: a tar earlier on the PATH, from Git's Unix tools, MSYS2
+--- or Cygwin, is GNU tar, which can't, and takes `C:` for another machine.
+local function tar()
+  if windows() and vim.env.SystemRoot then
+    local own = vim.env.SystemRoot .. "\\System32\\tar.exe"
+    if vim.fn.executable(own) == 1 then
+      return own
+    end
+  end
+  return "tar"
+end
+
+--- Clears the way for the new gclic. Windows won't delete a gclic that's
+--- running, as it is while open in Neovim, but lets it be renamed: it moves
+--- aside, and its copy goes the next time, once it's closed.
+local function clear(binary)
+  local old = binary .. ".old"
+  vim.fn.delete(old)
+  if vim.fn.filereadable(binary) == 0 or vim.fn.delete(binary) == 0 then
+    return
+  end
+  if not vim.uv.fs_rename(binary, old) then
+    error("can't replace " .. binary .. ", which may be running: close gclic, and run :GclicInstall", 0)
+  end
+end
+
 local function run(args, what)
   local result = vim.system(args, { text = true }):wait(120000)
   if result.code ~= 0 then
@@ -95,7 +122,7 @@ function M.install(opts)
   if not target then
     error(why .. ": build gclic from source, and set the plugin's `cmd`", 0)
   end
-  for _, tool in ipairs({ "curl", "tar" }) do
+  for _, tool in ipairs({ "curl", tar() }) do
     if vim.fn.executable(tool) ~= 1 then
       error("installing gclic needs " .. tool .. " on the PATH", 0)
     end
@@ -107,15 +134,14 @@ function M.install(opts)
   say("Downloading gclic " .. version .. " for " .. target)
   run({ "curl", "--fail", "--location", "--silent", "--show-error", "--output", work .. "/" .. archive, url },
     "downloading " .. url)
-  -- tar unpacks zips too on Windows, where it's bsdtar.
-  run({ "tar", "-xf", work .. "/" .. archive, "-C", work }, "unpacking " .. archive)
+  run({ tar(), "-xf", work .. "/" .. archive, "-C", work }, "unpacking " .. archive)
   local name = "gclic" .. (windows() and ".exe" or "")
   local found = vim.fs.find(name, { path = work, type = "file", limit = 1 })[1]
   if not found then
     error(archive .. " has no " .. name, 0)
   end
   vim.fn.mkdir(M.dir() .. "/bin", "p")
-  vim.fn.delete(M.binary())
+  clear(M.binary())
   assert(vim.uv.fs_rename(found, M.binary()))
   if not windows() then
     vim.uv.fs_chmod(M.binary(), tonumber("755", 8))
