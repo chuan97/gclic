@@ -341,12 +341,11 @@ impl DiffPane {
             navigated: false,
             comments: Vec::new(),
         };
-        // The whole file opens at its first change, which may be far down,
-        // as only the changes open at their first hunk.
-        if whole {
-            pane.active = (0..pane.items.len())
-                .find(|&i| pane.starts_change(i))
-                .unwrap_or(0);
+        // A diff opens on its first change, far down a whole file, say, and
+        // selected, as after n, so the next n goes on to the second.
+        if let Some(first) = (0..pane.items.len()).find(|&i| pane.starts_change(i)) {
+            pane.active = first;
+            pane.navigated = true;
         }
         pane
     }
@@ -710,15 +709,9 @@ impl DiffPane {
             }
             // Between changes rather than hunks, so it still works when a whole
             // file is one hunk. From inside a change, N goes to its start.
-            // The first n stays on the change a whole file opened at.
             KeyCode::Char('n') => {
-                let from = if !self.navigated && self.starts_change(self.active) {
-                    self.active
-                } else {
-                    self.active + 1
-                };
                 self.navigated = true;
-                let next = (from..self.items.len()).find(|&i| self.starts_change(i));
+                let next = (self.active + 1..self.items.len()).find(|&i| self.starts_change(i));
                 self.active = next.unwrap_or(self.active);
             }
             KeyCode::Char('N') => {
@@ -1359,7 +1352,7 @@ mod tests {
     }
 
     #[test]
-    fn a_whole_file_opens_at_its_first_change() {
+    fn a_diff_opens_with_its_first_change_selected() {
         let text = "@@ -1,7 +1,7 @@\n a\n b\n c\n-d\n+D\n e\n-f\n+F\n g";
         let open = |whole| {
             DiffPane::new(
@@ -1380,14 +1373,16 @@ mod tests {
         pane.height = 20;
         assert_eq!(pane.active, 3); // d → D
         assert_eq!(pane.active_line(), Some(4));
-        // n goes to that change first, then on.
-        press(&mut pane, 'n');
-        assert_eq!(pane.active, 3);
+        // Selected, as after n, from any pane.
+        assert!(pane.shows_active_line(false));
         assert_eq!(pane.change_counter().as_deref(), Some(" change 1 of 2 "));
+        // So n goes on to the second.
         press(&mut pane, 'n');
         assert_eq!(pane.active, 5);
-        // Just the changes open at the top, the first hunk's heading.
-        assert_eq!(open(false).active, 0);
+        // Just the changes open on the first too, under the hunk's heading.
+        let changes = open(false);
+        assert_eq!(changes.active, 4);
+        assert!(changes.shows_active_line(false));
     }
 
     #[test]
@@ -1420,7 +1415,7 @@ mod tests {
         let mut pane = pane_of(parse_diff("@@ -1,5 +1,5 @@\n a\n-b\n+B\n c\n-d\n+D\n e"));
         pane.height = 20;
         pane.set_split(false);
-        press(&mut pane, 'n');
+        // It opened on the first.
         assert_eq!(pane.items[pane.active], Item::Old(2));
         press(&mut pane, 'n');
         assert_eq!(pane.items[pane.active], Item::Old(4));
@@ -1482,6 +1477,7 @@ mod tests {
             Some(anchor(Side::New, 2, "c")),
             "Why c?\nb was fine.".to_string(),
         )]);
+        pane.active = 0; // the heading
         assert_eq!(pane.comment_at_active(), None);
         let mut terminal = Terminal::new(TestBackend::new(60, 8)).unwrap();
         terminal
@@ -1515,8 +1511,7 @@ mod tests {
     #[test]
     fn the_counter_says_which_change_or_how_many() {
         let mut pane = pane_of(parse_diff("@@ -1,5 +1,5 @@\n a\n-b\n+B\n c\n-d\n+D\n e"));
-        assert_eq!(pane.change_counter().as_deref(), Some(" 2 changes "));
-        press(&mut pane, 'n');
+        // It opens on the first.
         assert_eq!(pane.change_counter().as_deref(), Some(" change 1 of 2 "));
         press(&mut pane, 'j');
         assert_eq!(pane.change_counter().as_deref(), Some(" 2 changes "));

@@ -339,15 +339,12 @@ fn gg_goes_to_the_top_and_g_then_another_key_does_nothing() {
 }
 
 #[test]
-fn gc_from_a_list_needs_n_to_show_the_active_line_and_gc_upper_takes_the_file() {
+fn gc_from_a_list_takes_the_selected_change_and_gc_upper_the_file() {
     let repo = TestRepo::with_history();
     let mut app = app_on(&repo);
     app.focus_left(Pane::Graph);
+    // The diff opens with its first change selected, for gc at once.
     app.show_diff(last_commit_diff());
-    press(&mut app, KeyCode::Char('g'));
-    press(&mut app, KeyCode::Char('c'));
-    assert!(matches!(app.modal, Modal::None));
-    press(&mut app, KeyCode::Char('n'));
     press(&mut app, KeyCode::Char('g'));
     press(&mut app, KeyCode::Char('c'));
     assert!(matches!(&app.modal, Modal::CommentBox(comment) if comment.anchor.is_some()));
@@ -955,11 +952,10 @@ fn staged(repo: &TestRepo, path: &str) -> String {
     repo.git(&["show", &format!(":{path}")])
 }
 
-/// Into `source`'s diff, on its first change.
+/// Into `source`'s diff, which opens on its first change.
 fn into_diff(app: &mut App, source: DiffSource) {
     app.show_diff(source);
     app.focus_preview();
-    press(app, KeyCode::Char('n'));
 }
 
 #[test]
@@ -1110,6 +1106,8 @@ fn space_off_a_change_or_on_a_conflict_says_why_it_does_nothing() {
     app.show_diff(DiffSource::Unstaged("f".to_string()));
     app.focus_preview();
     // The hunk's heading, at the top, isn't a change.
+    press(&mut app, KeyCode::Char('g'));
+    press(&mut app, KeyCode::Char('g'));
     press(&mut app, KeyCode::Char(' '));
     assert!(
         app.message.starts_with("Not on a change"),
