@@ -83,6 +83,12 @@ const COMPARE_PICKER_KEYS: [(&str, &str); 4] = [
 /// Below this width, a diff or details take the whole width rather than
 /// share it with the panes, which would leave each too narrow to read.
 const NARROW_BELOW: u16 = 60;
+
+/// Whether the terminal is too narrow for the panes and a diff side by side.
+/// Tests take it as wide, whatever terminal runs them.
+fn narrow_terminal() -> bool {
+    !cfg!(test) && ratatui::crossterm::terminal::size().is_ok_and(|(width, _)| width < NARROW_BELOW)
+}
 /// The preview's share of the width, focused or not. Zooming gives it all of it.
 const DIFF_PERCENT: u16 = 80;
 const REVIEW_DIFF_PERCENT: u16 = 60;
@@ -694,7 +700,9 @@ impl App {
             if let Some(diff) = self.view.diff_mut() {
                 diff.reset_shift();
             }
-        } else if self.view.has_preview() {
+        // A comparison's diff opens with it, so esc from its list closes the
+        // comparison, or goes back to the stashes, as it would without one.
+        } else if self.view.has_preview() && !self.view.focused(Pane::Compare) {
             self.close_preview();
         } else if self.view.pane == Pane::Compare && self.compare.is_none() {
             self.go_to_tab(Tab::Repo);
@@ -849,14 +857,20 @@ impl App {
     }
 
     /// Puts a comparison, or a stash, on the Compare tab, replacing what was
-    /// there, and goes to it.
+    /// there, and goes to it, with its first file's diff.
     fn show_compare(&mut self, compare: ComparePanel) {
         self.go_to_tab(Tab::Compare);
         // Whatever was open on the right belonged to the old comparison.
         self.close_preview();
         self.view.zoomed = false;
+        let first = compare.selected_source();
         self.compare = Some(compare);
         self.focus_left(Pane::Compare);
+        // The first file's diff shows beside the list at once, where there's
+        // room for both. Too narrow, it would hide the list.
+        if let Some(source) = first.filter(|_| !narrow_terminal()) {
+            self.show_diff(source);
+        }
     }
 
     /// Closing a comparison goes back to the Repo tab, as esc does elsewhere.

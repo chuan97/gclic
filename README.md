@@ -92,7 +92,7 @@ A diff opens with its first change selected, far down a whole file included. Fro
 
 ## Compare
 
-The Compare tab, reached with `tab`, shows how two refs differ, going *from* one *to* the other, a trip through the commit graph rather than an order in time: how far the to is ahead of and behind the from, their common ancestor, and the files that differ, in a tree of their folders, each with its diff and the lines it adds and removes. `c` starts a comparison, from the Branches pane, the graph, or the tab itself, and `r` swaps from and to. The pickers for the two refs, and those for the graph's branches and `:cd`'s repos, are ready to type a search in as they open, with `ctrl-j`/`ctrl-k` to move, and `esc` closes one with nothing typed. `ctrl-v` pastes a ref, as a sha copied with `y`, and in the graph's branches `space` ticks one and `ctrl-a` ticks all shown, or unticks them. Lists you act on rather than choose from, as the Branches pane and `:stash`'s, take their keys as letters, with `i` to search.
+The Compare tab, reached with `tab`, shows how two refs differ, going *from* one *to* the other, a trip through the commit graph rather than an order in time: how far the to is ahead of and behind the from, their common ancestor, and the files that differ, in a tree of their folders, each with its diff and the lines it adds and removes. `c` starts a comparison, from the Branches pane, the graph, or the tab itself, and `r` swaps from and to. A comparison opens with its first file's diff beside the list, and `esc` from the list closes it, after asking. The pickers for the two refs, and those for the graph's branches and `:cd`'s repos, are ready to type a search in as they open, with `ctrl-j`/`ctrl-k` to move, and `esc` closes one with nothing typed. `ctrl-v` pastes a ref, as a sha copied with `y`, and in the graph's branches `space` ticks one and `ctrl-a` ticks all shown, or unticks them. Lists you act on rather than choose from, as the Branches pane and `:stash`'s, take their keys as letters, with `i` to search.
 
 ![Comparing main with hourly](docs/images/compare.svg)
 
@@ -104,7 +104,7 @@ While a merge, rebase or cherry-pick is stopped on conflicts, the Changes pane s
 
 ## Stashes
 
-`:stash` lists your stashes. `enter` shows a stash's files, untracked ones included, each with its diff, as a comparison does. `a` applies it, with every change back unstaged, `p` pops it, and `d` drops it after asking. The graph shows each stash too, hanging off the commit it was made on, with the same keys. Making one is left to `:git stash`, which has the options for what goes in it.
+`:stash` lists your stashes. `enter` shows a stash's files, untracked ones included, each with its diff, the first one's showing at once, as a comparison does. `a` applies it, with every change back unstaged, `p` pops it, and `d` drops it after asking. The graph shows each stash too, hanging off the commit it was made on, with the same keys. Making one is left to `:git stash`, which has the options for what goes in it.
 
 ![A stash's files, with one's diff](docs/images/stash.svg)
 
