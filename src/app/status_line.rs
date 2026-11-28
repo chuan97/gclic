@@ -125,6 +125,7 @@ impl App {
             match self.view.pane {
                 // Every other key is typed into the search.
                 Pane::Branches if self.branches.is_typing() => return self.branches.hints(),
+                Pane::Graph if self.graph.is_typing() => return self.graph.hints(None, None),
                 Pane::Branches => {
                     hints.extend(self.branches.hints());
                     esc = self.branches.esc_hint();
@@ -159,7 +160,9 @@ impl App {
         if self.where_staging_is() && self.history.can_redo() {
             hints.push(("ctrl-r", "redo"));
         }
-        if !self.view.in_preview {
+        // A search goes before the diff or details, as it takes n and N.
+        let searching = self.view.focused(Pane::Graph) && self.graph.is_searching();
+        if !self.view.in_preview && !searching {
             if self.view.diff().is_some() {
                 esc = Some("close diff");
             } else if self.view.details().is_some() {

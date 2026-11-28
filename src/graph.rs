@@ -8,7 +8,7 @@ use crate::git::{self, Branch, Commit, DiffSource, FileEntry, Repo, Stash};
 use crate::ui;
 use anyhow::Result;
 use ratatui::Frame;
-use ratatui::crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -419,6 +419,13 @@ pub struct GraphPanel {
     selected_file: Option<usize>,
     /// The stashes among `commits`.
     stashes: Vec<Stash>,
+    /// The search `i` types: a sha's start, or words in a commit's title or
+    /// its author's name. Matches are marked, and n and N go between them.
+    search: String,
+    /// Whether keys go to the search.
+    typing: bool,
+    /// Where the cursor was when typing began, to search on from.
+    search_from: usize,
 }
 
 impl GraphPanel {
@@ -437,7 +444,104 @@ impl GraphPanel {
             expanded: Vec::new(),
             selected_file: None,
             stashes: Vec::new(),
+            search: String::new(),
+            typing: false,
+            search_from: 0,
         }
+    }
+
+    /// Whether keys go to the search.
+    pub fn is_typing(&self) -> bool {
+        self.typing
+    }
+
+    /// Whether a search is under way, typed or not, which takes n and N.
+    pub fn is_searching(&self) -> bool {
+        self.typing || !self.search.is_empty()
+    }
+
+    /// Whether the commit at `index` matches the search.
+    fn is_match(&self, index: usize) -> bool {
+        self.commits
+            .get(index)
+            .is_some_and(|commit| commit_matches(commit, &self.search))
+    }
+
+    /// The commits matching the search, top to bottom.
+    fn matches(&self) -> Vec<usize> {
+        (0..self.commits.len())
+            .filter(|&index| self.is_match(index))
+            .collect()
+    }
+
+    /// Onto the first match from where the search began, or above it if
+    /// there's none below. Where it began, if nothing matches.
+    fn go_to_first_match(&mut self) {
+        let matches = self.matches();
+        let target = matches
+            .iter()
+            .find(|&&index| index >= self.search_from)
+            .or(matches.first())
+            .copied()
+            .unwrap_or(self.search_from);
+        self.select_commit(target);
+    }
+
+    /// n and N while searching: the next match down, or up, round past the
+    /// ends.
+    fn go_to_match(&mut self, forward: bool) {
+        let matches = self.matches();
+        let target = if forward {
+            matches
+                .iter()
+                .find(|&&index| index > self.selected)
+                .or(matches.first())
+        } else {
+            matches
+                .iter()
+                .rev()
+                .find(|&&index| index < self.selected)
+                .or(matches.last())
+        };
+        if let Some(&target) = target {
+            self.select_commit(target);
+        }
+    }
+
+    /// Typing a search: letters go into it, and the cursor jumps to the
+    /// first match as it grows. enter or esc stop typing, keeping it.
+    fn type_search(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Enter | KeyCode::Esc => self.typing = false,
+            KeyCode::Backspace => {
+                self.search.pop();
+                self.go_to_first_match();
+            }
+            KeyCode::Char(ch) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.search.push(ch);
+                self.go_to_first_match();
+            }
+            _ => {}
+        }
+    }
+
+    /// What the search line says at its right: which match the cursor is on,
+    /// or how many there are, or that none of the loaded commits match.
+    fn search_note(&self) -> Option<String> {
+        if self.search.is_empty() {
+            return None;
+        }
+        let matches = self.matches();
+        Some(
+            match matches.iter().position(|&index| index == self.selected) {
+                _ if matches.is_empty() && self.has_more_history() => {
+                    format!("none in the last {COMMIT_LIMIT}")
+                }
+                _ if matches.is_empty() => "none".to_string(),
+                Some(at) => format!("{} of {}", at + 1, matches.len()),
+                None => format!("{} found", matches.len()),
+            },
+        )
     }
 
     /// The stash at this row, if it is one.
@@ -502,16 +606,23 @@ impl GraphPanel {
         shown: Option<&DiffSource>,
         details: Option<&str>,
     ) -> Vec<ui::Hint<'static>> {
-        // i shows the selected commit's details, or moves into them if they show.
+        if self.typing {
+            return vec![("", "type a sha, title words or author"), ("enter", "done")];
+        }
+        // space shows the selected commit's details, or moves into them if
+        // they show.
         let details = if details.is_some() && details == self.selected_sha() {
-            ("i", "focus details")
+            ("space", "focus details")
         } else {
-            ("i", "details")
+            ("space", "details")
         };
         let mut hints = Vec::new();
+        if !self.search.is_empty() {
+            hints.push(("n/N", "match"));
+        }
         if self.is_on_file() {
             hints.extend(ui::enter_diff_hint(self.selected_file_source(), shown));
-            if shown.is_none() {
+            if shown.is_none() && self.search.is_empty() {
                 hints.push(("n/N", "commit"));
             }
             hints.extend([details, ("y", "copy sha")]);
@@ -527,12 +638,13 @@ impl GraphPanel {
         }
         hints.extend([
             details,
+            ("i", "search"),
             ("c", "compare"),
             ("y", "copy sha"),
             ("b", "choose branches"),
         ]);
         // Only worth it when open commits' files are in the way.
-        if self.has_expanded() && shown.is_none() {
+        if self.has_expanded() && shown.is_none() && self.search.is_empty() {
             hints.push(("n/N", "commit"));
         }
         hints
@@ -540,7 +652,9 @@ impl GraphPanel {
 
     /// What esc does, if anything.
     pub fn esc_hint(&self) -> Option<&'static str> {
-        if self.is_on_file() || self.is_selected_expanded() {
+        if !self.search.is_empty() {
+            Some("clear search")
+        } else if self.is_on_file() || self.is_selected_expanded() {
             Some("collapse")
         } else if self.has_expanded() {
             Some("collapse all")
@@ -653,6 +767,10 @@ impl GraphPanel {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Action {
+        if self.typing {
+            self.type_search(key);
+            return Action::None;
+        }
         // Checked first, as it's the way out if the chosen branches were deleted.
         if key.code == KeyCode::Char('b') {
             return Action::OpenGraphPicker;
@@ -669,7 +787,17 @@ impl GraphPanel {
         match key.code {
             KeyCode::Char('y') => return Action::Copy(sha),
             KeyCode::Char('c') => return Action::CompareWith(self.name_for(sha)),
+            // The search, as in the Branches pane, to edit if there is one.
             KeyCode::Char('i') => {
+                self.typing = true;
+                self.search_from = self.selected;
+                return Action::None;
+            }
+            KeyCode::Esc if !self.search.is_empty() => {
+                self.search.clear();
+                return Action::None;
+            }
+            KeyCode::Char(' ') => {
                 return match git::commit_details(&self.repo, &sha) {
                     Ok(details) => Action::OpenDetails(details),
                     Err(error) => Action::Error(error.to_string()),
@@ -684,6 +812,8 @@ impl GraphPanel {
             KeyCode::Char('k') | KeyCode::Up => self.move_up(),
             KeyCode::Char('g') => self.select_commit(0),
             KeyCode::Char('G') => self.select_commit(last),
+            KeyCode::Char('n') if !self.search.is_empty() => self.go_to_match(true),
+            KeyCode::Char('N') if !self.search.is_empty() => self.go_to_match(false),
             KeyCode::Char('n') => self.next_commit(),
             KeyCode::Char('N') => self.previous_commit(),
             KeyCode::Enter => return self.open_selection(sha),
@@ -848,9 +978,16 @@ impl GraphPanel {
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
         let block = ui::panel(TITLE.to_string(), focused);
-        let inner = block.inner(area);
+        let mut inner = block.inner(area);
         frame.render_widget(block, area);
 
+        // The search line only takes up room while it's in use.
+        if self.is_searching() && inner.height > 0 {
+            let line = Rect { height: 1, ..inner };
+            self.render_search(frame, line);
+            inner.y += 1;
+            inner.height -= 1;
+        }
         self.render_chain(frame, inner, focused);
     }
 
@@ -900,6 +1037,23 @@ impl GraphPanel {
         ui::render_lines(frame, area, lines);
     }
 
+    /// The search, as the pickers show theirs, with how it's going at the right.
+    fn render_search(&self, frame: &mut Frame, area: Rect) {
+        let mut spans = vec![
+            Span::styled("> ", Style::default().fg(ui::accent())),
+            Span::raw(self.search.as_str()),
+        ];
+        if self.typing {
+            spans.push(Span::styled("▏", Style::default().fg(ui::accent())));
+            spans.push(Span::styled(" enter done", Style::default().fg(ui::DIM)));
+        }
+        frame.render_widget(Line::from(spans), area);
+        if let Some(note) = self.search_note() {
+            let note = Line::styled(format!("{note} "), Style::default().fg(ui::DIM));
+            frame.render_widget(note.right_aligned(), area);
+        }
+    }
+
     /// One row per commit, with each expanded commit's files inserted under it.
     fn display_rows(&self) -> Vec<Display> {
         let mut display = Vec::with_capacity(self.rows.len());
@@ -940,7 +1094,10 @@ impl GraphPanel {
         spans.push(Span::raw(GAP));
 
         let commit = &self.commits[index];
-        let subject = if selected && focused {
+        // A match stands out in the accent, as the search line's > does.
+        let subject = if !self.search.is_empty() && self.is_match(index) {
+            ui::accent()
+        } else if selected && focused {
             Color::White
         } else {
             Color::Gray
@@ -1021,6 +1178,20 @@ const GAP: &str = "  ";
 /// How much of a commit's message stays when the row is short of room:
 /// its first few words, which usually say enough.
 const SUBJECT_KEPT: usize = 24;
+
+/// Whether a commit matches a search: words in its title, its author's name,
+/// ignoring case, or, four characters or more, the start of its sha.
+fn commit_matches(commit: &Commit, search: &str) -> bool {
+    let search = search.trim().to_lowercase();
+    if search.is_empty() {
+        return false;
+    }
+    let sha = search.len() >= 4
+        && search.chars().all(|ch| ch.is_ascii_hexdigit())
+        && commit.sha.starts_with(&search);
+    sha || commit.subject.to_lowercase().contains(&search)
+        || commit.author.to_lowercase().contains(&search)
+}
 
 /// How much of a row the graph draws on: up to its rightmost line or bead.
 fn drawn_width(glyphs: &[Glyph]) -> usize {
@@ -1636,5 +1807,115 @@ mod tests {
             path: "x".to_string(),
         };
         assert_eq!(panel.selected_file_source(), Some(expected));
+    }
+}
+
+#[cfg(test)]
+mod search_tests {
+    use super::*;
+
+    /// Commits with these shas, titles and authors, top to bottom.
+    fn panel_of(commits: &[(&str, &str, &str)]) -> GraphPanel {
+        let mut panel = GraphPanel::new(&Repo::nowhere());
+        panel.commits = commits
+            .iter()
+            .map(|(sha, subject, author)| Commit {
+                sha: sha.to_string(),
+                parents: Vec::new(),
+                author: author.to_string(),
+                subject: subject.to_string(),
+            })
+            .collect();
+        panel
+    }
+
+    fn press(panel: &mut GraphPanel, code: KeyCode) {
+        panel.handle_key(KeyEvent::from(code));
+    }
+
+    fn search(panel: &mut GraphPanel, text: &str) {
+        press(panel, KeyCode::Char('i'));
+        for ch in text.chars() {
+            press(panel, KeyCode::Char(ch));
+        }
+    }
+
+    fn history() -> GraphPanel {
+        panel_of(&[
+            ("a1b2c3d4", "Fix the login redirect", "Ana"),
+            ("b5e6f7a8", "Add hourly forecasts", "Ben"),
+            ("c9d0e1f2", "Cache the API's responses", "Ana"),
+            ("d3e4f5a6", "Fix a typo in the README", "Cy"),
+        ])
+    }
+
+    #[test]
+    fn a_commit_matches_title_words_its_author_or_its_sha_s_start() {
+        let commit = &history().commits[1];
+        assert!(commit_matches(commit, "hourly"));
+        assert!(commit_matches(commit, "ADD HOUR"));
+        assert!(commit_matches(commit, "ben"));
+        assert!(commit_matches(commit, "b5e6"));
+        // A sha takes four characters, so a letter or two is a word.
+        assert!(!commit_matches(commit, "b5e"));
+        assert!(!commit_matches(commit, "e6f7"));
+        assert!(!commit_matches(commit, "  "));
+    }
+
+    #[test]
+    fn typing_jumps_to_the_first_match_from_the_cursor_and_n_goes_round() {
+        let mut panel = history();
+        panel.select_commit(1);
+        search(&mut panel, "fix");
+        assert!(panel.is_typing());
+        // From the cursor down first: the typo, not the redirect above.
+        assert_eq!(panel.selected, 3);
+        assert_eq!(panel.search_note().as_deref(), Some("2 of 2"));
+        press(&mut panel, KeyCode::Enter);
+        assert!(!panel.is_typing() && panel.is_searching());
+        // n goes on, round past the end; N back.
+        press(&mut panel, KeyCode::Char('n'));
+        assert_eq!(panel.selected, 0);
+        press(&mut panel, KeyCode::Char('N'));
+        assert_eq!(panel.selected, 3);
+        // esc clears it, and n goes back to the next commit.
+        press(&mut panel, KeyCode::Esc);
+        assert!(!panel.is_searching());
+        press(&mut panel, KeyCode::Char('N'));
+        assert_eq!(panel.selected, 2);
+    }
+
+    #[test]
+    fn letters_go_to_the_search_while_typing_and_backspace_widens_it() {
+        let mut panel = history();
+        search(&mut panel, "ana");
+        assert_eq!(panel.matches(), [0, 2]);
+        // i, b and c are letters here, not search, branches and compare.
+        for ch in "ibc".chars() {
+            press(&mut panel, KeyCode::Char(ch));
+        }
+        assert_eq!(panel.search, "anaibc");
+        assert_eq!(panel.search_note().as_deref(), Some("none"));
+        // Nothing matched: the cursor stayed where the search began.
+        assert_eq!(panel.selected, 0);
+        for _ in 0..3 {
+            press(&mut panel, KeyCode::Backspace);
+        }
+        assert_eq!(panel.matches(), [0, 2]);
+    }
+
+    #[test]
+    fn space_shows_the_commit_s_details_rather_than_i() {
+        let mut panel = history();
+        // Without a repo, the details fail to load, which says space asked.
+        assert!(matches!(
+            panel.handle_key(KeyEvent::from(KeyCode::Char(' '))),
+            Action::Error(_) | Action::OpenDetails(_)
+        ));
+        assert!(matches!(
+            panel.handle_key(KeyEvent::from(KeyCode::Char('i'))),
+            Action::None
+        ));
+        assert!(panel.is_typing());
     }
 }

@@ -168,10 +168,18 @@ fn every_hint_is_in_the_help() {
         assert_hints_in_help(&app);
     }
     press(&mut app, KeyCode::Esc);
+    press(&mut app, KeyCode::Char(' '));
+    assert_hints_in_help(&app);
+    press(&mut app, KeyCode::Char(' '));
+    assert_hints_in_help(&app);
+    // A search in the graph, typed, then stepped through.
+    press(&mut app, KeyCode::Esc);
     press(&mut app, KeyCode::Char('i'));
     assert_hints_in_help(&app);
-    press(&mut app, KeyCode::Char('i'));
+    press(&mut app, KeyCode::Char('e'));
+    press(&mut app, KeyCode::Enter);
     assert_hints_in_help(&app);
+    press(&mut app, KeyCode::Esc);
     // The Compare tab, empty and then with a comparison and its diff.
     press(&mut app, KeyCode::Tab);
     assert_hints_in_help(&app);
@@ -1799,7 +1807,7 @@ fn a_commit_s_details_show_at_once_and_its_size_once_counted() {
     let repo = TestRepo::with_history();
     let mut app = app_on(&repo);
     app.focus_left(Pane::Graph);
-    press(&mut app, KeyCode::Char('i'));
+    press(&mut app, KeyCode::Char(' '));
     // The message is there before the worker has counted anything.
     assert!(screen(&mut app).contains("changes counting…"));
     // The last commit adds two lines to the README.
@@ -1929,4 +1937,39 @@ fn a_comparison_or_a_stash_opens_with_its_first_file_s_diff_and_esc_still_closes
     // esc goes back to the stashes.
     press(&mut app, KeyCode::Esc);
     assert!(matches!(&app.modal, Modal::Picker(_, PickerUse::Stash(_))));
+}
+
+#[test]
+fn a_graph_search_takes_n_from_an_open_diff_until_esc_clears_it() {
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
+    app.focus_left(Pane::Graph);
+    app.show_diff(last_commit_diff());
+    // While typing, letters are the search's, q and ? included.
+    press(&mut app, KeyCode::Char('i'));
+    for ch in "q?".chars() {
+        press(&mut app, KeyCode::Char(ch));
+    }
+    assert!(matches!(app.modal, Modal::None));
+    for _ in 0..2 {
+        press(&mut app, KeyCode::Backspace);
+    }
+    // Every commit's author is Test.
+    for ch in "test".chars() {
+        press(&mut app, KeyCode::Char(ch));
+    }
+    press(&mut app, KeyCode::Enter);
+    let selected = app.graph.selected_sha().map(str::to_string);
+    press(&mut app, KeyCode::Char('n'));
+    assert_ne!(
+        app.graph.selected_sha().map(str::to_string),
+        selected,
+        "n went to the next match"
+    );
+    // esc clears it, and n is the diff's again.
+    press(&mut app, KeyCode::Esc);
+    assert!(!app.graph.is_searching());
+    let selected = app.graph.selected_sha().map(str::to_string);
+    press(&mut app, KeyCode::Char('n'));
+    assert_eq!(app.graph.selected_sha().map(str::to_string), selected);
 }

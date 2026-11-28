@@ -59,13 +59,14 @@ const LEFT: &[Section] = &[
         title: "Graph",
         keys: &[
             ("enter", "expand a commit, show a file's diff"),
-            ("n N", "next/previous commit, if no diff is open"),
-            ("i", "commit details, again to move in"),
+            ("space", "commit details, again to move in"),
+            ("i", "search: a sha, title words, author"),
+            ("n N", "next/previous match, or commit"),
             ("c", "compare the commit with a ref"),
             ("y", "copy the commit's sha"),
             ("b", "choose which branches to show"),
             ("a p d", "on a stash: apply, pop, drop"),
-            ("esc", "collapse"),
+            ("esc", "clear the search, or collapse"),
         ],
     },
     Section {
