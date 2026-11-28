@@ -375,7 +375,6 @@ pub fn background_fetch(repo: &Repo, remotes: &[String]) -> Result<()> {
         .args(remotes)
         .env("GCM_INTERACTIVE", "never");
     no_prompts(repo, &mut fetch);
-    // Its first line is enough for the message `:fetch` shows.
     output(&mut fetch).map(|_| ()).map_err(|error| {
         let error = error.to_string();
         anyhow!(

@@ -1,6 +1,13 @@
 //! The command line: the commands there are, the hints and completion as
 //! one is typed, and what each runs, with the stash, fetch, repo and editor
 //! actions behind them.
+//!
+//! What git does is typed as git, as `:git fetch`, and gclic's own commands
+//! have names that aren't git's, or do what git's don't, as `:stash` does.
+//!
+//! After `:git`, output too long for the message line shows in a popup, which
+//! in Neovim's sidebar opens over the whole editor, with room for it, and
+//! goes back to the sidebar as it closes, as a diff does.
 
 use super::*;
 
@@ -45,9 +52,9 @@ pub const COMMANDS: [CommandInfo; 6] = [
         about: "list the stashes",
     },
     CommandInfo {
-        key: ":fetch",
+        key: ":autofetch",
         args: "[on | off]",
-        about: "fetch now, or every minute",
+        about: "fetch every minute, or not",
     },
     CommandInfo {
         key: ":color",
@@ -257,8 +264,8 @@ impl App {
             "" => {}
             "cd" => self.change_repo(rest.trim()),
             "git" => self.run_git(rest),
-            "fetch" => self.fetch_command(rest.trim()),
             "stash" => self.open_stash_picker(),
+            "autofetch" => self.autofetch_command(rest.trim()),
             "color" | "colour" => self.color_command(rest.trim()),
             _ => self.message = format!("Unknown command :{name}. Try {}", command_list()),
         }
@@ -444,22 +451,33 @@ impl App {
         }
     }
 
-    /// `:fetch` fetches now, and `:fetch on` or `off` turns fetching every
-    /// minute on or off, for the session.
-    pub(super) fn fetch_command(&mut self, setting: &str) {
-        match setting {
-            "" if self.fetcher.is_fetching() => self.message = "Already fetching".to_string(),
-            "" => self.fetcher.fetch_now(),
+    /// `:autofetch` says whether gclic fetches every minute, and `:autofetch
+    /// on` or `off` turns it on or off, for the session.
+    pub(super) fn autofetch_command(&mut self, setting: &str) {
+        self.message = match setting {
+            "" if self.fetcher.auto => "Fetching every minute. :autofetch off stops it",
+            "" => "Not fetching every minute. :autofetch on starts again",
             "on" => {
                 self.fetcher.auto = true;
-                self.message = "Fetching every minute".to_string();
+                "Fetching every minute"
             }
             "off" => {
                 self.fetcher.auto = false;
-                self.message = "Not fetching any more, until :fetch on".to_string();
+                "Not fetching every minute any more, until :autofetch on"
             }
-            _ => self.message = "Try :fetch, :fetch on or :fetch off".to_string(),
+            _ => "Try :autofetch, :autofetch on or :autofetch off",
         }
+        .to_string();
+    }
+
+    /// What the Branches title says about fetching, `fetching…` while the
+    /// user's `:git fetch` runs included.
+    pub(super) fn fetch_note(&self) -> Option<String> {
+        let user_fetching = self
+            .running
+            .as_ref()
+            .is_some_and(|running| is_fetch(&running.label));
+        self.fetcher.note(user_fetching)
     }
 
     /// Picks up a `:git` command that has ended. gclic refreshes, as it may
@@ -474,6 +492,10 @@ impl App {
             return false;
         };
         self.refresh();
+        // The Branches title says how long ago the remotes were fetched.
+        if !stopped && finished.succeeded() && is_fetch(&label) {
+            self.fetcher.fetched();
+        }
         if stopped {
             self.message = format!("{label}: stopped");
         } else if finished.succeeded() && finished.lines.len() <= 1 {
@@ -639,6 +661,11 @@ impl App {
     }
 }
 
+/// Whether a `:git` command's label is a fetch's.
+fn is_fetch(label: &str) -> bool {
+    label == "git fetch" || label.starts_with("git fetch ")
+}
+
 /// The first word on the clipboard, which is all a ref could be. None if it
 /// holds no text.
 pub(super) fn read_clipboard() -> Result<Option<String>> {
@@ -658,7 +685,7 @@ mod tests {
         let (_, wide) = command_hint("", 100);
         assert_eq!(
             wide,
-            "cd · git · ! · stash · fetch · color   tab completes · esc cancel"
+            "cd · git · ! · stash · autofetch · color   tab completes · esc cancel"
         );
         let (_, narrow) = command_hint("", 20);
         assert_eq!(narrow, "cd · git · ! · …");
@@ -683,10 +710,10 @@ mod tests {
     #[test]
     fn arguments_are_shown_until_they_are_typed() {
         assert_eq!(
-            command_hint("fetch ", 100).1,
-            "[on | off]   fetch now, or every minute"
+            command_hint("autofetch ", 100).1,
+            "[on | off]   fetch every minute, or not"
         );
-        assert_eq!(command_hint("fetch o", 100).1, "");
+        assert_eq!(command_hint("autofetch o", 100).1, "");
         assert_eq!(command_hint("stash", 100).1, "list the stashes");
         assert_eq!(
             command_hint("!", 100).1,
@@ -698,6 +725,7 @@ mod tests {
     #[test]
     fn tab_completes_a_command_name() {
         assert_eq!(complete_command("co").as_deref(), Some("color "));
+        assert_eq!(complete_command("a").as_deref(), Some("autofetch "));
         assert_eq!(complete_command("st").as_deref(), Some("stash"));
         // Only as far as the names share.
         assert_eq!(complete_command("c"), None);
@@ -707,6 +735,6 @@ mod tests {
     #[test]
     fn every_command_is_in_the_help_and_the_unknown_command_message() {
         assert_eq!(COMMAND_HELP.len(), COMMANDS.len());
-        assert_eq!(command_list(), ":cd, :git, :!, :stash, :fetch, :color");
+        assert_eq!(command_list(), ":cd, :git, :!, :stash, :autofetch, :color");
     }
 }

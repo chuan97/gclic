@@ -1,7 +1,7 @@
 //! gclic in a sidebar beside the code, through its Neovim plugin. gclic says
 //! where it should show: over the whole editor while there's a diff or
-//! details to show, another tab than Repo, or after z, and in the sidebar
-//! otherwise. The plugin moves the one gclic between the two, so everything
+//! details to show, a `:git` command's output popup, another tab than Repo,
+//! or after z, and in the sidebar otherwise. The plugin moves the one gclic between the two, so everything
 //! stays as it was. Over the whole editor, gclic is laid out as it is
 //! anywhere else.
 
@@ -10,7 +10,10 @@ use super::*;
 impl App {
     /// Whether gclic should show over the whole editor.
     pub(super) fn wants_full(&self) -> bool {
-        self.chose_full || self.view.has_preview() || self.tab != Tab::Repo
+        self.chose_full
+            || self.view.has_preview()
+            || self.tab != Tab::Repo
+            || matches!(self.modal, Modal::Output(_))
     }
 
     /// z without a diff or details: over the whole editor from the sidebar,

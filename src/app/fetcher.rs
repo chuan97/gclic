@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 const FETCH_EVERY: Duration = Duration::from_secs(60);
 
 pub(super) struct Fetcher {
-    /// Whether the remotes are fetched every minute. On unless `:fetch off`.
+    /// Whether the remotes are fetched every minute. On unless `:autofetch off`.
     pub(super) auto: bool,
     /// A fetch under way, on its own thread, as it can take seconds.
     running: Option<Receiver<Result<()>>>,
@@ -20,11 +20,6 @@ pub(super) struct Fetcher {
     started: Option<Instant>,
     /// How the last fetch went: when it finished, or why it failed.
     last: Option<Result<Instant, String>>,
-    /// Whether the fetch under way was asked for with `:fetch`, which shows
-    /// while it runs, and says how it went when it ends.
-    asked: bool,
-    /// How a fetch asked for went, once it has ended, for the message line.
-    report: Option<String>,
     /// What a fetch runs: git in the repo, except in tests.
     fetch: Arc<dyn Fn() -> Result<()> + Send + Sync>,
 }
@@ -41,20 +36,13 @@ impl Fetcher {
             running: None,
             started: None,
             last: None,
-            asked: false,
-            report: None,
             fetch: Arc::new(fetch),
         }
     }
 
-    pub(super) fn is_fetching(&self) -> bool {
+    #[cfg(test)]
+    fn is_fetching(&self) -> bool {
         self.running.is_some()
-    }
-
-    /// `:fetch`: fetches now, to say how it went once it ends.
-    pub(super) fn fetch_now(&mut self) {
-        self.start();
-        self.asked = true;
     }
 
     /// Fetches on a thread of its own, as it can take seconds, which would
@@ -67,7 +55,11 @@ impl Fetcher {
         });
         self.running = Some(receive);
         self.started = Some(Instant::now());
-        self.asked = false;
+    }
+
+    /// A fetch the user ran with `:git fetch`, which worked.
+    pub(super) fn fetched(&mut self) {
+        self.last = Some(Ok(Instant::now()));
     }
 
     /// Picks up a fetch that has ended, and starts the next when it's due. A
@@ -92,13 +84,6 @@ impl Fetcher {
                     self.running = None;
                 }
             }
-            if self.running.is_none() && self.asked {
-                self.asked = false;
-                self.report = match &self.last {
-                    Some(Err(error)) => Some(format!("Fetch failed: {error}")),
-                    _ => Some("Fetched the remotes your branches track".to_string()),
-                };
-            }
         }
         let due = self
             .started
@@ -111,17 +96,12 @@ impl Fetcher {
         ended
     }
 
-    /// How a fetch asked for with `:fetch` went, once, after it ends.
-    pub(super) fn take_report(&mut self) -> Option<String> {
-        self.report.take()
-    }
-
     /// What the Branches title says about fetching: how long ago it last
     /// worked, or that it failed, and that it's fetching, before the first
-    /// fetch ends or while one asked for runs. The fetches every minute
-    /// don't say so, which would flicker.
-    pub(super) fn note(&self) -> Option<String> {
-        let fetching = self.running.is_some() && (self.asked || self.last.is_none());
+    /// fetch ends or while the user's `:git fetch` runs. The fetches every
+    /// minute don't say so, which would flicker.
+    pub(super) fn note(&self, user_fetching: bool) -> Option<String> {
+        let fetching = user_fetching || (self.running.is_some() && self.last.is_none());
         if fetching {
             return Some("fetching…".to_string());
         }
@@ -175,12 +155,12 @@ mod tests {
     #[test]
     fn it_fetches_at_once_then_says_how_it_went() {
         let mut fetcher = fake(|| Ok(()));
-        assert_eq!(fetcher.note(), None);
+        assert_eq!(fetcher.note(false), None);
         fetcher.keep_fetching();
         assert!(fetcher.is_fetching());
-        assert_eq!(fetcher.note().as_deref(), Some("fetching…"));
+        assert_eq!(fetcher.note(false).as_deref(), Some("fetching…"));
         finish(&mut fetcher);
-        assert_eq!(fetcher.note().as_deref(), Some("fetched just now"));
+        assert_eq!(fetcher.note(false).as_deref(), Some("fetched just now"));
         // The next waits a minute.
         fetcher.keep_fetching();
         assert!(!fetcher.is_fetching());
@@ -188,40 +168,30 @@ mod tests {
         let mut failing = fake(|| Err(anyhow::anyhow!("no network")));
         failing.keep_fetching();
         finish(&mut failing);
-        assert_eq!(failing.note().as_deref(), Some("fetch failed"));
+        assert_eq!(failing.note(false).as_deref(), Some("fetch failed"));
     }
 
     #[test]
-    fn fetch_off_stops_the_fetches_every_minute_but_not_one_asked_for() {
+    fn autofetch_off_stops_the_fetches_every_minute() {
         let mut fetcher = fake(|| Ok(()));
         fetcher.auto = false;
         fetcher.keep_fetching();
         assert!(!fetcher.is_fetching());
-        fetcher.fetch_now();
-        finish(&mut fetcher);
-        assert_eq!(fetcher.note().as_deref(), Some("fetched just now"));
+        // The user's :git fetch still says it fetched.
+        assert_eq!(fetcher.note(true).as_deref(), Some("fetching…"));
+        fetcher.fetched();
+        assert_eq!(fetcher.note(false).as_deref(), Some("fetched just now"));
     }
 
     #[test]
-    fn a_fetch_asked_for_shows_while_it_runs_and_says_how_it_went() {
-        let mut failing = fake(|| Err(anyhow::anyhow!("Could not resolve host")));
-        failing.keep_fetching();
-        finish(&mut failing);
-        // A fetch every minute only says it failed.
-        assert_eq!(failing.take_report(), None);
-        failing.fetch_now();
-        assert_eq!(failing.note().as_deref(), Some("fetching…"));
-        finish(&mut failing);
-        assert_eq!(
-            failing.take_report().as_deref(),
-            Some("Fetch failed: Could not resolve host")
-        );
-        assert_eq!(failing.take_report(), None);
-
-        let mut working = fake(|| Ok(()));
-        working.fetch_now();
-        finish(&mut working);
-        let report = working.take_report().unwrap();
-        assert!(report.starts_with("Fetched"), "{report}");
+    fn only_the_first_fetch_every_minute_says_it_is_fetching() {
+        let mut fetcher = fake(|| Ok(()));
+        fetcher.keep_fetching();
+        finish(&mut fetcher);
+        fetcher.started = None;
+        fetcher.keep_fetching();
+        assert!(fetcher.is_fetching());
+        assert_eq!(fetcher.note(false).as_deref(), Some("fetched just now"));
+        finish(&mut fetcher);
     }
 }

@@ -155,6 +155,19 @@ wait("esc goes back to the sidebar", function()
 end)
 check("the sidebar has the focus again", vim.api.nvim_get_current_win() == side())
 
+-- A :git command's output, too much for the message line, shows in a popup
+-- over the whole editor, and closing it goes back to the sidebar, as a diff
+-- does.
+keys(":git status\r")
+wait("a :git command's output goes over the whole editor", function()
+  return term() and float() ~= nil and screen():find("On branch") ~= nil
+end)
+keys("\027")
+wait("closing it goes back to the sidebar", function()
+  return term() and screen():find("On branch") == nil and float() == nil
+    and side() and vim.api.nvim_win_get_buf(side()) == term()
+end)
+
 -- o from the sidebar opens the file beside it, which stays.
 keys("o")
 wait("o from the sidebar opens the file beside it", function()

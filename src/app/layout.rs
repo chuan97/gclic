@@ -164,7 +164,7 @@ impl App {
             Constraint::Min(0),
         ])
         .areas(area);
-        let note = self.fetcher.note();
+        let note = self.fetch_note();
         self.branches.render(
             frame,
             branches,
