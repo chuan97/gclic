@@ -227,8 +227,11 @@ impl OutputPopup {
     pub fn render(&mut self, frame: &mut Frame, area: Rect) {
         let lines = self.shown_lines();
         let widest = lines.iter().map(Line::width).max().unwrap_or(0);
+        // At least 40 wide, unless the screen is narrower, as Neovim's
+        // sidebar is.
         let width = (widest.max(self.title.chars().count() + 4) as u16 + 2)
-            .clamp(40, area.width.saturating_sub(4).max(1));
+            .max(40)
+            .min(area.width.saturating_sub(4).max(1));
         let height = (lines.len() as u16 + 2).min(area.height.saturating_sub(2));
         let popup = ui::centered(area, width, height);
         let mut block = ui::panel(self.title.clone(), true);
@@ -265,6 +268,29 @@ mod tests {
             "It needs a terminal: run it as :!git commit  (: then tab)"
         );
         assert_eq!(popup.suggestion().as_deref(), Some("!git commit"));
+    }
+
+    #[test]
+    fn the_output_fits_a_screen_narrower_than_the_popup_usually_is() {
+        use ratatui::{Terminal, backend::TestBackend};
+        let lines = vec![
+            "On branch main".to_string(),
+            "nothing to commit".to_string(),
+        ];
+        let mut popup = OutputPopup::new(
+            "git status",
+            Finished {
+                status: None,
+                lines,
+            },
+        );
+        // Neovim's sidebar is 40 wide.
+        for width in [40, 10, 1] {
+            let mut terminal = Terminal::new(TestBackend::new(width, 20)).unwrap();
+            terminal
+                .draw(|frame| popup.render(frame, frame.area()))
+                .unwrap();
+        }
     }
 
     #[test]

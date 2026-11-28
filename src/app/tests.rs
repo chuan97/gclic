@@ -715,15 +715,42 @@ fn a_stash_s_files_open_in_its_view() {
 fn the_stash_command_lists_the_stashes_or_says_there_are_none() {
     let repo = TestRepo::with_history();
     let mut app = app_on(&repo);
-    app.open_stash_picker();
+    app.run_command("stash");
     assert!(matches!(app.modal, Modal::None));
+    assert!(app.running.is_none());
     assert!(app.message.starts_with("No stashes"));
     repo.write("README.md", "changed\n");
     repo.git(&["stash", "-q"]);
-    app.open_stash_picker();
+    app.run_command("stash");
     assert!(
         matches!(&app.modal, Modal::Picker(_, PickerUse::Stash(stashes)) if stashes.len() == 1)
     );
+    // git's own is git's.
+    app.modal = Modal::None;
+    app.run_command("git stash list");
+    assert!(app.running.is_some());
+}
+
+#[test]
+fn git_fetch_runs_git_and_the_branches_title_says_it_fetched() {
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
+    app.fetcher.auto = false;
+    assert_eq!(app.fetch_note(), None);
+    app.run_command("git fetch --all");
+    assert!(app.running.is_some());
+    assert_eq!(app.fetch_note().as_deref(), Some("fetching…"));
+    while !app.take_command_result() {
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert_eq!(app.fetch_note().as_deref(), Some("fetched just now"));
+    // gclic's own commands have names git doesn't use.
+    app.run_command("fetch");
+    assert!(app.message.starts_with("Unknown command :fetch"));
+    app.run_command("autofetch on");
+    assert!(app.fetcher.auto);
+    app.run_command("autofetch off");
+    assert!(!app.fetcher.auto);
 }
 
 #[test]
@@ -1795,4 +1822,33 @@ fn a_commit_s_details_show_at_once_and_its_size_once_counted() {
     press(&mut app, KeyCode::Tab);
     let shown = screen(&mut app);
     assert!(shown.contains("changes 1 file"), "{shown}");
+}
+
+#[test]
+fn in_the_sidebar_a_git_command_s_popup_goes_over_the_whole_editor_until_it_closes() {
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
+    app.sidebar = Some(40);
+    // One line goes to the message line, in the sidebar.
+    app.run_command("git rev-parse HEAD");
+    while !app.take_command_result() {
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(!app.wants_full());
+    app.run_command("git log");
+    while !app.take_command_result() {
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(matches!(app.modal, Modal::Output(_)));
+    assert!(app.wants_full());
+    app.modal = Modal::None;
+    assert!(!app.wants_full());
+    // After z, gclic stays over the whole editor.
+    app.chose_full = true;
+    app.run_command("git log");
+    while !app.take_command_result() {
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    app.modal = Modal::None;
+    assert!(app.wants_full());
 }
