@@ -1,10 +1,13 @@
-# Builds and tests gclic on macOS, Linux and Windows for pull requests: when one is
-# opened, reopened, or gets new commits. On macOS it checks the Neovim plugin
-# too, end to end, in headless Neovim with the gclic just built.
+# Builds and tests gclic on macOS, Linux and Windows for pull requests, when one is
+# opened, reopened, or gets new commits, and for commits pushed to main without
+# one. On macOS it checks the Neovim plugin too, end to end, in headless Neovim
+# with the gclic just built.
 name: CI
 
 on:
   pull_request:
+  push:
+    branches: [main]
 
 # A newer push to the same pull request cancels a run still going.
 concurrency:

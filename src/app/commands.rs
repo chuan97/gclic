@@ -449,7 +449,7 @@ impl App {
     pub(super) fn fetch_command(&mut self, setting: &str) {
         match setting {
             "" if self.fetcher.is_fetching() => self.message = "Already fetching".to_string(),
-            "" => self.fetcher.start(),
+            "" => self.fetcher.fetch_now(),
             "on" => {
                 self.fetcher.auto = true;
                 self.message = "Fetching every minute".to_string();
@@ -571,7 +571,7 @@ impl App {
         // A command still running carries on, and its result shows here.
         fresh.running = self.running.take();
         fresh.follow = self.follow.take();
-        // The old worker stops once it finds no one listening for its results.
+        // The old worker's thread ends as the old app, dropped, lets go of it.
         *self = fresh;
     }
 

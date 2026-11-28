@@ -47,6 +47,9 @@ pub enum Done {
 struct Queue {
     poll: Option<Job>,
     highlights: VecDeque<DiffView>,
+    /// The app let go of the worker, as when it moves to another repo, so
+    /// the thread ends rather than wait for jobs that won't come.
+    stopped: bool,
 }
 
 impl Queue {
@@ -66,8 +69,8 @@ pub struct Worker {
 }
 
 impl Worker {
-    /// Starts the thread, which runs git in `repo` until the app moves to
-    /// another and drops this.
+    /// Starts the thread, which runs git in `repo` until this is dropped, as
+    /// when the app moves to another.
     pub fn start(repo: &Repo) -> Worker {
         let shared: Shared = Arc::new((Mutex::new(Queue::default()), Condvar::new()));
         let (sender, results) = mpsc::channel();
@@ -114,7 +117,14 @@ impl Worker {
     }
 }
 
-/// The thread's loop: wait for a job, do it, send the result.
+impl Drop for Worker {
+    fn drop(&mut self) {
+        self.with_queue(|queue| queue.stopped = true);
+    }
+}
+
+/// The thread's loop: wait for a job, do it, send the result, until the
+/// worker is dropped.
 fn work(repo: &Repo, shared: &Shared, sender: &Sender<Done>) {
     loop {
         let job = {
@@ -123,6 +133,9 @@ fn work(repo: &Repo, shared: &Shared, sender: &Sender<Done>) {
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
             loop {
+                if queue.stopped {
+                    return;
+                }
                 if let Some(job) = queue.next() {
                     break job;
                 }
@@ -135,7 +148,7 @@ fn work(repo: &Repo, shared: &Shared, sender: &Sender<Done>) {
             continue;
         };
         if sender.send(done).is_err() {
-            return; // The app has quit.
+            return; // The worker was dropped while this job ran.
         }
     }
 }
@@ -191,8 +204,8 @@ mod tests {
     #[test]
     fn a_poll_goes_before_waiting_highlights() {
         let mut queue = Queue {
-            poll: None,
             highlights: VecDeque::from([file("a")]),
+            ..Queue::default()
         };
         queue.poll = Some(Job::Poll {
             generation: 1,
@@ -214,6 +227,22 @@ mod tests {
         let (queue, _) = &*worker.shared;
         let waiting: Vec<_> = queue.lock().unwrap().highlights.iter().cloned().collect();
         assert_eq!(waiting, [file("c")]);
+    }
+
+    #[test]
+    fn the_thread_ends_once_the_worker_is_dropped() {
+        let worker = Worker::start(&Repo::nowhere());
+        let shared = Arc::clone(&worker.shared);
+        drop(worker);
+        // The thread held the other reference, and lets go of it as it ends.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while Arc::strong_count(&shared) > 1 {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the thread is still waiting"
+            );
+            thread::yield_now();
+        }
     }
 
     #[test]

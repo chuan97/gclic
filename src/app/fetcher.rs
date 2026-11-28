@@ -20,6 +20,11 @@ pub(super) struct Fetcher {
     started: Option<Instant>,
     /// How the last fetch went: when it finished, or why it failed.
     last: Option<Result<Instant, String>>,
+    /// Whether the fetch under way was asked for with `:fetch`, which shows
+    /// while it runs, and says how it went when it ends.
+    asked: bool,
+    /// How a fetch asked for went, once it has ended, for the message line.
+    report: Option<String>,
     /// What a fetch runs: git in the repo, except in tests.
     fetch: Arc<dyn Fn() -> Result<()> + Send + Sync>,
 }
@@ -36,6 +41,8 @@ impl Fetcher {
             running: None,
             started: None,
             last: None,
+            asked: false,
+            report: None,
             fetch: Arc::new(fetch),
         }
     }
@@ -44,9 +51,15 @@ impl Fetcher {
         self.running.is_some()
     }
 
+    /// `:fetch`: fetches now, to say how it went once it ends.
+    pub(super) fn fetch_now(&mut self) {
+        self.start();
+        self.asked = true;
+    }
+
     /// Fetches on a thread of its own, as it can take seconds, which would
     /// hold up the worker's refreshes.
-    pub(super) fn start(&mut self) {
+    fn start(&mut self) {
         let (send, receive) = mpsc::channel();
         let fetch = Arc::clone(&self.fetch);
         thread::spawn(move || {
@@ -54,6 +67,7 @@ impl Fetcher {
         });
         self.running = Some(receive);
         self.started = Some(Instant::now());
+        self.asked = false;
     }
 
     /// Picks up a fetch that has ended, and starts the next when it's due. A
@@ -78,6 +92,13 @@ impl Fetcher {
                     self.running = None;
                 }
             }
+            if self.running.is_none() && self.asked {
+                self.asked = false;
+                self.report = match &self.last {
+                    Some(Err(error)) => Some(format!("Fetch failed: {error}")),
+                    _ => Some("Fetched the remotes your branches track".to_string()),
+                };
+            }
         }
         let due = self
             .started
@@ -90,11 +111,21 @@ impl Fetcher {
         ended
     }
 
+    /// How a fetch asked for with `:fetch` went, once, after it ends.
+    pub(super) fn take_report(&mut self) -> Option<String> {
+        self.report.take()
+    }
+
     /// What the Branches title says about fetching: how long ago it last
-    /// worked, or that it failed. Nothing before the first fetch ends.
+    /// worked, or that it failed, and that it's fetching, before the first
+    /// fetch ends or while one asked for runs. The fetches every minute
+    /// don't say so, which would flicker.
     pub(super) fn note(&self) -> Option<String> {
+        let fetching = self.running.is_some() && (self.asked || self.last.is_none());
+        if fetching {
+            return Some("fetching…".to_string());
+        }
         match &self.last {
-            None if self.running.is_some() => Some("fetching…".to_string()),
             None => None,
             Some(Ok(finished)) => Some(fetched_ago(finished.elapsed())),
             Some(Err(_)) => Some("fetch failed".to_string()),
@@ -166,8 +197,31 @@ mod tests {
         fetcher.auto = false;
         fetcher.keep_fetching();
         assert!(!fetcher.is_fetching());
-        fetcher.start();
+        fetcher.fetch_now();
         finish(&mut fetcher);
         assert_eq!(fetcher.note().as_deref(), Some("fetched just now"));
+    }
+
+    #[test]
+    fn a_fetch_asked_for_shows_while_it_runs_and_says_how_it_went() {
+        let mut failing = fake(|| Err(anyhow::anyhow!("Could not resolve host")));
+        failing.keep_fetching();
+        finish(&mut failing);
+        // A fetch every minute only says it failed.
+        assert_eq!(failing.take_report(), None);
+        failing.fetch_now();
+        assert_eq!(failing.note().as_deref(), Some("fetching…"));
+        finish(&mut failing);
+        assert_eq!(
+            failing.take_report().as_deref(),
+            Some("Fetch failed: Could not resolve host")
+        );
+        assert_eq!(failing.take_report(), None);
+
+        let mut working = fake(|| Ok(()));
+        working.fetch_now();
+        finish(&mut working);
+        let report = working.take_report().unwrap();
+        assert!(report.starts_with("Fetched"), "{report}");
     }
 }
