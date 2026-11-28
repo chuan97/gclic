@@ -37,7 +37,10 @@ pub fn change_patch(
     direction: Direction,
 ) -> Option<String> {
     let mut hunk: Option<Hunk> = None;
-    for line in diff.lines() {
+    // Split on `\n` alone, rather than with `lines()`, which also drops a
+    // `\r` before it: in a file with CRLF line endings, the patch's lines
+    // must keep theirs to match the file's.
+    for line in diff.split_terminator('\n') {
         if line.starts_with("@@ ") {
             if let Some(done) = hunk.take().filter(|hunk| hunk.has_change) {
                 return Some(done.patch(path, direction));
@@ -172,6 +175,7 @@ fn quoted(path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::git::{self, DiffSource};
 
     fn lines(old: &[usize], new: &[usize]) -> ChangeLines {
         ChangeLines {
@@ -272,6 +276,24 @@ diff --git a/f b/f
             patch.ends_with(
                 "-a\n\\ No newline at end of file\n+a\n+b\n\\ No newline at end of file\n"
             )
+        );
+    }
+
+    #[test]
+    fn a_file_with_crlf_line_endings_keeps_them_in_the_patch() {
+        let repo = crate::test_repo::TestRepo::new();
+        let crlf =
+            |words: &[&str]| -> String { words.iter().map(|word| format!("{word}\r\n")).collect() };
+        repo.write("f.txt", &crlf(&["one", "two", "three", "four"]));
+        repo.commit("CRLF");
+        repo.write("f.txt", &crlf(&["one", "TWO", "three", "FOUR"]));
+        let diff = git::diff(&repo, &DiffSource::Unstaged("f.txt".to_string()), false).unwrap();
+        let patch = change_patch(&diff, "f.txt", &lines(&[2], &[2]), Direction::Forward).unwrap();
+        git::apply_to_index(&repo, &patch, false).unwrap();
+        let staged = git::diff(&repo, &DiffSource::Staged("f.txt".to_string()), false).unwrap();
+        assert!(
+            staged.contains("+TWO\r\n") && !staged.contains("FOUR"),
+            "{staged}"
         );
     }
 
