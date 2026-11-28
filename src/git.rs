@@ -188,6 +188,9 @@ fn command(args: &[&str]) -> Command {
         // Read-only refreshes shouldn't take the index lock and get in the
         // way of git commands the user runs in another terminal.
         .env("GIT_OPTIONAL_LOCKS", "0")
+        // Paths are file names, not patterns: discarding a file named `[ab]`
+        // or `*` mustn't take `a`, `b` or every other file with it.
+        .env("GIT_LITERAL_PATHSPECS", "1")
         // Nothing may wait for input on the terminal the TUI is drawing on.
         .stdin(Stdio::null());
     #[cfg(test)]
@@ -509,8 +512,7 @@ fn run_with_input(repo: &Repo, args: &[&str], input: &[u8]) -> Result<Vec<u8>> {
 /// What the index holds for these paths, as `git ls-files --stage` prints
 /// it, conflicts' stages included: enough to put them back exactly.
 pub fn index_entries(repo: &Repo, paths: &[String]) -> Result<String> {
-    // Paths as they are, not as patterns: a `*` in a name is just a `*`.
-    let mut args = vec!["--literal-pathspecs", "ls-files", "--stage", "-z", "--"];
+    let mut args = vec!["ls-files", "--stage", "-z", "--"];
     args.extend(paths.iter().map(String::as_str));
     run(repo, &args)
 }

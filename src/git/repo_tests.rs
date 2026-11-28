@@ -205,6 +205,30 @@ fn discarding_everything_restores_and_deletes_at_once() {
 }
 
 #[test]
+fn a_path_is_only_ever_its_own_file_never_a_pattern() {
+    // `[ab]` as a pattern matches `a` and `b`, and `*` everything. Windows
+    // allows the brackets in a name, but not the star.
+    let repo = TestRepo::with_history();
+    for name in ["a", "b", "[ab]", "keep.txt"] {
+        repo.write(name, "untracked\n");
+    }
+    stage(&repo, "[ab]").unwrap();
+    assert_eq!(status(&repo).unwrap().staged, [entry('A', "[ab]")]);
+    unstage(&repo, "[ab]").unwrap();
+    delete_untracked(&repo, "[ab]").unwrap();
+    assert_eq!(repo.read("[ab]"), None);
+    for name in ["a", "b", "keep.txt"] {
+        assert!(repo.read(name).is_some(), "{name} was deleted too");
+    }
+    repo.write("[ab]", "again\n");
+    discard_all(&repo, &[], &["[ab]".to_string()]).unwrap();
+    assert_eq!(
+        paths(&status(&repo).unwrap().unstaged),
+        ["a", "b", "keep.txt"]
+    );
+}
+
+#[test]
 fn committing_records_the_staged_files_and_says_when_there_are_none() {
     let repo = TestRepo::with_history();
     repo.write("README.md", "changed\n");
