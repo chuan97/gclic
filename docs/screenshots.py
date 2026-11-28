@@ -440,7 +440,7 @@ def main():
         # Changes: the unstaged file's diff, next to the lists.
         "staging": (repo, ["j", ENTER]),
         # Graph: the top commit opened, with its details on the right.
-        "graph": (repo, ["l", ENTER, "i"]),
+        "graph": (repo, ["l", ENTER, " "]),
         # Branches: the list, with main's remotes opened.
         "branches": (repo, ["h", "j", " "]),
         # A commit's diff, moved into, with the active line a few rows down.

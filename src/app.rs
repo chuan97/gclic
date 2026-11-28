@@ -611,8 +611,11 @@ impl App {
             // In Neovim's sidebar, ctrl-g goes back from the whole editor to
             // the sidebar, and from the sidebar hides gclic.
             KeyCode::Char('g') if ctrl && self.sidebar.is_some() => self.shrink(),
-            // While searching branches, letters belong to the search.
+            // While searching branches or commits, letters belong to the search.
             _ if self.view.focused(Pane::Branches) && self.branches.is_typing() => {
+                self.send_to_focused_panel(key);
+            }
+            _ if self.view.focused(Pane::Graph) && self.graph.is_typing() => {
                 self.send_to_focused_panel(key);
             }
             // The key after g.
@@ -656,8 +659,13 @@ impl App {
             KeyCode::Char('e') if self.view.diff().is_some() => self.toggle_whole_files(),
             // A diff on screen takes n and N from any pane, so its changes can
             // be stepped through while browsing files. The graph's own n and N,
-            // between commits, work when there's no diff.
-            KeyCode::Char('n' | 'N') if !self.view.in_preview && self.view.diff().is_some() => {
+            // between commits, work when there's no diff, and between a
+            // search's matches always, until esc clears it.
+            KeyCode::Char('n' | 'N')
+                if !self.view.in_preview
+                    && self.view.diff().is_some()
+                    && !(self.view.focused(Pane::Graph) && self.graph.is_searching()) =>
+            {
                 if let Some(diff) = self.view.diff_mut() {
                     diff.handle_key(key);
                 }
@@ -700,6 +708,9 @@ impl App {
             if let Some(diff) = self.view.diff_mut() {
                 diff.reset_shift();
             }
+        // A graph search goes first, as it takes n and N from the diff.
+        } else if self.view.focused(Pane::Graph) && self.graph.is_searching() {
+            self.send_to_focused_panel(KeyEvent::from(KeyCode::Esc));
         // A comparison's diff opens with it, so esc from its list closes the
         // comparison, or goes back to the stashes, as it would without one.
         } else if self.view.has_preview() && !self.view.focused(Pane::Compare) {
