@@ -23,9 +23,10 @@ gclic is heavily inspired by the features I like and have grown accustomed to in
 
 ## Installation
 
-**On macOS and Linux**, with [Homebrew](https://brew.sh):
+**On macOS and Linux**, with [Homebrew](https://brew.sh). Homebrew asks you to trust a tap that isn't its own, as gclic's is, first:
 
 ```sh
+brew trust chuan97/tap
 brew install chuan97/tap/gclic
 ```
 
