@@ -446,7 +446,7 @@ def main():
         # A commit's diff, moved into, with the active line a few rows down.
         "diff": (repo, ["l", ENTER, "j", ENTER, ENTER, "j", "j", "j", "j", "j", "j"]),
         # Compare: main against hourly, with a file's diff.
-        "compare": (repo, [TAB, "c", "i", *"main", ENTER, "i", *"hourly", ENTER, ENTER]),
+        "compare": (repo, [TAB, "c", *"main", ENTER, *"hourly", ENTER, ENTER]),
         # A merge stopped on a conflict.
         "conflict": (conflict, [ENTER]),
         # The help, opened from the graph.
@@ -463,7 +463,7 @@ def main():
         # A git command's output.
         "command": (repo, [":", *"git status", ENTER]),
         # :cd, with a search typed.
-        "switch": (repo, [":", *"cd", ENTER, "i", *"sky"]),
+        "switch": (repo, [":", *"cd", ENTER, *"sky"]),
     }
     IMAGES.mkdir(parents=True, exist_ok=True)
     for name, (path, keys) in shots.items():

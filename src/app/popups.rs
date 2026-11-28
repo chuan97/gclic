@@ -89,9 +89,12 @@ impl App {
         usage: PickerUse,
         key: KeyEvent,
     ) {
-        // `p` pastes a ref, so a sha yanked in the graph is two keys from comparing.
-        let paste = key.code == KeyCode::Char('p') && key.modifiers == KeyModifiers::NONE;
-        if paste && picker.accepts_free_text() && !picker.is_typing() {
+        // ctrl-v pastes a ref, so a sha yanked in the graph is two keys from
+        // comparing. So does p, outside the search, where it'd be a letter.
+        let ctrl_v = key.code == KeyCode::Char('v') && key.modifiers == KeyModifiers::CONTROL;
+        let p = key.code == KeyCode::Char('p') && key.modifiers == KeyModifiers::NONE;
+        let paste = ctrl_v || (p && !picker.is_typing());
+        if paste && picker.accepts_free_text() {
             match read_clipboard() {
                 Ok(Some(text)) => picker.set_query(text),
                 Ok(None) => self.message = "The clipboard is empty".to_string(),
@@ -185,7 +188,9 @@ impl App {
                 // Comparing a ref with itself shows nothing.
                 items.retain(|item| item.split_whitespace().next() != Some(a.as_str()));
                 let title = format!("Compare from {a}: to");
-                let picker = Picker::with_free_text(&title, items).with_hints(&COMPARE_PICKER_KEYS);
+                let picker = Picker::with_free_text(&title, items)
+                    .with_hints(&COMPARE_PICKER_KEYS)
+                    .typing();
                 self.modal = Modal::Picker(picker, PickerUse::CompareB { a });
             }
             Err(error) => self.modal = Modal::Error(error.to_string()),
@@ -200,11 +205,13 @@ impl App {
                 let ticked = self.graph.shown_refs();
                 let hints = [
                     ("space", "tick"),
-                    ("a/A", "all, none"),
+                    ("ctrl-a/d", "all, none"),
                     ("enter", "apply"),
                     ("esc", "close"),
                 ];
-                let picker = Picker::multi("Graph branches", names, ticked).with_hints(&hints);
+                let picker = Picker::multi("Graph branches", names, ticked)
+                    .with_hints(&hints)
+                    .typing();
                 self.modal = Modal::Picker(picker, PickerUse::GraphBranches);
             }
             Err(error) => self.modal = Modal::Error(error.to_string()),
@@ -214,8 +221,9 @@ impl App {
     pub(super) fn open_compare_picker(&mut self) {
         match compare_items(&self.repo, &self.recent_yanks) {
             Ok(items) => {
-                let picker =
-                    Picker::with_free_text("Compare: from", items).with_hints(&COMPARE_PICKER_KEYS);
+                let picker = Picker::with_free_text("Compare: from", items)
+                    .with_hints(&COMPARE_PICKER_KEYS)
+                    .typing();
                 self.modal = Modal::Picker(picker, PickerUse::CompareA);
             }
             Err(error) => self.modal = Modal::Error(error.to_string()),

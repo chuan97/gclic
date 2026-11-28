@@ -554,7 +554,8 @@ impl App {
         let title = format!("Switch repo, in {}", repos::tilde(&self.search_root));
         let mut picker = Picker::single(&title, labels)
             .with_hints(&repos::PICKER_KEYS)
-            .with_dimmed_folders();
+            .with_dimmed_folders()
+            .typing();
         if !query.is_empty() {
             picker.set_query(query.to_string());
         }

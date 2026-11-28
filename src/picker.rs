@@ -60,12 +60,15 @@ pub struct Picker {
     matches: Vec<usize>,
     /// Over `matches`.
     cursor: ui::Cursor,
-    /// Multi-select mode: Space ticks names, Enter returns the ticked ones.
+    /// Multi-select mode: space ticks names, which have no spaces, so it
+    /// does while typing too. Enter returns the ticked ones.
     multi: bool,
     ticked: Vec<String>,
     /// Lets Enter return the typed text when nothing matches, e.g. a sha.
     free_text: bool,
     /// Keys go to the query rather than navigating, like vim's insert mode.
+    /// A popup picker starts so, to type at once; `esc` leaves it for the
+    /// letter keys, and `i` goes back.
     typing: bool,
     /// Items are paths: the folders leading to the last name are dimmed.
     dim_folders: bool,
@@ -115,6 +118,14 @@ impl Picker {
         }
     }
 
+    /// Ready to type in as it opens, as a popup picker is.
+    pub fn typing(self) -> Picker {
+        Picker {
+            typing: true,
+            ..self
+        }
+    }
+
     /// Shows items as paths, the last name in full and the folders before it dimmed.
     pub fn with_dimmed_folders(self) -> Picker {
         Picker {
@@ -127,10 +138,10 @@ impl Picker {
         self.free_text
     }
 
-    /// Fills in the search from outside, e.g. from the clipboard.
+    /// Fills in the search from outside, e.g. from the clipboard, typing or
+    /// not as before.
     pub fn set_query(&mut self, query: String) {
         self.query = query;
-        self.typing = false;
         self.update_matches();
     }
 
@@ -227,8 +238,12 @@ impl Picker {
             KeyCode::Char('j' | 'n') if ctrl => self.move_down(),
             KeyCode::Char('k' | 'p') if ctrl => self.move_up(),
             KeyCode::Char(' ') if self.multi => self.toggle_tick(),
+            KeyCode::Char('a') if self.multi && ctrl => self.tick_all_matches(),
+            KeyCode::Char('d') if self.multi && ctrl => self.untick_all_matches(),
 
-            // Typing mode, entered with `i`.
+            // Typing mode, where a popup picker starts. With nothing typed,
+            // esc closes it, as there's nothing to keep.
+            KeyCode::Esc if self.typing && self.query.is_empty() => return Outcome::Cancelled,
             KeyCode::Esc if self.typing => self.typing = false,
             KeyCode::Backspace if self.typing => {
                 self.query.pop();
@@ -239,7 +254,7 @@ impl Picker {
                 self.update_matches();
             }
 
-            // Navigation mode, the default.
+            // Navigation mode, after esc, or the Branches pane's search.
             KeyCode::Esc => return Outcome::Cancelled,
             KeyCode::Char('i') => self.typing = true,
             KeyCode::Char('a') if self.multi => self.tick_all_matches(),
@@ -375,8 +390,13 @@ impl Picker {
         // search" before typing, and "esc done" just past the cursor while
         // typing, moving along as the search grows.
         if self.typing {
+            let esc = if self.query.is_empty() {
+                " esc close"
+            } else {
+                " esc done"
+            };
             query.push(Span::styled("▏", Style::default().fg(ui::accent())));
-            query.push(Span::styled(" esc done", Style::default().fg(ui::DIM)));
+            query.push(Span::styled(esc, Style::default().fg(ui::DIM)));
         } else if self.query.is_empty() {
             query.push(Span::styled("i to search", Style::default().fg(ui::DIM)));
         }
@@ -624,14 +644,63 @@ mod tests {
     }
 
     #[test]
-    fn set_query_filters_and_leaves_typing_mode() {
+    fn set_query_filters_and_keeps_typing_or_not() {
         let items = vec!["main".to_string(), "other".to_string()];
         let mut picker = Picker::with_free_text("t", items);
         type_text(&mut picker, "x");
         picker.set_query("main".to_string());
         assert_eq!(picker.query, "main");
-        assert!(!picker.typing);
+        assert!(picker.typing);
         assert_eq!(picker.matches, [0]);
+        picker.stop_typing();
+        picker.set_query("other".to_string());
+        assert!(!picker.typing);
+    }
+
+    #[test]
+    fn a_typing_picker_closes_on_esc_with_nothing_typed_and_stops_typing_with_a_search() {
+        let items = vec!["main".to_string(), "other".to_string()];
+        let mut picker = Picker::single("t", items.clone()).typing();
+        // Letters search at once.
+        picker.handle_key(key(KeyCode::Char('o')));
+        assert_eq!(picker.matched_items(), ["other"]);
+        // esc keeps the search, for the letter keys, and closes after.
+        assert!(matches!(
+            picker.handle_key(key(KeyCode::Esc)),
+            Outcome::Open
+        ));
+        assert!(!picker.is_typing());
+        assert!(matches!(
+            picker.handle_key(key(KeyCode::Esc)),
+            Outcome::Cancelled
+        ));
+        let mut empty = Picker::single("t", items).typing();
+        assert!(matches!(
+            empty.handle_key(key(KeyCode::Esc)),
+            Outcome::Cancelled
+        ));
+    }
+
+    #[test]
+    fn ctrl_a_and_ctrl_d_tick_and_untick_what_a_search_shows_while_typing() {
+        let items = vec![
+            "main".to_string(),
+            "feat/a".to_string(),
+            "feat/b".to_string(),
+        ];
+        let mut picker = Picker::multi("t", items, vec!["main".to_string()]).typing();
+        let ctrl = |ch| KeyEvent::new(KeyCode::Char(ch), KeyModifiers::CONTROL);
+        for ch in "feat".chars() {
+            picker.handle_key(key(KeyCode::Char(ch)));
+        }
+        picker.handle_key(ctrl('a'));
+        assert_eq!(picker.ticked, ["main", "feat/a", "feat/b"]);
+        // space ticks while typing, as names have no spaces.
+        picker.handle_key(key(KeyCode::Char(' ')));
+        assert_eq!(picker.query, "feat");
+        assert_eq!(picker.ticked, ["main", "feat/b"]);
+        picker.handle_key(ctrl('d'));
+        assert_eq!(picker.ticked, ["main"]);
     }
 
     #[test]

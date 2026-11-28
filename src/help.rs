@@ -142,12 +142,13 @@ const RIGHT: &[Section] = &[
     Section {
         title: "Pickers",
         keys: &[
-            ("i", "type to filter; ctrl-j k move"),
+            ("type", "to filter, at once; ctrl-j k move"),
             ("space", "tick a branch"),
-            ("a A", "tick all shown, untick all"),
-            ("p", "paste a ref, when comparing"),
+            ("ctrl-a d", "tick all shown, untick all"),
+            ("ctrl-v", "paste a ref, when comparing"),
             ("enter", "confirm"),
-            ("esc", "stop typing, then close"),
+            ("esc", "close, or stop typing a search"),
+            ("i", "type again, after esc"),
         ],
     },
     Section {

@@ -92,7 +92,7 @@ A diff opens with its first change selected, far down a whole file included. Fro
 
 ## Compare
 
-The Compare tab, reached with `tab`, shows how two refs differ, going *from* one *to* the other, a trip through the commit graph rather than an order in time: how far the to is ahead of and behind the from, their common ancestor, and the files that differ, in a tree of their folders, each with its diff and the lines it adds and removes. `c` starts a comparison, from the Branches pane, the graph, or the tab itself, and `r` swaps from and to.
+The Compare tab, reached with `tab`, shows how two refs differ, going *from* one *to* the other, a trip through the commit graph rather than an order in time: how far the to is ahead of and behind the from, their common ancestor, and the files that differ, in a tree of their folders, each with its diff and the lines it adds and removes. `c` starts a comparison, from the Branches pane, the graph, or the tab itself, and `r` swaps from and to. The pickers for the two refs, and those for the graph's branches and `:cd`'s repos, are ready to type a search in as they open, with `ctrl-j`/`ctrl-k` to move, and `esc` closes one with nothing typed. `ctrl-v` pastes a ref, as a sha copied with `y`.
 
 ![Comparing main with hourly](docs/images/compare.svg)
 

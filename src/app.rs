@@ -76,7 +76,7 @@ const STASH_PICKER_KEYS: [(&str, &str); 6] = [
 /// The keys shown on the pickers that choose refs to compare.
 const COMPARE_PICKER_KEYS: [(&str, &str); 4] = [
     ("i", "type"),
-    ("p", "paste"),
+    ("ctrl-v", "paste"),
     ("enter", "choose"),
     ("esc", "close"),
 ];
