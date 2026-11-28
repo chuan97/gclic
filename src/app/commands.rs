@@ -571,7 +571,7 @@ impl App {
         // A command still running carries on, and its result shows here.
         fresh.running = self.running.take();
         fresh.follow = self.follow.take();
-        // The old worker stops once it finds no one listening for its results.
+        // The old worker's thread ends as the old app, dropped, lets go of it.
         *self = fresh;
     }
 
