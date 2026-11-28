@@ -209,8 +209,8 @@
 <text x="98.4" y="131.6" fill="#666666" textLength="57.4" lengthAdjust="spacingAndGlyphs">skycast</text>
 <line x1="192.7" y1="127.5" x2="192.7" y2="119.0" stroke="#8abeb7" stroke-width="1.2"/><line x1="192.7" y1="127.5" x2="192.7" y2="136.0" stroke="#8abeb7" stroke-width="1.2"/>
 <line x1="200.9" y1="127.5" x2="200.9" y2="119.0" stroke="#666666" stroke-width="1.2"/><line x1="200.9" y1="127.5" x2="200.9" y2="136.0" stroke="#666666" stroke-width="1.2"/>
-<rect x="205.0" y="119" width="82.0" height="17" fill="#3a1e22" shape-rendering="crispEdges"/>
-<text x="221.4" y="131.6" fill="#666666" textLength="16.4" lengthAdjust="spacingAndGlyphs">37</text>
+<rect x="205.0" y="119" width="82.0" height="17" fill="#3a3a3a" shape-rendering="crispEdges"/>
+<text x="221.4" y="131.6" fill="#eaeaea" font-weight="bold" textLength="16.4" lengthAdjust="spacingAndGlyphs">37</text>
 <rect x="287.0" y="119" width="24.6" height="17" fill="#3a1e22" shape-rendering="crispEdges"/>
 <text x="287.0" y="131.6" fill="#569cd6" textLength="24.6" lengthAdjust="spacingAndGlyphs">def</text>
 <rect x="311.6" y="119" width="8.2" height="17" fill="#3a1e22" shape-rendering="crispEdges"/>
@@ -804,13 +804,10 @@
 <line x1="832.3" y1="552.5" x2="828.2" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="832.3" y1="552.5" x2="836.4" y2="552.5" stroke="#666666" stroke-width="1.2"/>
 <line x1="840.5" y1="552.5" x2="836.4" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="840.5" y1="552.5" x2="844.6" y2="552.5" stroke="#666666" stroke-width="1.2"/>
 <line x1="848.7" y1="552.5" x2="844.6" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="848.7" y1="552.5" x2="852.8" y2="552.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="856.9" y1="552.5" x2="852.8" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="856.9" y1="552.5" x2="861.0" y2="552.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="865.1" y1="552.5" x2="861.0" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="865.1" y1="552.5" x2="869.2" y2="552.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="873.3" y1="552.5" x2="869.2" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="873.3" y1="552.5" x2="877.4" y2="552.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="881.5" y1="552.5" x2="877.4" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="881.5" y1="552.5" x2="885.6" y2="552.5" stroke="#666666" stroke-width="1.2"/>
-<line x1="889.7" y1="552.5" x2="885.6" y2="552.5" stroke="#666666" stroke-width="1.2"/><line x1="889.7" y1="552.5" x2="893.8" y2="552.5" stroke="#666666" stroke-width="1.2"/>
-<text x="902.0" y="556.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">1</text>
-<text x="918.4" y="556.6" fill="#666666" textLength="49.2" lengthAdjust="spacingAndGlyphs">change</text>
+<text x="861.0" y="556.6" fill="#666666" textLength="49.2" lengthAdjust="spacingAndGlyphs">change</text>
+<text x="918.4" y="556.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">1</text>
+<text x="934.8" y="556.6" fill="#666666" textLength="16.4" lengthAdjust="spacingAndGlyphs">of</text>
+<text x="959.4" y="556.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">1</text>
 <path d="M979.9,544.0 Q979.9,552.5 975.8,552.5" fill="none" stroke="#666666" stroke-width="1.2"/>
 <text x="8.2" y="573.6" fill="#f0c674" textLength="41.0" lengthAdjust="spacingAndGlyphs">space</text>
 <text x="57.4" y="573.6" fill="#ffffff" textLength="41.0" lengthAdjust="spacingAndGlyphs">stage</text>
@@ -833,9 +830,9 @@
 <text x="705.2" y="573.6" fill="#f0c674" textLength="8.2" lengthAdjust="spacingAndGlyphs">c</text>
 <text x="721.6" y="573.6" fill="#ffffff" textLength="49.2" lengthAdjust="spacingAndGlyphs">commit</text>
 <text x="779.0" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
-<text x="795.4" y="573.6" fill="#f0c674" textLength="16.4" lengthAdjust="spacingAndGlyphs">gC</text>
+<text x="795.4" y="573.6" fill="#f0c674" textLength="16.4" lengthAdjust="spacingAndGlyphs">gc</text>
 <text x="820.0" y="573.6" fill="#ffffff" textLength="57.4" lengthAdjust="spacingAndGlyphs">comment</text>
-<text x="885.6" y="573.6" fill="#ffffff" textLength="32.8" lengthAdjust="spacingAndGlyphs">file</text>
-<text x="926.6" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
-<text x="943.0" y="573.6" fill="#f0c674" textLength="24.6" lengthAdjust="spacingAndGlyphs">n/N</text>
+<text x="885.6" y="573.6" fill="#666666" textLength="8.2" lengthAdjust="spacingAndGlyphs">·</text>
+<text x="902.0" y="573.6" fill="#f0c674" textLength="16.4" lengthAdjust="spacingAndGlyphs">gC</text>
+<text x="926.6" y="573.6" fill="#ffffff" textLength="49.2" lengthAdjust="spacingAndGlyphs">commen</text>
 </g></svg>
