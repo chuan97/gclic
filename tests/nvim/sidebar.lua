@@ -298,6 +298,34 @@ wait("without the sidebar, quitting closes it", function()
   return term() == nil and float() == nil
 end)
 
+-- The plugin installs the gclic release matching its version, here from a
+-- folder standing in for GitHub's releases, with an archive as dist makes.
+local install = require("gclic.install")
+local target = install.target()
+check("this machine has a release", target ~= nil)
+local releases = vim.fn.tempname()
+local packed = releases .. "/v" .. install.version()
+vim.fn.mkdir(packed .. "/gclic-" .. target, "p")
+vim.uv.fs_copyfile(gclic, packed .. "/gclic-" .. target .. "/gclic")
+vim.system({ "tar", "-czf", "gclic-" .. target .. ".tar.gz", "gclic-" .. target }, { cwd = packed }):wait()
+install.releases = "file://" .. releases
+-- Into a folder of the test's, not Neovim's data folder.
+local data = vim.fn.tempname()
+install.dir = function()
+  return data
+end
+local ok, error = pcall(install.install, { say = function() end })
+check("the plugin installs its gclic" .. (ok and "" or ": " .. tostring(error)), ok)
+check("the installed gclic runs, at the plugin's version", install.installed_version() == install.version())
+gc.config.cmd = nil
+check("the plugin runs the gclic it installed", gc.command() == install.binary())
+gc.config.cmd = gclic
+check("a cmd of its own wins", gc.command() == gclic)
+-- Installed already: nothing to download, from a source that's gone.
+vim.fn.delete(releases, "rf")
+check("installed already, nothing is downloaded", pcall(install.install, { say = function() end }))
+vim.fn.delete(data, "rf")
+
 vim.fn.delete(repo, "rf")
 if not failed then
   print("all checks passed")

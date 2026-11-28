@@ -1,0 +1,55 @@
+# Publishes gclic's Scoop manifest to chuan97/scoop-bucket, for
+#
+#     scoop bucket add chuan97 https://github.com/chuan97/scoop-bucket
+#     scoop install gclic
+#
+# The release workflow (release.yml, from dist) calls it once the GitHub
+# Release is up, with dist's plan. It needs HOMEBREW_TAP_TOKEN, the token that
+# publishes the Homebrew formula, to have write access to the bucket too.
+name: Publish to Scoop
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+jobs:
+  scoop:
+    runs-on: ubuntu-latest
+    env:
+      PLAN: ${{ inputs.plan }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          repository: chuan97/scoop-bucket
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      - name: Write the manifest
+        run: |
+          tag=$(echo "$PLAN" | jq -r '.announcement_tag')
+          version=$(echo "$PLAN" | jq -r '.releases[] | select(.app_name == "gclic") | .app_version')
+          zip="gclic-x86_64-pc-windows-msvc.zip"
+          base="https://github.com/chuan97/gclic/releases/download/$tag"
+          hash=$(gh release download "$tag" --repo chuan97/gclic --pattern "$zip.sha256" --output - | cut -d ' ' -f 1)
+          mkdir -p bucket
+          jq -n --arg version "$version" --arg url "$base/$zip" --arg hash "$hash" '{
+            version: $version,
+            description: "A git TUI: staging, a branch graph, comparisons and reviews",
+            homepage: "https://github.com/chuan97/gclic",
+            license: "MIT",
+            depends: "git",
+            architecture: { "64bit": { url: $url, hash: $hash, extract_dir: "gclic-x86_64-pc-windows-msvc" } },
+            bin: "gclic.exe",
+            checkver: "github",
+            autoupdate: { architecture: { "64bit": { url: "https://github.com/chuan97/gclic/releases/download/v$version/gclic-x86_64-pc-windows-msvc.zip" } } }
+          }' > bucket/gclic.json
+          cat bucket/gclic.json
+      - name: Push it
+        run: |
+          git config user.name "gclic release"
+          git config user.email "noreply@github.com"
+          git add bucket/gclic.json
+          git commit -m "gclic $(jq -r .version bucket/gclic.json)" || exit 0
+          git push

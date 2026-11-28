@@ -1,0 +1,34 @@
+# How gclic is built and released, by dist (cargo-dist), from a version tag:
+# binaries for macOS, Linux and Windows on the GitHub Release, installers for
+# them, and a Homebrew formula in chuan97/homebrew-tap. The Scoop manifest, in
+# chuan97/scoop-bucket, is published by .github/workflows/publish-scoop.yml.
+# After changing this, run `dist generate` to rewrite the release workflow.
+
+[workspace]
+members = ["cargo:."]
+
+[dist]
+cargo-dist-version = "0.34.0"
+ci = "github"
+installers = ["shell", "powershell", "homebrew"]
+targets = [
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+  "aarch64-unknown-linux-gnu",
+  "x86_64-unknown-linux-gnu",
+  "x86_64-pc-windows-msvc",
+]
+# Archives every tar reads, as the Neovim plugin unpacks them too.
+unix-archive = ".tar.gz"
+windows-archive = ".zip"
+tap = "chuan97/homebrew-tap"
+formula = "gclic"
+publish-jobs = ["homebrew", "./publish-scoop"]
+# Where the shell and PowerShell installers put gclic: ~/.local/bin, or
+# %USERPROFILE%\.local\bin on Windows, which they add to the PATH.
+install-path = "~/.local/bin"
+install-updater = false
+# The release workflow has one line fixed by hand, which dist 0.34 writes as
+# `uses: $/.github/workflows/publish-scoop.yml`: a local workflow is `./`.
+# After `dist generate`, put the `./` back.
+allow-dirty = ["ci"]

@@ -1,4 +1,4 @@
-# Builds and tests gclic on macOS and Windows for pull requests: when one is
+# Builds and tests gclic on macOS, Linux and Windows for pull requests: when one is
 # opened, reopened, or gets new commits.
 name: CI
 
@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        os: [macos-latest, ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
