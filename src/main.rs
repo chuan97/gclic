@@ -110,7 +110,9 @@ fn choose_repo(
         let labels = repos.iter().map(|(label, _)| label.clone()).collect();
         let title = format!("Open a repo, in {}", repos::tilde(root));
         (
-            Picker::single(&title, labels).with_hints(&repos::PICKER_KEYS),
+            Picker::single(&title, labels)
+                .with_hints(&repos::PICKER_KEYS)
+                .typing(),
             repos,
         )
     };

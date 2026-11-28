@@ -71,6 +71,11 @@ fn gg_goes_to_the_top_of_a_picker_and_a_single_g_does_not() {
     let mut app = app_on(&repo);
     app.focus_left(Pane::Graph);
     press(&mut app, KeyCode::Char('b'));
+    // It opens typing: g and G are letters until esc after a search.
+    if let Modal::Picker(picker, _) = &mut app.modal {
+        assert!(picker.is_typing());
+        picker.stop_typing();
+    }
     let row = |app: &App| match &app.modal {
         Modal::Picker(picker, _) => picker.selected_row(),
         _ => panic!("the branches picker should be open"),
@@ -1867,4 +1872,30 @@ fn with_whole_files_on_a_diff_opens_at_its_first_change() {
     let shown = screen(&mut app);
     assert!(shown.contains("line 150, changed"), "{shown}");
     assert!(!shown.contains("line 1 "), "{shown}");
+}
+
+#[test]
+fn the_ref_branch_and_repo_pickers_open_ready_to_type_and_the_stash_list_does_not() {
+    let repo = TestRepo::with_history();
+    let mut app = app_on(&repo);
+    let typing = |app: &App| matches!(&app.modal, Modal::Picker(picker, _) if picker.is_typing());
+    app.open_compare_picker();
+    assert!(typing(&app));
+    // Letters search, rather than act.
+    press(&mut app, KeyCode::Char('m'));
+    assert!(matches!(&app.modal, Modal::Picker(picker, _) if picker.query() == "m"));
+    app.modal = Modal::None;
+    app.open_graph_picker();
+    assert!(typing(&app));
+    app.modal = Modal::None;
+    app.open_repo_picker("");
+    assert!(typing(&app));
+    // esc with nothing typed closes it.
+    press(&mut app, KeyCode::Esc);
+    assert!(matches!(app.modal, Modal::None));
+    // The stash list's actions are letters.
+    repo.write("README.md", "changed\n");
+    repo.git(&["stash", "-q"]);
+    app.open_stash_picker();
+    assert!(matches!(&app.modal, Modal::Picker(picker, _) if !picker.is_typing()));
 }
