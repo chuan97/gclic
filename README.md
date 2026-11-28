@@ -86,7 +86,7 @@ The Branches pane shows the checked-out branch, and when focused, every branch. 
 
 Diffs are syntax highlighted with VS Code's Dark Modern colours, with the words that changed marked. They're side by side when the pane is wide enough for about 80 columns of text a side, and unified otherwise. A minimap down the right edge shows the whole file, its removed lines on the left and its added ones on the right, with the part on screen lighter. The bottom border counts the changes, and says which one you're on.
 
-From any pane, while a diff is showing, `n`/`N` jump between its changes, `e` switches between the whole file, which opens at its first change, and just the changes, and `s` between side by side and unified. A second `enter` moves into a diff: `j`/`k` move the active line, `h`/`l` scroll sideways, and `o` opens the file in [your editor](#your-editor) at the active line.
+From any pane, while a diff is showing, `n`/`N` jump between its changes, `e` switches between the whole file, which opens with its first change selected, as after `n`, and just the changes, and `s` between side by side and unified. A second `enter` moves into a diff: `j`/`k` move the active line, `h`/`l` scroll sideways, and `o` opens the file in [your editor](#your-editor) at the active line.
 
 ![A commit's diff, with the active line a few rows down](docs/images/diff.svg)
 

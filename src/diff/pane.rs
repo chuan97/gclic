@@ -341,12 +341,12 @@ impl DiffPane {
             navigated: false,
             comments: Vec::new(),
         };
-        // The whole file opens at its first change, which may be far down,
-        // as only the changes open at their first hunk.
-        if whole {
-            pane.active = (0..pane.items.len())
-                .find(|&i| pane.starts_change(i))
-                .unwrap_or(0);
+        // The whole file opens on its first change, which may be far down,
+        // as only the changes open at their first hunk. It's selected, as
+        // after n, so the next n goes on to the second.
+        if whole && let Some(first) = (0..pane.items.len()).find(|&i| pane.starts_change(i)) {
+            pane.active = first;
+            pane.navigated = true;
         }
         pane
     }
@@ -710,15 +710,9 @@ impl DiffPane {
             }
             // Between changes rather than hunks, so it still works when a whole
             // file is one hunk. From inside a change, N goes to its start.
-            // The first n stays on the change a whole file opened at.
             KeyCode::Char('n') => {
-                let from = if !self.navigated && self.starts_change(self.active) {
-                    self.active
-                } else {
-                    self.active + 1
-                };
                 self.navigated = true;
-                let next = (from..self.items.len()).find(|&i| self.starts_change(i));
+                let next = (self.active + 1..self.items.len()).find(|&i| self.starts_change(i));
                 self.active = next.unwrap_or(self.active);
             }
             KeyCode::Char('N') => {
@@ -1380,14 +1374,17 @@ mod tests {
         pane.height = 20;
         assert_eq!(pane.active, 3); // d → D
         assert_eq!(pane.active_line(), Some(4));
-        // n goes to that change first, then on.
-        press(&mut pane, 'n');
-        assert_eq!(pane.active, 3);
+        // Selected, as after n, from any pane.
+        assert!(pane.shows_active_line(false));
         assert_eq!(pane.change_counter().as_deref(), Some(" change 1 of 2 "));
+        // So n goes on to the second.
         press(&mut pane, 'n');
         assert_eq!(pane.active, 5);
-        // Just the changes open at the top, the first hunk's heading.
-        assert_eq!(open(false).active, 0);
+        // Just the changes open at the top, the first hunk's heading, with
+        // nothing selected.
+        let changes = open(false);
+        assert_eq!(changes.active, 0);
+        assert!(!changes.shows_active_line(false));
     }
 
     #[test]
